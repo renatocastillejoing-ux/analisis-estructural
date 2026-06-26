@@ -849,7 +849,6 @@ function bindEditor(){
   $("#diag-zout")?.addEventListener("click", ()=>{ state._diagZoom=(state._diagZoom||1)/1.25; _applyDiagZoom($("#diag-svg")); });
   $("#diag-zreset")?.addEventListener("click", ()=>{ state._diagZoom=1; const s=$("#diag-svg"); if(s && state._vb) s.setAttribute("viewBox",state._vb); });
   $("#diag-export")?.addEventListener("click", exportarDiagramaPNG);
-  $("#diag-traccion-side")?.addEventListener("change", (e)=>{ state._diagTraccionSide=e.target.checked; if(state.diag) renderDiagrama(state.diag); });
 
   /* --- Envolvente segment (delegation) --- */
   const segEnv=$("#seg-envolvente");
@@ -1856,12 +1855,10 @@ function renderDiagrama(tipo){
       g.push(`<polyline points="${pts.map(p=>p[0].toFixed(4)+","+p[1].toFixed(4)).join(" ")}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`);
     } else {
       // Build baseline and diagram points
-      // For M (momento flector): draw on tension side (signo_traccion convention)
-      // Invert normal so +M (sagging) plots toward tension side
-      // For V/N: optionally draw on tension side when toggle is active
+      // M  → siempre del lado traccionado (sagging)
+      // V,N → siempre perpendicular al elemento (convención estándar)
       const isM = dk==="M";
-      const traccionSide = isM || (state._diagTraccionSide && (dk==="V" || dk==="N"));
-      const fnx = traccionSide ? dwy : nx, fny = traccionSide ? -dwx : ny;
+      const fnx = isM ? dwy : nx, fny = isM ? -dwx : ny;
       const bPts=[], dPts=[];
       for(let k=0;k<e.s.length;k++){
         const t=e.s[k]/L;
@@ -1928,10 +1925,9 @@ function renderDiagrama(tipo){
     const p = pt.matrixTransform(ctm.inverse());
     let found=null, bestDist=Infinity;
     const isM = dk==="M";
-    const traccionSide = isM || (state._diagTraccionSide && (dk==="V" || dk==="N"));
     for(const e of elems){
       const L=Math.hypot(e.xj-e.xi,e.yj-e.yi)||1, dwx=(e.xj-e.xi)/L, dwy=(e.yj-e.yi)/L;
-      const fnx = traccionSide ? dwy : -dwy, fny = traccionSide ? -dwx : dwx;
+      const fnx = isM ? dwy : -dwy, fny = isM ? -dwx : dwx;
       for(let k=0;k<e.s.length;k++){
         const t=e.s[k]/L;
         let mx=e.xi+(e.xj-e.xi)*t, my=e.yi+(e.yj-e.yi)*t;
