@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Análisis Estructural · Método Matricial de Rigidez</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+  <!-- ================= TOPBAR ================= -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>
+          </svg>
+        </span>
+        <div class="brand-text">
+          <h1>Análisis Estructural</h1>
+          <p>Método Matricial de Rigidez</p>
+        </div>
+      </div>
+      <nav class="nav" id="nav">
+        <button class="nav-btn is-active" data-vista="modelo">Modelo</button>
+        <button class="nav-btn" data-vista="resultados">Resultados</button>
+        <button class="nav-btn" data-vista="combinaciones">Combinaciones</button>
+        <button class="nav-btn" data-vista="historial">Historial</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- ============================================================= -->
+    <!-- ===================== VISTA: MODELO ========================= -->
+    <!-- ============================================================= -->
+    <section class="vista app-shell" id="vista-modelo">
+
+      <!-- ===== STEP BAR (app shell: hamburguesa · pasos · analizar) ===== -->
+      <div class="model-stepbar">
+        <!-- Cluster izquierdo: menú de modelo -->
+        <div class="stepbar-left">
+          <div class="ham-wrap">
+            <button class="ham-btn" id="ham-btn" type="button" title="Acciones del modelo" aria-label="Acciones del modelo">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <div class="ham-menu hidden" id="ham-menu">
+              <span class="ham-menu-title">Modelo</span>
+              <button class="ham-item" id="btn-tpl-toggle" type="button"><span class="ham-ico">📋</span> Plantillas</button>
+              <button class="ham-item" id="btn-guardar-tpl" type="button"><span class="ham-ico">💾</span> Guardar como plantilla</button>
+              <button class="ham-item" id="btn-importar" type="button"><span class="ham-ico">⬇</span> Importar JSON</button>
+              <button class="ham-item" id="btn-exportar" type="button"><span class="ham-ico">⬆</span> Exportar JSON</button>
+              <div class="ham-sep"></div>
+              <button class="ham-item ham-item--danger" id="btn-limpiar" type="button"><span class="ham-ico">🗑</span> Limpiar modelo</button>
+              <input type="file" id="file-importar" accept=".json" class="hidden">
+            </div>
+          </div>
+          <span class="stepbar-brand">Modelo</span>
+          <span class="stepbar-divider" aria-hidden="true"></span>
+        </div>
+
+        <!-- Cluster central: stepper -->
+        <div class="model-steps-wrap">
+          <div class="model-steps" id="workflow-stepper" role="tablist">
+            <button class="wf-step is-active" data-wf="definir" role="tab" title="Materiales, secciones y configuración del proyecto">
+              <span class="wf-num"><span class="wf-num-n">1</span></span>
+              <span class="wf-info">
+                <span class="wf-label">Definir</span>
+                <span class="wf-desc">Materiales · Secciones</span>
+              </span>
+            </button>
+            <button class="wf-step" data-wf="modelar" role="tab" title="Crear nudos y conectar elementos">
+              <span class="wf-num"><span class="wf-num-n">2</span></span>
+              <span class="wf-info">
+                <span class="wf-label">Modelar</span>
+                <span class="wf-desc">Nudos · Elementos</span>
+              </span>
+            </button>
+            <button class="wf-step" data-wf="cargar" role="tab" title="Asignar cargas a nudos y elementos">
+              <span class="wf-num"><span class="wf-num-n">3</span></span>
+              <span class="wf-info">
+                <span class="wf-label">Cargar</span>
+                <span class="wf-desc">Nodales · Elementos</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Cluster derecho: modo + calcular -->
+        <div class="stepbar-right">
+          <div class="mode-toggle" id="mode-toggle" title="Modo simple: datos esenciales · Modo avanzado: masa, térmica, modal, etc.">
+            <button type="button" class="mode-btn is-active" data-mode="simple">Simple</button>
+            <button type="button" class="mode-btn" data-mode="avanzado">Avanzado</button>
+          </div>
+          <span class="stepbar-divider" aria-hidden="true"></span>
+          <button class="btn btn-primary btn-analizar" id="btn-calcular" type="button">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18M19 3v18M5 9h14M5 15h14M9 3v18M15 3v18"/></svg>
+            <span>Calcular estructura</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Modal de plantillas (pantalla completa) -->
+      <div class="tpl-overlay hidden" id="tpl-panel">
+        <div class="tpl-modal">
+          <div class="tpl-modal-head">
+            <div class="tpl-modal-title-row">
+              <h2 class="tpl-modal-title">Plantillas</h2>
+              <button class="tpl-modal-close" id="btn-tpl-close" type="button" title="Cerrar">✕</button>
+            </div>
+            <div class="tpl-search-row">
+              <div class="tpl-search-wrap">
+                <svg class="tpl-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="21" y2="21"/></svg>
+                <input type="text" class="tpl-search" id="tpl-search" placeholder="Buscar plantilla..." autocomplete="off">
+              </div>
+            </div>
+            <div class="tpl-tabs" id="tpl-tabs">
+              <button class="tpl-tab is-active" data-cat="todas">Todas</button>
+              <button class="tpl-tab" data-cat="vigas">Vigas</button>
+              <button class="tpl-tab" data-cat="porticos">Pórticos</button>
+              <button class="tpl-tab" data-cat="cerchas">Cerchas</button>
+              <button class="tpl-tab" data-cat="arcos">Arcos</button>
+              <button class="tpl-tab" data-cat="mis">Mis plantillas</button>
+            </div>
+          </div>
+          <div class="tpl-modal-body" id="tpl-modal-body">
+            <div class="template-grid" id="template-grid"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== WORKSPACE: 3 columnas (Editor | Canvas | Propiedades) ===== -->
+      <div class="app-workspace">
+
+        <!-- ===== COLUMNA EDITOR (izquierda) ===== -->
+        <aside class="app-col-editor" id="rail">
+          <div class="acc-toolbar">
+            <span class="acc-toolbar-hint" id="acc-open-count"></span>
+            <button class="acc-collapse-all" id="btn-collapse-all" type="button" title="Colapsar o expandir todas las secciones">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+              <span id="collapse-all-label">Colapsar todo</span>
+            </button>
+          </div>
+
+          <!-- ─── GRUPO 1: Proyecto ─── -->
+          <div class="acc-group is-active" data-group="definir" id="grp-definir">
+            <div class="acc-group-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <span>Proyecto</span>
+              <span class="acc-group-sub">materiales · secciones · opciones</span>
+            </div>
+
+            <!-- General -->
+            <div class="card acc" data-acc="general">
+              <button class="acc-head" type="button">
+                <span class="acc-title">General</span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <div class="field">
+                  <label for="in-nombre">Nombre del proyecto</label>
+                  <input id="in-nombre" type="text" data-field="nombre" placeholder="Ej. Pórtico de dos tramos">
+                </div>
+                <div class="field">
+                  <label for="sel-unidad">Sistema de unidades</label>
+                  <select id="sel-unidad" data-field="unidad">
+                    <option value="tonf_m">tonf · m (default)</option>
+                    <option value="kN_m">kN · m</option>
+                    <option value="kgf_cm">kgf · cm</option>
+                    <option value="lb_ft">lb · ft</option>
+                    <option value="N_mm">N · mm</option>
+                  </select>
+                  <span class="hint" id="unidad-info">tonf / m</span>
+                </div>
+                <div class="options-grid">
+                  <label class="switch">
+                    <input type="checkbox" id="in-axial" data-field="despreciar_axial">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                    <span class="switch-label">Despreciar deformaciones axiales <span class="muted">(pocos GDL)</span></span>
+                  </label>
+                  <label class="switch">
+                    <input type="checkbox" id="in-peso" data-field="peso_propio">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                    <span class="switch-label">Incluir peso propio</span>
+                  </label>
+                  <label class="switch adv-only">
+                    <input type="checkbox" id="in-timoshenko" data-field="timoshenko">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                    <span class="switch-label">Timoshenko <span class="muted">(cortante en peraltes altos)</span></span>
+                  </label>
+                  <label class="switch adv-only">
+                    <input type="checkbox" id="in-pdelta" data-field="pdelta">
+                    <span class="switch-track"><span class="switch-thumb"></span></span>
+                    <span class="switch-label">P-Delta <span class="muted">(2° orden geométrico)</span></span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <!-- Material global -->
+            <div class="card acc is-collapsed" data-acc="material">
+              <button class="acc-head" type="button">
+                <span class="acc-title">Material global <span class="muted">(por defecto)</span></span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <div class="segmented" id="seg-material">
+                  <button type="button" data-mat="E" class="is-active">Módulo E</button>
+                  <button type="button" data-mat="fc">Por f'c</button>
+                </div>
+                <div id="mat-E" class="field">
+                  <label for="in-E">E (tonf/m²)</label>
+                  <input id="in-E" type="number" step="any" data-field="material.E" placeholder="2000000">
+                </div>
+                <div id="mat-fc" class="field hidden">
+                  <label for="in-fc">f'c (kgf/cm²)</label>
+                  <input id="in-fc" type="number" step="any" data-field="material.fc" placeholder="210">
+                  <p class="hint">E.060: Ec = 15000·√f'c → E en tonf/m²</p>
+                </div>
+                <div class="field adv-only">
+                  <label for="in-dens">Peso específico <span class="muted">(peso propio · masa)</span></label>
+                  <input id="in-dens" type="number" step="any" data-field="material.densidad" placeholder="2.4 tonf/m³ o 24 kN/m³">
+                </div>
+                <div class="field adv-only">
+                  <label for="in-alpha">Coef. dilatación térmica α <span class="muted">(1/°)</span></label>
+                  <input id="in-alpha" type="number" step="any" data-field="material.alpha" placeholder="1e-5 (concreto/acero)">
+                </div>
+                <div class="field adv-only">
+                  <label for="in-nu">Poisson ν <span class="muted">(Timoshenko)</span></label>
+                  <input id="in-nu" type="number" step="any" data-field="material.nu" placeholder="0.2">
+                </div>
+              </div>
+            </div>
+
+            <!-- Materiales por elemento -->
+            <div class="card acc is-collapsed adv-only" data-acc="materiales">
+              <button class="acc-head" type="button">
+                <span class="acc-title">Materiales por elemento <span class="count" id="cnt-mat">0</span></span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <p class="hint">Opcional. Si no asignas, se usa el material global.</p>
+                <div id="tb-materiales" class="cargas-list"></div>
+                <button class="btn btn-secondary btn-sm add-row" data-add="materiales">+ Agregar material</button>
+              </div>
+            </div>
+
+            <!-- Secciones -->
+            <div class="card acc is-collapsed" data-acc="secciones">
+              <button class="acc-head" type="button">
+                <span class="acc-title">Secciones <span class="count" id="cnt-sec">0</span></span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <div id="tb-secciones" class="cargas-list"></div>
+                <button class="btn btn-secondary btn-sm add-row" data-add="secciones">+ Agregar sección</button>
+              </div>
+            </div>
+
+            <!-- Análisis modal dinámico (avanzado) -->
+            <div class="card acc is-collapsed adv-only" data-acc="modal">
+              <button class="acc-head" type="button">
+                <span class="acc-title">Análisis modal dinámico</span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <label class="switch">
+                  <input type="checkbox" id="in-modal" data-field="analisis_modal">
+                  <span class="switch-track"><span class="switch-thumb"></span></span>
+                  <span class="switch-label">Calcular modos y frecuencias</span>
+                </label>
+                <p class="hint">Requiere el <strong>peso específico</strong> del material (masa = peso/g).</p>
+                <div class="carga-params">
+                  <div class="field">
+                    <label for="in-nmodos">N° de modos</label>
+                    <input id="in-nmodos" type="number" step="1" min="1" data-field="n_modos" placeholder="6">
+                  </div>
+                  <div class="field">
+                    <label for="in-g">Gravedad g</label>
+                    <input id="in-g" type="number" step="any" data-field="g" placeholder="9.81 (m/s²)">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /grp-definir -->
+
+          <!-- ─── GRUPO 2: Geometría ─── -->
+          <div class="acc-group" data-group="modelar" id="grp-modelar">
+            <div class="acc-group-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/></svg>
+              <span>Geometría</span>
+              <span class="acc-group-sub">nudos · elementos · apoyos</span>
+            </div>
+
+            <!-- Nudos -->
+            <div class="card acc" data-acc="nudos">
+              <button class="acc-head" type="button">
+                <span class="acc-title">Nudos <span class="count" id="cnt-nud">0</span></span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <div id="tb-nudos" class="cargas-list"></div>
+                <button class="btn btn-secondary btn-sm add-row" data-add="nudos">+ Agregar nudo</button>
+              </div>
+            </div>
+
+            <!-- Elementos -->
+            <div class="card acc is-collapsed" data-acc="elementos">
+              <button class="acc-head" type="button">
+                <span class="acc-title">Elementos <span class="count" id="cnt-ele">0</span></span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <div class="tbl-wrap">
+                  <table class="tbl">
+                    <thead><tr>
+                      <th scope="col">Nombre</th><th scope="col">i</th><th scope="col">j</th>
+                      <th scope="col">Sección</th><th scope="col">Material</th>
+                      <th scope="col" title="Rótula en i / j">Rót.</th><th scope="col"></th>
+                    </tr></thead>
+                    <tbody id="tb-elementos"></tbody>
+                  </table>
+                </div>
+                <button class="btn btn-secondary btn-sm add-row" data-add="elementos">+ Agregar elemento</button>
+              </div>
+            </div>
+
+          </div><!-- /grp-modelar -->
+
+          <!-- ─── GRUPO 3: Cargas ─── -->
+          <div class="acc-group" data-group="cargar" id="grp-cargar">
+            <div class="acc-group-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+              <span>Cargas</span>
+              <span class="acc-group-sub">nodales · en elementos · combinaciones</span>
+            </div>
+
+            <!-- Cargas nodales -->
+            <div class="card acc" data-acc="cargas_nodales">
+              <button class="acc-head" type="button">
+                <span class="acc-title">Cargas en nudos <span class="count" id="cnt-cn">0</span></span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <div class="convencion-leyenda">
+                  <strong>Convención:</strong>
+                  <span>Fy + = ↑ arriba</span><span class="conv-sep">·</span>
+                  <span>Fx + = → derecha</span><span class="conv-sep">·</span>
+                  <span>M + = ↺ antihorario</span>
+                </div>
+                <div id="tb-cargas_nodales" class="cargas-list"></div>
+                <button class="btn btn-secondary btn-sm add-row" data-add="cargas_nodales">+ Agregar carga nodal</button>
+              </div>
+            </div>
+
+            <!-- Cargas en elementos -->
+            <div class="card acc is-collapsed" data-acc="cargas_elementos">
+              <button class="acc-head" type="button">
+                <span class="acc-title">Cargas en elementos <span class="count" id="cnt-ce">0</span></span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <div class="convencion-leyenda">
+                  <strong>Convención de signos:</strong>
+                  <span>Fy/wy + = ↑ arriba</span><span class="conv-sep">·</span>
+                  <span>Fx/wx + = → derecha</span><span class="conv-sep">·</span>
+                  <span>M + = ↺ antihorario</span><span class="conv-sep">·</span>
+                  <span>Perp. + = lado izq. de i→j</span>
+                </div>
+                <div id="tb-cargas_elementos" class="cargas-list"></div>
+                <button class="btn btn-secondary btn-sm add-row" data-add="cargas_elementos">+ Agregar carga</button>
+              </div>
+            </div>
+
+            <!-- Casos y combinaciones -->
+            <div class="card acc is-collapsed adv-only" data-acc="combos">
+              <button class="acc-head" type="button">
+                <span class="acc-title">Casos y combinaciones <span class="count" id="cnt-combo">0</span></span>
+                <span class="chev" aria-hidden="true">▾</span>
+              </button>
+              <div class="acc-body">
+                <label class="switch">
+                  <input type="checkbox" id="in-usar-combos" data-field="usar_combos">
+                  <span class="switch-track"><span class="switch-thumb"></span></span>
+                  <span class="switch-label">Usar casos y combinaciones <span class="muted">(asigna cargas a casos)</span></span>
+                </label>
+                <div id="combo-editor" class="combo-wrap hidden">
+                  <div>
+                    <h4 class="section-title">Casos de carga</h4>
+                    <p class="hint">D = muerta, L = viva, S = sismo…</p>
+                    <div id="tb-casos" class="cargas-list"></div>
+                    <button class="btn btn-secondary btn-sm add-row" data-add="casos">+ Agregar caso</button>
+                  </div>
+                  <div>
+                    <h4 class="section-title">Combinaciones</h4>
+                    <p class="hint">Suma factorizada de casos (1.2D + 1.6L).</p>
+                    <div id="tb-combinaciones" class="cargas-list"></div>
+                    <button class="btn btn-secondary btn-sm add-row" data-add="combinaciones">+ Agregar combinación</button>
+                  </div>
+                  <button class="btn btn-primary btn-sm" id="btn-calc-combos">Calcular combinaciones</button>
+                </div>
+              </div>
+            </div>
+
+          </div><!-- /grp-cargar -->
+
+        </aside><!-- /app-col-editor -->
+
+        <!-- ===== COLUMNA CANVAS (centro) ===== -->
+        <div class="app-col-canvas">
+          <!-- Toolbar del canvas -->
+          <div class="canvas-toolbar">
+            <div class="editor-tools" id="editor-tools">
+              <div class="segmented seg-mini" id="seg-modo-editor">
+                <button type="button" data-emode="mover" class="is-active" title="Seleccionar/arrastrar nudos (clic = inspector)">⊹ Mover</button>
+                <button type="button" data-emode="nudo" title="Clic en el lienzo para crear un nudo">＋ Nudo</button>
+                <button type="button" data-emode="conectar" title="Clic en dos nudos para unirlos">⁃ Conectar</button>
+                <button type="button" data-emode="eliminar" title="Clic en un nudo para eliminarlo">✕ Elim.</button>
+              </div>
+              <label class="snap-chk"><input type="checkbox" id="chk-snap" checked> snap 0.5</label>
+              <label class="snap-chk"><input type="checkbox" id="chk-grid"> grilla</label>
+            </div>
+            <div class="preview-head-right">
+              <span class="badge badge-info"><span class="dot"></span>en vivo</span>
+              <div class="label-toggles" id="label-toggles">
+                <button type="button" class="lbl-toggle is-active" data-lbl="nombres" title="Mostrar nombres de nudos">N</button>
+                <button type="button" class="lbl-toggle is-active" data-lbl="secciones" title="Mostrar nombre del elemento">E</button>
+                <button type="button" class="lbl-toggle is-active" data-lbl="cargas" title="Mostrar símbolos de carga">C</button>
+                <button type="button" class="lbl-toggle is-active" data-lbl="valores" title="Mostrar valores numéricos">V</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cuerpo del canvas (vista previa) -->
+          <div class="canvas-body">
+            <svg id="preview-svg" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="preview-zoom">
+              <button type="button" id="pv-zoom-in" title="Acercar">+</button>
+              <button type="button" id="pv-zoom-out" title="Alejar">−</button>
+              <button type="button" id="pv-zoom-reset" title="Restablecer">⤢</button>
+              <button type="button" id="pv-export-png" title="Exportar PNG">📷</button>
+            </div>
+          </div>
+
+          <!-- Leyenda del canvas -->
+          <div class="canvas-legend" id="preview-legend">
+            <span>N · E · C · V</span>
+          </div>
+        </div><!-- /app-col-canvas -->
+
+        <!-- ===== COLUMNA PROPIEDADES (derecha) ===== -->
+        <aside class="app-col-props" id="col-inspector">
+          <div class="props-panel" id="inspector-panel">
+            <div class="props-head">
+              <button class="props-collapse-btn" id="props-collapse-btn" type="button" title="Colapsar panel de propiedades" aria-label="Colapsar panel">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+              </button>
+              <div class="props-head-text">
+                <div class="props-title" id="inspector-hint">Propiedades</div>
+                <div class="props-subtitle" id="props-subtitle">Selecciona un nudo o elemento</div>
+              </div>
+            </div>
+            <div class="props-body" id="inspector-body">
+              <!-- Empty state -->
+              <div class="props-empty">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
+                  <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>
+                  <circle cx="12" cy="10" r="2"/>
+                  <line x1="12" y1="12" x2="12" y2="14"/>
+                </svg>
+                <p><strong>Selecciona un nudo o elemento</strong> en el lienzo para ver sus propiedades.</p>
+                <p class="hint">Modo <strong>Mover</strong>: haz clic sin arrastrar.</p>
+              </div>
+            </div>
+          </div>
+        </aside><!-- /app-col-props -->
+
+      </div><!-- /app-workspace -->
+
+      <!-- ===== STATUS BAR ===== -->
+      <div class="model-statusbar">
+        <span class="sb-item sb-coords" id="status-coords">x: — · y: —</span>
+        <span class="sb-sep">·</span>
+        <span class="sb-item" id="status-units">tonf · m</span>
+        <span class="sb-sep">·</span>
+        <span class="sb-item" id="status-snap">snap 0.5 m</span>
+        <span class="sb-flex"></span>
+        <span class="sb-item sb-sel" id="status-sel"></span>
+        <span class="sb-item sb-counts" id="preview-legend"></span>
+      </div>
+    </section><!-- /vista-modelo -->
+
+    <!-- ============================================================= -->
+    <!-- ==================== VISTA: RESULTADOS ====================== -->
+    <!-- ============================================================= -->
+    <section class="vista hidden" id="vista-resultados">
+      <div id="resultados-vacio" class="empty">
+        <span class="empty-ico" aria-hidden="true">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18M7 14l3-3 3 3 5-6"/></svg>
+        </span>
+        <h3>Aún no hay resultados</h3>
+        <p>Define la estructura y pulsa "Calcular estructura".</p>
+        <div class="empty-steps">
+          <div class="empty-step"><div class="empty-step-num">1</div><div class="empty-step-text">Define materiales y secciones</div></div>
+          <div class="empty-step"><div class="empty-step-num">2</div><div class="empty-step-text">Modela nudos y elementos</div></div>
+          <div class="empty-step"><div class="empty-step-num">3</div><div class="empty-step-text">Aplica cargas</div></div>
+          <div class="empty-step"><div class="empty-step-num">4</div><div class="empty-step-text">Calcula</div></div>
+        </div>
+      </div>
+
+      <div id="resultados-cont" class="hidden">
+        <div class="res-head">
+          <div>
+            <h2 class="page-title" id="res-nombre">Resultados</h2>
+            <p class="res-meta" id="res-meta"></p>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="btn-volver-editar">← Editar modelo</button>
+        </div>
+
+        <!-- KPIs -->
+        <div class="kpis" id="res-kpis"></div>
+
+        <!-- Equilibrio + acciones -->
+        <div class="card res-card res-equilibrio">
+          <span class="card-accent" aria-hidden="true"></span>
+          <div class="res-card-head">
+            <h3 class="section-title">Verificación de equilibrio</h3>
+            <div class="res-export">
+              <button class="btn btn-secondary btn-sm" id="btn-exp-memoria">Memoria (.txt)</button>
+              <button class="btn btn-secondary btn-sm" id="btn-exp-csv">Tablas (.csv)</button>
+              <button class="btn btn-secondary btn-sm" id="btn-imprimir">Imprimir / PDF</button>
+            </div>
+          </div>
+          <div id="res-equilibrio-cont"></div>
+        </div>
+
+        <!-- Diagramas -->
+        <div class="card res-card">
+          <span class="card-accent" aria-hidden="true"></span>
+          <div class="res-card-head">
+            <h3 class="section-title">Diagramas</h3>
+            <div class="segmented seg-diag" id="seg-diagramas">
+              <button type="button" data-img="dmf" class="is-active">DMF</button>
+              <button type="button" data-img="dfc">DFC</button>
+              <button type="button" data-img="dfn">Axial</button>
+              <button type="button" data-img="deformada">Deformada</button>
+              <button type="button" data-img="modelo">Modelo</button>
+            </div>
+          </div>
+          <div class="convencion-leyenda">
+            <strong>Convención:</strong>
+            <span class="conv-tag conv-m">M + = sagging (lado tracción)</span>
+            <span class="conv-tag conv-v">V + = cortante local ↑</span>
+            <span class="conv-tag conv-n">N + = tracción</span>
+            <label class="switch" style="margin-left:auto;font-size:11px">
+              <input type="checkbox" id="diag-traccion-side">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="switch-label">Lado tracción (V/N)</span>
+            </label>
+          </div>
+          <div class="diag-box diag-interactive">
+            <svg id="diag-svg" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="diag-tip" id="diag-tip" hidden></div>
+            <div class="diag-zoom">
+              <button type="button" id="diag-zin" title="Acercar">+</button>
+              <button type="button" id="diag-zout" title="Alejar">−</button>
+              <button type="button" id="diag-zreset" title="Ajustar">⤢</button>
+              <button type="button" id="diag-export" title="Exportar PNG">📷</button>
+            </div>
+            <div class="diag-hint" id="diag-hint">Pasa el cursor para ver valores · rueda para zoom · arrastra para mover</div>
+          </div>
+        </div>
+
+        <!-- Análisis modal (solo si se solicitó) -->
+        <div class="card res-card hidden" id="res-modal-card">
+          <span class="card-accent" aria-hidden="true"></span>
+          <div class="res-card-head">
+            <h3 class="section-title">Análisis modal dinámico</h3>
+            <div class="segmented seg-diag" id="seg-modos"></div>
+          </div>
+          <div class="res-2col">
+            <div class="tbl-wrap">
+              <table class="tbl tbl-data">
+                <thead><tr>
+                  <th scope="col">Modo</th><th scope="col">f (Hz)</th>
+                  <th scope="col">T (s)</th><th scope="col">ω (rad/s)</th>
+                </tr></thead>
+                <tbody id="tb-res-modal"></tbody>
+              </table>
+            </div>
+            <div class="diag-box diag-interactive" style="min-height:280px">
+              <svg id="modal-svg" preserveAspectRatio="xMidYMid meet"></svg>
+              <div class="diag-hint">Forma modal (normalizada). Usa los botones para cambiar de modo.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="res-2col">
+          <!-- Desplazamientos -->
+          <div class="card res-card">
+            <span class="card-accent" aria-hidden="true"></span>
+            <h3 class="section-title">Desplazamientos y rotaciones</h3>
+            <div class="tbl-wrap">
+              <table class="tbl tbl-data">
+                <thead><tr>
+                  <th scope="col">Nudo</th><th scope="col">ux</th>
+                  <th scope="col">uy</th><th scope="col">giro (rad)</th>
+                </tr></thead>
+                <tbody id="tb-res-desp"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Reacciones -->
+          <div class="card res-card">
+            <span class="card-accent" aria-hidden="true"></span>
+            <h3 class="section-title">Reacciones en apoyos</h3>
+            <div class="tbl-wrap">
+              <table class="tbl tbl-data">
+                <thead><tr>
+                  <th scope="col">Nudo</th><th scope="col">Rx</th>
+                  <th scope="col">Ry</th><th scope="col">M</th>
+                </tr></thead>
+                <tbody id="tb-res-reac"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fuerzas en elementos -->
+        <div class="card res-card">
+          <span class="card-accent" aria-hidden="true"></span>
+          <h3 class="section-title">Fuerzas internas en extremos de elementos</h3>
+          <div class="convencion-inline"><span class="conv-tag conv-n">N + = tracción</span> <span class="conv-tag conv-v">V + = cortante local ↑</span> <span class="conv-tag conv-m">M + = sagging (lado tracción)</span></div>
+          <div class="tbl-wrap">
+            <table class="tbl tbl-data">
+              <thead><tr>
+                <th scope="col">Elem</th>
+                <th scope="col"><span class="th-main">N<sub>i</sub></span><span class="th-sub">Axial</span></th>
+                <th scope="col"><span class="th-main">V<sub>i</sub></span><span class="th-sub">Cortante</span></th>
+                <th scope="col"><span class="th-main">M<sub>i</sub></span><span class="th-sub">Momento</span></th>
+                <th scope="col"><span class="th-main">N<sub>j</sub></span><span class="th-sub">Axial</span></th>
+                <th scope="col"><span class="th-main">V<sub>j</sub></span><span class="th-sub">Cortante</span></th>
+                <th scope="col"><span class="th-main">M<sub>j</sub></span><span class="th-sub">Momento</span></th>
+                <th scope="col">|M|máx</th><th scope="col">|V|máx</th>
+              </tr></thead>
+              <tbody id="tb-res-fuerzas"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Memoria paso a paso -->
+        <div class="card res-card">
+          <span class="card-accent" aria-hidden="true"></span>
+          <button class="acc-head acc-head--flat" type="button" id="toggle-reporte">
+            <span class="acc-title">Memoria de cálculo paso a paso</span>
+            <span class="chev" aria-hidden="true">▾</span>
+          </button>
+          <div class="acc-body" id="reporte-body" hidden>
+            <pre class="reporte" id="res-reporte"></pre>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================= -->
+    <!-- ===================== VISTA: COMBINACIONES ================== -->
+    <!-- ============================================================= -->
+    <section class="vista hidden" id="vista-combinaciones">
+      <div class="res-head">
+        <div>
+          <h2 class="page-title">Combinaciones y envolventes</h2>
+          <p class="res-meta" id="combo-meta">Define casos de carga y combinaciones, luego calcula.</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-combo-editar">← Editar casos</button>
+      </div>
+      <div id="combo-vacio" class="empty-state">
+        <p>Aún no hay envolventes. Ve a <strong>Cargas → Casos y combinaciones</strong>, define tus casos y combinaciones y pulsa <strong>Calcular combinaciones</strong>.</p>
+      </div>
+      <div id="combo-cont" class="hidden">
+        <div class="kpis" id="combo-kpis"></div>
+        <div class="card res-card">
+          <span class="card-accent" aria-hidden="true"></span>
+          <div class="res-card-head">
+            <h3 class="section-title">Envolvente de solicitaciones</h3>
+            <div class="segmented seg-diag" id="seg-envolvente">
+              <button type="button" data-env="M" class="is-active">Momento</button>
+              <button type="button" data-env="V">Cortante</button>
+              <button type="button" data-env="N">Axial</button>
+            </div>
+          </div>
+          <div class="diag-box diag-interactive">
+            <svg id="env-svg" preserveAspectRatio="xMidYMid meet"></svg>
+            <div class="diag-hint">Curvas máxima y mínima sobre todas las combinaciones</div>
+          </div>
+        </div>
+        <div class="res-2col">
+          <div class="card res-card">
+            <span class="card-accent" aria-hidden="true"></span>
+            <h3 class="section-title">Resumen por combinación</h3>
+            <div class="tbl-wrap"><table class="combo-tabla">
+              <thead><tr><th>Combinación</th><th>|M|máx</th><th>|V|máx</th><th>|N|máx</th></tr></thead>
+              <tbody id="tb-combos"></tbody>
+            </table></div>
+          </div>
+          <div class="card res-card">
+            <span class="card-accent" aria-hidden="true"></span>
+            <h3 class="section-title">Envolvente de reacciones</h3>
+            <div class="tbl-wrap"><table class="combo-tabla">
+              <thead><tr><th>Nudo</th><th>Rx (mín/máx)</th><th>Ry (mín/máx)</th><th>M (mín/máx)</th></tr></thead>
+              <tbody id="tb-reac-env"></tbody>
+            </table></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===================== VISTA: HISTORIAL ====================== -->
+    <section class="vista hidden" id="vista-historial">
+      <div class="res-head">
+        <div>
+          <h2 class="page-title">Historial de cálculos</h2>
+          <p class="res-meta">Resultados guardados automáticamente. Haz clic para ver.</p>
+        </div>
+        <button class="btn btn-danger btn-sm" id="btn-limpiar-historial">Vaciar historial</button>
+      </div>
+      <div class="field" style="max-width:320px;margin-bottom:var(--sp4)">
+        <input type="text" id="hist-search" placeholder="Buscar por nombre...">
+      </div>
+      <div id="historial-cont"></div>
+    </section>
+
+  </main>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden" role="alert"></div>
+
+  <!-- Mobile bottom nav -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <button class="bottom-nav-btn is-active" data-vista="modelo">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>
+      <span>Modelo</span>
+    </button>
+    <button class="bottom-nav-btn" data-vista="resultados">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 14l3-3 3 3 5-6"/></svg>
+      <span>Resultados</span>
+    </button>
+    <button class="bottom-nav-btn" data-vista="combinaciones">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+      <span>Combos</span>
+    </button>
+    <button class="bottom-nav-btn" data-vista="historial">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      <span>Historial</span>
+    </button>
+  </nav>
+
+  <!-- Overlay de carga -->
+  <div id="overlay" class="overlay hidden">
+    <div class="spinner"></div>
+    <p>Calculando…</p>
+  </div>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

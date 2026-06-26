@@ -1,0 +1,112 @@
+{
+  "nombre": "PÓRTICO HIPERESTÁTICO",
+  "despreciar_axial": false,
+  "peso_propio": false,
+  "unidad": "kN_m",
+  "material": {
+    "modo": "E",
+    "E": 2100000
+  },
+  "materiales": [],
+  "casos": [],
+  "combinaciones": [],
+  "usar_combos": false,
+  "secciones": [
+    {
+      "nombre": "columnas",
+      "tipo": "rectangular",
+      "b": 0.3,
+      "h": "0.3"
+    },
+    {
+      "nombre": "viga",
+      "tipo": "rectangular",
+      "b": "0.6",
+      "h": "0.3"
+    }
+  ],
+  "nudos": [
+    {
+      "id": 1,
+      "nombre": "N1",
+      "x": 0,
+      "y": 0,
+      "apoyo": "empotrado"
+    },
+    {
+      "id": 2,
+      "nombre": "N2",
+      "x": "0",
+      "y": "8",
+      "apoyo": "libre"
+    },
+    {
+      "id": 3,
+      "nombre": "N3",
+      "x": "12",
+      "y": 0,
+      "apoyo": "empotrado"
+    },
+    {
+      "id": 4,
+      "nombre": "N4",
+      "x": "12",
+      "y": "8",
+      "apoyo": "libre"
+    }
+  ],
+  "elementos": [
+    {
+      "id": 1,
+      "nombre": "E1",
+      "i": 1,
+      "j": 2,
+      "seccion": "columnas",
+      "release_i": false,
+      "release_j": false
+    },
+    {
+      "id": 2,
+      "nombre": "E2",
+      "i": 2,
+      "j": 4,
+      "seccion": "columnas",
+      "release_i": false,
+      "release_j": false
+    },
+    {
+      "id": 3,
+      "nombre": "E3",
+      "i": 3,
+      "j": 4,
+      "seccion": "columnas",
+      "release_i": false,
+      "release_j": false
+    }
+  ],
+  "cargas_nodales": [],
+  "cargas_elementos": [
+    {
+      "elem": 1,
+      "tipo": "distribuida",
+      "subtipo": "uniforme",
+      "dir": "perp",
+      "q": "-20"
+    },
+    {
+      "elem": 2,
+      "tipo": "distribuida",
+      "subtipo": "uniforme",
+      "dir": "vert",
+      "q": "-10"
+    },
+    {
+      "elem": 3,
+      "tipo": "puntual",
+      "dir": "horiz",
+      "q": "16",
+      "a": "4"
+    }
+  ],
+  "modo_oscilatorio": false
+}
