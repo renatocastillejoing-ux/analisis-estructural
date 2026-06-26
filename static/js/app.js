@@ -77,7 +77,7 @@ function renderMaterialItem(x, i){
     <div class="sec-row1">
       <input type="text" value="${esc(x.nombre||"")}" data-coll="materiales" data-idx="${i}" data-field="nombre" placeholder="nombre">
       <select data-matpreset data-idx="${i}">${presets}</select>
-      <button class="btn-del" data-del="materiales" data-idx="${i}" title="Eliminar">×</button>
+      <button class="btn-del" data-del="materiales" data-idx="${i}" title="Eliminar material" aria-label="Eliminar material">×</button>
     </div>
     <div class="carga-params">${f("E (tonf/m²)","E",x.E)}${f("Peso esp. (tonf/m³)","densidad",x.densidad)}${f("Poisson ν","nu",x.nu)}</div>
   </div>`;
@@ -311,7 +311,7 @@ function renderEditor(){
         <input type="checkbox" ${e.release_i?"checked":""} data-coll="elementos" data-idx="${i}" data-field="release_i" title="Rótula en i">
         <input type="checkbox" ${e.release_j?"checked":""} data-coll="elementos" data-idx="${i}" data-field="release_j" title="Rótula en j">
       </div></td>
-      <td><button class="btn-del" data-dup="elementos" data-idx="${i}" title="Duplicar">⧉</button> <button class="btn-del" data-del="elementos" data-idx="${i}" title="Eliminar">×</button></td>
+      <td><button class="btn-del" data-dup="elementos" data-idx="${i}" title="Duplicar elemento" aria-label="Duplicar elemento">⧉</button> <button class="btn-del" data-del="elementos" data-idx="${i}" title="Eliminar elemento" aria-label="Eliminar elemento">×</button></td>
     </tr>`).join("");
   $("#tb-cargas_nodales").innerHTML = m.cargas_nodales.map((c,i)=>renderCargaNodal(c,i)).join("");
   $("#tb-cargas_elementos").innerHTML = m.cargas_elementos.map((c,i)=>renderCargaItem(c,i)).join("");
@@ -357,7 +357,7 @@ function dirPresets(coll, i, dir){
   const btns = DIR_OPCIONES.map(([v,l])=>{
     const sp = l.indexOf(" ");
     const glyph = l.slice(0, sp), name = l.slice(sp+1);
-    return `<button type="button" class="dir-preset ${cur===v?"is-active":""}" data-dirpreset="${v}" data-coll="${coll}" data-idx="${i}" title="${esc(name)}">${glyph}</button>`;
+    return `<button type="button" class="dir-preset ${cur===v?"is-active":""}" data-dirpreset="${v}" data-coll="${coll}" data-idx="${i}" title="${esc(name)}" aria-label="Dirección: ${esc(name)}">${glyph}</button>`;
   }).join("");
   const curName = (DIR_OPCIONES.find(o=>o[0]===cur)||["",""])[1].replace(/^\S+\s/,"");
   return `<div class="dir-presets">${btns}</div><span class="dir-cur">${esc(curName)}</span>`;
@@ -436,8 +436,8 @@ function renderCargaItem(c, i){
         ${opt("puntual","Puntual")}${opt("momento","Momento")}${opt("termica","Térmica (ΔT)")}
       </select>
       ${casoSel("cargas_elementos", i, c)}
-      <button class="btn-del" data-dup="cargas_elementos" data-idx="${i}" title="Duplicar">⧉</button>
-      <button class="btn-del" data-del="cargas_elementos" data-idx="${i}" title="Eliminar">×</button>
+      <button class="btn-del" data-dup="cargas_elementos" data-idx="${i}" title="Duplicar carga" aria-label="Duplicar carga elemental">⧉</button>
+      <button class="btn-del" data-del="cargas_elementos" data-idx="${i}" title="Eliminar carga" aria-label="Eliminar carga elemental">×</button>
     </div>
     ${dirRow}
     <div class="carga-params">${params}</div>${parcial}${helpText}
@@ -481,8 +481,8 @@ function renderSeccionItem(s, i){
     <div class="sec-row1">
       <input type="text" value="${esc(s.nombre)}" data-coll="secciones" data-idx="${i}" data-field="nombre" placeholder="nombre">
       <select data-coll="secciones" data-idx="${i}" data-field="__sectipo">${opts}</select>
-      <button class="btn-del" data-dup="secciones" data-idx="${i}" title="Duplicar">⧉</button>
-      <button class="btn-del" data-del="secciones" data-idx="${i}" title="Eliminar">×</button>
+      <button class="btn-del" data-dup="secciones" data-idx="${i}" title="Duplicar sección" aria-label="Duplicar sección">⧉</button>
+      <button class="btn-del" data-del="secciones" data-idx="${i}" title="Eliminar sección" aria-label="Eliminar sección">×</button>
     </div>
     <div class="carga-params">${campos}</div>
     ${info}
@@ -503,8 +503,8 @@ function renderNudoItem(n, i){
       <select data-coll="nudos" data-idx="${i}" data-field="apoyo">
         ${APOYOS.map(([v,l])=>`<option value="${v}" ${n.apoyo===v?"selected":""}>${l}</option>`).join("")}
       </select>
-      <button class="btn-del" data-dup="nudos" data-idx="${i}" title="Duplicar">⧉</button>
-      <button class="btn-del" data-del="nudos" data-idx="${i}" title="Eliminar">×</button>
+      <button class="btn-del" data-dup="nudos" data-idx="${i}" title="Duplicar nudo" aria-label="Duplicar nudo">⧉</button>
+      <button class="btn-del" data-del="nudos" data-idx="${i}" title="Eliminar nudo" aria-label="Eliminar nudo">×</button>
     </div>
     <button class="nd-adv-toggle" data-ndadv="${i}">Avanzado: resorte / asentamiento ▾</button>
     <div class="nd-adv ${hasAdv?"open":""}" data-ndadvbody="${i}">
@@ -526,7 +526,7 @@ function renderCargaNodal(c, i){
   if (modo==="ang"){
     const mag=num(c.mag), ang=num(c.ang);
     const Fx=(mag*Math.cos(ang*Math.PI/180)), Fy=(mag*Math.sin(ang*Math.PI/180));
-    const preset = (deg,glyph,title)=>`<button type="button" class="ang-preset ${num(c.ang)===deg?"is-active":""}" data-angpreset="${deg}" data-idx="${i}" title="${title}">${glyph}</button>`;
+    const preset = (deg,glyph,title)=>`<button type="button" class="ang-preset ${num(c.ang)===deg?"is-active":""}" data-angpreset="${deg}" data-idx="${i}" title="${title}" aria-label="${esc(title)}">${glyph}</button>`;
     cuerpo = f(`Magnitud (${u.fuerza})`, "mag", c.mag, "Magnitud de la fuerza resultante")
            + `<div class="field"><label>Ángulo (°)</label>
                 <div class="ang-input">
@@ -547,8 +547,8 @@ function renderCargaNodal(c, i){
       <select data-coll="cargas_nodales" data-idx="${i}" data-field="nudo" title="Nudo">${optsNudos(c.nudo)}</select>
       <div class="seg-mini">${seg("comp","Componentes")}${seg("ang","Magnitud + ángulo")}</div>
       ${casoSel("cargas_nodales", i, c)}
-      <button class="btn-del" data-dup="cargas_nodales" data-idx="${i}" title="Duplicar">⧉</button>
-      <button class="btn-del" data-del="cargas_nodales" data-idx="${i}" title="Eliminar">×</button>
+      <button class="btn-del" data-dup="cargas_nodales" data-idx="${i}" title="Duplicar carga" aria-label="Duplicar carga nodal">⧉</button>
+      <button class="btn-del" data-del="cargas_nodales" data-idx="${i}" title="Eliminar carga" aria-label="Eliminar carga nodal">×</button>
     </div>
     <div class="carga-params">${cuerpo}</div>
     <div class="carga-help"><span class="carga-help-icon">?</span> <em>Fy + = arriba · Fx + = derecha · M + = antihorario</em></div>
@@ -573,7 +573,7 @@ function renderCasoItem(c, i){
     <div class="caso-head">
       <span class="tag-caso">${esc(c.nombre||("C"+(i+1)))}</span>
       <input type="text" value="${esc(c.nombre||"")}" data-coll="casos" data-idx="${i}" data-field="nombre" placeholder="nombre del caso (D, L, S…)">
-      <button class="btn-del" data-del="casos" data-idx="${i}" title="Eliminar">×</button>
+      <button class="btn-del" data-del="casos" data-idx="${i}" title="Eliminar caso" aria-label="Eliminar caso de carga">×</button>
     </div>
   </div>`;
 }
@@ -586,7 +586,7 @@ function renderComboItem(c, i){
   return `<div class="combo-item">
     <div class="caso-head">
       <input type="text" value="${esc(c.nombre||"")}" data-coll="combinaciones" data-idx="${i}" data-field="nombre" placeholder="nombre (1.2D+1.6L)">
-      <button class="btn-del" data-del="combinaciones" data-idx="${i}" title="Eliminar">×</button>
+      <button class="btn-del" data-del="combinaciones" data-idx="${i}" title="Eliminar combinación" aria-label="Eliminar combinación">×</button>
     </div>
     <div class="combo-factores">${campos}</div>
   </div>`;
@@ -619,15 +619,17 @@ function bindEditor(){
     if (wasCollapsed) {
       // Collapse sibling accordions within same group
       if (parentGroup){
-        parentGroup.querySelectorAll(".acc").forEach(a => a.classList.add("is-collapsed"));
+        parentGroup.querySelectorAll(".acc").forEach(a => { a.classList.add("is-collapsed"); a.querySelector(".acc-head")?.setAttribute("aria-expanded","false"); });
       } else {
-        $$("#rail .acc").forEach(a => a.classList.add("is-collapsed"));
+        $$("#rail .acc").forEach(a => { a.classList.add("is-collapsed"); a.querySelector(".acc-head")?.setAttribute("aria-expanded","false"); });
       }
       acc.classList.remove("is-collapsed");
+      h.setAttribute("aria-expanded","true");
       // Activate workflow step for this group
       if (parentGroup) setWorkflowActiveForGroup(parentGroup.dataset.group);
     } else {
       acc.classList.add("is-collapsed");
+      h.setAttribute("aria-expanded","false");
     }
     updateAccOpenCount();
   }));
@@ -2372,7 +2374,7 @@ function renderTemplateGallery(){
           const t = custom[key];
           const svgContent = t.svg || _generarSvgPlantilla(t.modelo||{});
           return `<div class="template-card-wrap">
-            <button class="template-card-del" data-del-tpl="${key}" title="Eliminar plantilla">✕</button>
+            <button class="template-card-del" data-del-tpl="${key}" title="Eliminar plantilla" aria-label="Eliminar plantilla">✕</button>
             <div class="template-card template-card--custom" data-tpl-custom="${key}">
               <svg viewBox="0 0 120 90" xmlns="http://www.w3.org/2000/svg">${svgContent}</svg>
               <span class="template-card-name">${esc(t.nombre)}</span>
@@ -3005,6 +3007,7 @@ function initLabelToggles(){
     const lbl = btn.dataset.lbl;
     state._labelToggles[lbl] = !state._labelToggles[lbl];
     btn.classList.toggle("is-active", state._labelToggles[lbl]);
+    btn.setAttribute("aria-pressed", state._labelToggles[lbl] ? "true" : "false");
     drawPreview();
   });
 }
@@ -3027,6 +3030,8 @@ function initPropsCollapse(){
   const apply = (collapsed)=>{
     vista.classList.toggle("props-collapsed", collapsed);
     btn.title = collapsed ? "Expandir panel de propiedades" : "Colapsar panel de propiedades";
+    btn.setAttribute("aria-label", collapsed ? "Expandir panel de propiedades" : "Colapsar panel de propiedades");
+    btn.setAttribute("aria-expanded", collapsed ? "false" : "true");
     localStorage.setItem("ae_props_collapsed", collapsed ? "1" : "0");
     requestAnimationFrame(drawPreview);   // el lienzo cambia de tamaño
   };
@@ -3074,8 +3079,8 @@ function initCollapseAll(){
 function initHamMenu(){
   const btn = $("#ham-btn"), menu = $("#ham-menu");
   if (!btn || !menu) return;
-  const open = ()=>{ menu.classList.remove("hidden"); btn.classList.add("is-open"); };
-  const close = ()=>{ menu.classList.add("hidden"); btn.classList.remove("is-open"); };
+  const open = ()=>{ menu.classList.remove("hidden"); btn.classList.add("is-open"); btn.setAttribute("aria-expanded","true"); };
+  const close = ()=>{ menu.classList.add("hidden"); btn.classList.remove("is-open"); btn.setAttribute("aria-expanded","false"); };
   btn.addEventListener("click",(e)=>{
     e.stopPropagation();
     menu.classList.contains("hidden") ? open() : close();
