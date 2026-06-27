@@ -54,8 +54,21 @@ def construir(datos):
         "lb_ft":   {"f": 1/2204.62,"l": 1/3.281},
         "N_mm":    {"f": 1/9810,   "l": 1/1000},
     }
-    unidad_key = datos.get("unidad", "tonf_m")
-    conv = UNIDADES_CONV.get(unidad_key, UNIDADES_CONV["tonf_m"])
+    FORCE_FACTORS = {
+        "tonf": 1.0, "kgf": 1/1000, "N": 1/9810, "kN": 1/9.81,
+        "MN": 1/0.00981, "GN": 1/0.00000981, "lbf": 1/2204.62, "kip": 1/2.20462,
+    }
+    LENGTH_FACTORS = {
+        "m": 1.0, "mm": 1/1000, "cm": 1/100, "km": 1000, "ft": 1/3.281, "in": 1/39.37,
+    }
+    # Support both old combined key and new separate keys
+    if "unidad_fuerza" in datos or "unidad_longitud" in datos:
+        f_key = datos.get("unidad_fuerza", "tonf")
+        l_key = datos.get("unidad_longitud", "m")
+        conv = {"f": FORCE_FACTORS.get(f_key, 1.0), "l": LENGTH_FACTORS.get(l_key, 1.0)}
+    else:
+        unidad_key = datos.get("unidad", "tonf_m")
+        conv = UNIDADES_CONV.get(unidad_key, UNIDADES_CONV["tonf_m"])
 
     # Conversión identidad: se trabaja directamente en las unidades del usuario.
     def conv_fuerza(val):      return float(val)
@@ -132,10 +145,15 @@ def construir(datos):
         if dir_mode is None or dir_mode == "comp":
             return d  # already in global components
         cx, cy = e.cos, e.sin
+        # perpendicular orientada hacia arriba-derecha (igual que el frontend):
+        # columna -> +X (derecha), viga -> +Y (arriba).
+        ppx, ppy = -cy, cx
+        if ppy < -1e-9 or (abs(ppy) < 1e-9 and ppx < 0):
+            ppx, ppy = -ppx, -ppy
         _DIR_VEC = {
             "vert":  (0.0, 1.0),
             "horiz": (1.0, 0.0),
-            "perp":  (-cy, cx),    # 90 deg left of i->j
+            "perp":  (ppx, ppy),
             "axial": (cx, cy),     # along element axis
         }
         if dir_mode == "angle":

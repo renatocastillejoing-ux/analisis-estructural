@@ -169,17 +169,33 @@
                   <label for="in-nombre">Nombre del proyecto</label>
                   <input id="in-nombre" type="text" data-field="nombre" placeholder="Ej. Pórtico de dos tramos">
                 </div>
-                <div class="field">
-                  <label for="sel-unidad">Sistema de unidades</label>
-                  <select id="sel-unidad" data-field="unidad">
-                    <option value="tonf_m">tonf · m (default)</option>
-                    <option value="kN_m">kN · m</option>
-                    <option value="kgf_cm">kgf · cm</option>
-                    <option value="lb_ft">lb · ft</option>
-                    <option value="N_mm">N · mm</option>
-                  </select>
-                  <span class="hint" id="unidad-info">tonf / m</span>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp3)">
+                  <div class="field">
+                    <label for="sel-unidad-f">Fuerza</label>
+                    <select id="sel-unidad-f" data-field="unidad_fuerza">
+                      <option value="tonf">tonf</option>
+                      <option value="kgf">kgf</option>
+                      <option value="N">N</option>
+                      <option value="kN">kN</option>
+                      <option value="MN">MN</option>
+                      <option value="GN">GN</option>
+                      <option value="lbf">lbf</option>
+                      <option value="kip">kip</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="sel-unidad-l">Longitud</label>
+                    <select id="sel-unidad-l" data-field="unidad_longitud">
+                      <option value="m">m</option>
+                      <option value="mm">mm</option>
+                      <option value="cm">cm</option>
+                      <option value="km">km</option>
+                      <option value="ft">ft</option>
+                      <option value="in">in</option>
+                    </select>
+                  </div>
                 </div>
+                <span class="hint" id="unidad-info">tonf / m</span>
                 <div class="options-grid">
                   <label class="switch">
                     <input type="checkbox" id="in-axial" data-field="despreciar_axial">
@@ -374,7 +390,7 @@
                   <span>Fy/wy + = ↑ arriba</span><span class="conv-sep">·</span>
                   <span>Fx/wx + = → derecha</span><span class="conv-sep">·</span>
                   <span>M + = ↺ antihorario</span><span class="conv-sep">·</span>
-                  <span>Perp. + = lado izq. de i→j</span>
+                  <span>Perp. + apunta a ↑/→</span>
                 </div>
                 <div id="tb-cargas_elementos" class="cargas-list"></div>
                 <button class="btn btn-secondary btn-sm add-row" data-add="cargas_elementos">+ Agregar carga</button>

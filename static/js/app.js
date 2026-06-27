@@ -24,14 +24,39 @@ const API = {
 /* ============================================================
    SISTEMA DE UNIDADES
    ============================================================ */
-const UNIDADES = {
-  "tonf_m":   { label:"tonf · m",   fuerza:"tonf", longitud:"m",     momentof:"tonf·m",  cargad:"tonf/m",   cargam:"tonf·m/m", f:1,      l:1 },
-  "kN_m":     { label:"kN · m",     fuerza:"kN",   longitud:"m",     momentof:"kN·m",    cargad:"kN/m",     cargam:"kN·m/m",   f:1/9.81, l:1 },
-  "kgf_cm":   { label:"kgf · cm",   fuerza:"kgf",  longitud:"cm",    momentof:"kgf·cm",  cargad:"kgf/cm",   cargam:"kgf·cm/cm", f:1/1000, l:1/100 },
-  "lb_ft":    { label:"lb · ft",    fuerza:"lb",   longitud:"ft",    momentof:"lb·ft",   cargad:"lb/ft",    cargam:"lb·ft/ft", f:1/2204.62, l:1/3.281 },
-  "N_mm":     { label:"N · mm",     fuerza:"N",    longitud:"mm",    momentof:"N·mm",    cargad:"N/mm",     cargam:"N·mm/mm",  f:1/9810, l:1/1000 },
+const FORCE_UNITS = {
+  tonf: { label:"tonf", factor:1 },
+  kgf:  { label:"kgf",  factor:1/1000 },
+  N:    { label:"N",    factor:1/9810 },
+  kN:   { label:"kN",   factor:1/9.81 },
+  MN:   { label:"MN",   factor:1/0.00981 },
+  GN:   { label:"GN",   factor:1/0.00000981 },
+  lbf:  { label:"lbf",  factor:1/2204.62 },
+  kip:  { label:"kip",  factor:1/2.20462 },
 };
-function getUnidad(){ return UNIDADES[state.modelo?.unidad || "tonf_m"] || UNIDADES.tonf_m; }
+const LENGTH_UNITS = {
+  m:  { label:"m",  factor:1 },
+  mm: { label:"mm", factor:1/1000 },
+  cm: { label:"cm", factor:1/100 },
+  km: { label:"km", factor:1000 },
+  ft: { label:"ft", factor:1/3.281 },
+  inch:{ label:"in", factor:1/39.37 },
+};
+function getUnidad(){
+  const m = state.modelo || {};
+  const fu = FORCE_UNITS[m.unidad_fuerza] || FORCE_UNITS.tonf;
+  const lu = LENGTH_UNITS[m.unidad_longitud] || LENGTH_UNITS.m;
+  const f = fu.factor, l = lu.factor;
+  const fl = fu.label, ll = lu.label;
+  return {
+    fuerza: fl, longitud: ll,
+    momentof: `${fl}·${ll}`,
+    cargad: `${fl}/${ll}`,
+    cargam: `${fl}·${ll}/${ll}`,
+    f, l,
+    label: `${fl} · ${ll}`,
+  };
+}
 
 const APOYOS = [
   ["empotrado","Empotrado"], ["fijo","Articulado (fijo)"],
@@ -251,15 +276,17 @@ function renderEstaticos(){
   const imd=$("#in-modal"); if(imd) imd.checked = !!m.analisis_modal;
   const inm=$("#in-nmodos"); if(inm) inm.value = m.n_modos ?? "";
   const ig=$("#in-g"); if(ig) ig.value = m.g ?? "";
-  const selUnidad = $("#sel-unidad");
-  if(selUnidad) selUnidad.value = m.unidad || "tonf_m";
+  const selF = $("#sel-unidad-f");
+  const selL = $("#sel-unidad-l");
+  if(selF) selF.value = m.unidad_fuerza || "tonf";
+  if(selL) selL.value = m.unidad_longitud || "m";
   renderUnidadInfo();
 }
 
 function renderUnidadInfo(){
   const u = getUnidad();
   const el = $("#unidad-info");
-  if(el) el.textContent = `${u.fuerza} / ${u.longitud}`;
+  if(el) el.textContent = `Sistema: ${u.fuerza} / ${u.longitud}`;
   const sb = $("#status-units");
   if(sb) sb.textContent = `${u.fuerza} · ${u.longitud}`;
 }
@@ -367,7 +394,7 @@ function dirHint(dir){
   switch(dir){
     case "vert":  return "+ ↑ arriba · − ↓ abajo (gravedad)";
     case "horiz": return "+ → derecha · − ← izquierda";
-    case "perp":  return "perpendicular al eje · + = lado izquierdo de i→j";
+    case "perp":  return "perpendicular al eje · + apunta a ↑/→ (arriba/derecha)";
     case "axial": return "a lo largo del eje · + = de i hacia j";
     case "angle": return "magnitud + ángulo (0°→ +X, 90°→ +Y)";
     case "comp":  return "componentes globales independientes wx, wy";
@@ -811,10 +838,17 @@ function bindEditor(){
     state.modelo.material.modo = b.dataset.mat; renderEstaticos(); drawPreview();
   });
 
-  const selUnidad = $("#sel-unidad");
-  if (selUnidad) {
-    selUnidad.addEventListener("change", (e) => {
-      state.modelo.unidad = e.target.value;
+  const selF = $("#sel-unidad-f");
+  const selL = $("#sel-unidad-l");
+  if (selF) {
+    selF.addEventListener("change", (e) => {
+      state.modelo.unidad_fuerza = e.target.value;
+      renderEstaticos(); renderEditor(); drawPreview(); scheduleAutoSave();
+    });
+  }
+  if (selL) {
+    selL.addEventListener("change", (e) => {
+      state.modelo.unidad_longitud = e.target.value;
       renderEstaticos(); renderEditor(); drawPreview(); scheduleAutoSave();
     });
   }
@@ -1115,7 +1149,13 @@ function arrow(x1,y1,x2,y2,color){
 function loadDirUnit(dir, cx, cy, ang){
   switch(dir){
     case "horiz": return [1, 0];
-    case "perp":  return [-cy, cx];   // perpendicular: 90° a la izquierda de i→j
+    case "perp":  {
+      // perpendicular al eje, orientada hacia arriba-derecha (consistente con
+      // los ejes globales): en columna apunta a +X (derecha), en viga a +Y (arriba).
+      let px=-cy, py=cx;
+      if (py < -1e-9 || (Math.abs(py)<1e-9 && px<0)){ px=-px; py=-py; }
+      return [px, py];
+    }
     case "axial": return [cx, cy];    // a lo largo del eje del elemento (de i a j)
     case "angle": { const r=num(ang)*Math.PI/180; return [Math.cos(r), Math.sin(r)]; }
     case "vert":
@@ -1311,6 +1351,7 @@ function bindGraphEditor(){
     drawPreview();
   });
   let dragIdx = null, _dragPending = false, _panning = false, _panStart = null, _dragMoved = false;
+  let _downPos = null, _moved = false;   // distinguir clic (selección) de arrastre real
   const nodeIdxAt = (evt)=>{ const t = evt.target.closest("[data-node]"); return t? +t.dataset.node : null; };
 
   svg.addEventListener("pointerdown",(evt)=>{
@@ -1322,8 +1363,11 @@ function bindGraphEditor(){
     }
     if (state.emode==="mover"){
       const idx = nodeIdxAt(evt);
-      if (idx!=null){ _dragPending=true; dragIdx = idx; svg.classList.add("dragging");
-        try{ svg.setPointerCapture(evt.pointerId); }catch(_){} }
+      if (idx!=null){
+        // Aún no es arrastre: solo lo será si el puntero se mueve > umbral.
+        dragIdx = idx; _dragPending = true; _moved = false;
+        _downPos = {x:evt.clientX, y:evt.clientY};
+      }
     } else if (state.emode==="nudo"){
       const p = svgToModel(svg, evt); if(!p) return;
       pushUndo();
@@ -1376,6 +1420,13 @@ function bindGraphEditor(){
       drawPreview(); return;
     }
     if (dragIdx!=null){
+      if (!_moved){
+        const dx = evt.clientX - (_downPos?.x ?? evt.clientX);
+        const dy = evt.clientY - (_downPos?.y ?? evt.clientY);
+        if (Math.hypot(dx, dy) < 4) return;        // todavía es un clic, no arrastre
+        _moved = true; svg.classList.add("dragging");
+        try{ svg.setPointerCapture(evt.pointerId); }catch(_){}
+      }
       if (_dragPending){ pushUndo(); _dragPending=false; }
       const p = svgToModel(svg, evt); if(!p) return;
       const n = state.modelo.nudos[dragIdx]; n.x = p.x; n.y = p.y;
@@ -1402,7 +1453,7 @@ function bindGraphEditor(){
       selectObject(null, null);
     }
   });
-  const endDrag = ()=>{ _panning=false; _panStart=null; if (dragIdx!=null){ _dragMoved=true; dragIdx=null; _dragPending=false; svg.classList.remove("dragging"); renderEditor(); scheduleAutoSave(); } };
+  const endDrag = ()=>{ _panning=false; _panStart=null; if (dragIdx!=null){ _dragMoved=_moved; dragIdx=null; _dragPending=false; svg.classList.remove("dragging"); if(_moved){ renderEditor(); scheduleAutoSave(); } } };
   svg.addEventListener("pointerup", endDrag);
   svg.addEventListener("pointercancel", endDrag);
 
@@ -1467,7 +1518,8 @@ function buildPayload(){
     analisis_modal: !!m.analisis_modal,
     n_modos: num(m.n_modos, 6),
     g: num(m.g, 9.81),
-    unidad: m.unidad || "tonf_m",
+    unidad_fuerza: m.unidad_fuerza || "tonf",
+    unidad_longitud: m.unidad_longitud || "m",
     material: mat,
     materiales: (m.materiales||[]).map(x=>({nombre:x.nombre, modo:x.modo||"E",
         E:num(x.E), fc:num(x.fc), densidad:num(x.densidad), nu:num(x.nu,0.2)})),
@@ -2011,7 +2063,8 @@ function cargarModeloEnEditor(modelo){
   if (!modelo.casos) modelo.casos = [];
   if (!modelo.combinaciones) modelo.combinaciones = [];
   if (modelo.usar_combos==null) modelo.usar_combos = false;
-  if (modelo.unidad==null) modelo.unidad = "tonf_m";
+  if (modelo.unidad_fuerza==null) modelo.unidad_fuerza = "tonf";
+  if (modelo.unidad_longitud==null) modelo.unidad_longitud = "m";
   state.modelo = modelo;
   state._undoStack = [];
   state._redoStack = [];
@@ -2023,7 +2076,7 @@ function cargarModeloEnEditor(modelo){
 }
 function limpiarModelo(){
   cargarModeloEnEditor({
-    nombre:"Nueva estructura", despreciar_axial:false, peso_propio:false, unidad:"tonf_m",
+    nombre:"Nueva estructura", despreciar_axial:false, peso_propio:false, unidad_fuerza:"tonf", unidad_longitud:"m",
     material:{modo:"E", E:2100000}, materiales:[], casos:[], combinaciones:[], usar_combos:false,
     secciones:[],
     nudos:[], elementos:[], cargas_nodales:[], cargas_elementos:[],
@@ -2036,7 +2089,7 @@ function limpiarModelo(){
    ============================================================ */
 function _baseModelo(nombre, nudos, elementos, cn, ce, extra){
   return Object.assign({
-    nombre, despreciar_axial:false, peso_propio:false, timoshenko:false, pdelta:false, unidad:"kN_m",
+    nombre, despreciar_axial:false, peso_propio:false, timoshenko:false, pdelta:false, unidad_fuerza:"kN", unidad_longitud:"m",
     material:{modo:"E", E:2100000}, materiales:[],
     secciones:[{nombre:"sec1", tipo:"rectangular", b:0.30, h:0.50}],
     nudos, elementos, cargas_nodales:cn||[], cargas_elementos:ce||[],
@@ -2685,6 +2738,58 @@ function renderInspector(){
   bindInspectorEvents();
 }
 
+// Resultados del análisis para un nudo (desplazamientos + reacciones).
+function renderPropsResultadosNudo(n){
+  const r = state.resultado && state.resultado.resultados;
+  if (!r) return "";
+  const u = getUnidad();
+  const nom = n.nombre || ("N"+n.id);
+  const d  = (r.desplazamientos||[]).find(x=>x.nudo===nom);
+  const re = (r.reacciones||[]).find(x=>x.nudo===nom);
+  if (!d && !re) return "";
+  let rows = "";
+  if (d) rows += `
+    <div class="props-field-row">
+      <div class="props-field"><label>ux (${u.longitud})</label><span class="props-value">${fmtD(d.ux)}</span></div>
+      <div class="props-field"><label>uy (${u.longitud})</label><span class="props-value">${fmtD(d.uy)}</span></div>
+    </div>
+    <div class="props-field"><label>giro (rad)</label><span class="props-value">${fmtD(d.giro)}</span></div>`;
+  if (re) rows += `
+    <div class="props-section-title" style="margin-top:var(--sp3)">Reacciones</div>
+    <div class="props-field-row">
+      <div class="props-field"><label>Rx (${u.fuerza})</label><span class="props-value">${fnum(re.Rx)}</span></div>
+      <div class="props-field"><label>Ry (${u.fuerza})</label><span class="props-value">${fnum(re.Ry)}</span></div>
+    </div>
+    <div class="props-field"><label>M (${u.momentof})</label><span class="props-value">${fnum(re.M)}</span></div>`;
+  return `<div class="props-section"><div class="props-section-title">Resultados del análisis</div>${rows}</div>`;
+}
+
+// Resultados del análisis para un elemento (fuerzas internas en extremos).
+function renderPropsResultadosElem(e){
+  const r = state.resultado && state.resultado.resultados;
+  if (!r) return "";
+  const u = getUnidad();
+  const nom = e.nombre || ("E"+e.id);
+  const f = (r.fuerzas||[]).find(x=>x.elem===nom);
+  if (!f) return "";
+  const cell=(v)=>`<td style="text-align:right;font-variant-numeric:tabular-nums">${fnum(v)}</td>`;
+  return `<div class="props-section">
+    <div class="props-section-title">Resultados del análisis</div>
+    <div class="props-info">
+      <span class="props-info-chip">|M|máx <strong>${fnum(f.Mmax)}</strong> ${u.momentof}</span>
+      <span class="props-info-chip">|V|máx <strong>${fnum(f.Vmax)}</strong> ${u.fuerza}</span>
+    </div>
+    <table class="tbl tbl-data" style="font-size:11px;margin-top:var(--sp2);width:100%">
+      <thead><tr><th></th><th style="text-align:right">N</th><th style="text-align:right">V</th><th style="text-align:right">M</th></tr></thead>
+      <tbody>
+        <tr><td><strong>i</strong></td>${cell(f.Ni)}${cell(f.Vi)}${cell(f.Mi)}</tr>
+        <tr><td><strong>j</strong></td>${cell(f.Nj)}${cell(f.Vj)}${cell(f.Mj)}</tr>
+      </tbody>
+    </table>
+    <p class="hint" style="margin-top:4px">N tracción + · M sagging +</p>
+  </div>`;
+}
+
 function renderPropsNudo(n, idx){
   const apoyo_opts = APOYOS.map(([v,l])=>
     `<option value="${v}" ${n.apoyo===v?"selected":""}>${l}</option>`).join("");
@@ -2699,6 +2804,8 @@ function renderPropsNudo(n, idx){
         Nudo · <strong>${esc(n.nombre||("N"+n.id))}</strong>
       </span>
     </div>
+
+    ${renderPropsResultadosNudo(n)}
 
     <div class="props-section">
       <div class="props-section-title">Geometría</div>
@@ -2757,16 +2864,25 @@ function renderPropsNudo(n, idx){
 }
 
 function renderPropsCargasNudo(nudoId){
-  const cargas = (state.modelo.cargas_nodales||[]).filter(c=>+c.nudo===+nudoId);
-  if (!cargas.length) return `<p class="hint" style="margin-top:var(--sp2)">Sin cargas asignadas.</p>`;
-  const u = getUnidad();
-  return `<div class="props-carga-list">${cargas.map((c,i)=>{
-    const Fx=num(c.Fx||0), Fy=num(c.Fy||0), M=num(c.M||0);
-    return `<div class="props-carga-row">
-      <span class="props-carga-type">Nodal</span>
-      <span class="props-carga-val">Fx=${Fx.toFixed(2)} · Fy=${Fy.toFixed(2)} · M=${M.toFixed(2)} ${u.fuerza}</span>
+  const m = state.modelo, u = getUnidad();
+  const items = (m.cargas_nodales||[]).map((c,gi)=>({c,gi})).filter(o=>+o.c.nudo===+nudoId);
+  if (!items.length) return `<p class="hint" style="margin-top:var(--sp2)">Sin cargas asignadas.</p>`;
+  const inp=(gi,field,val)=>`<input type="number" step="any" value="${val??0}" class="insp-inp" data-insp-coll="cargas_nodales" data-insp-idx="${gi}" data-insp-field="${field}">`;
+  return items.map(({c,gi})=>{
+    const ang = (c.modo||"comp")==="ang";
+    const Fx = ang? num(c.mag)*Math.cos(num(c.ang)*Math.PI/180) : num(c.Fx);
+    const Fy = ang? num(c.mag)*Math.sin(num(c.ang)*Math.PI/180) : num(c.Fy);
+    return `<div class="props-carga-edit">
+      <div class="props-field-row">
+        <div class="props-field"><label>Fx (${u.fuerza})</label>${inp(gi,"Fx",+Fx.toFixed(4))}</div>
+        <div class="props-field"><label>Fy (${u.fuerza})</label>${inp(gi,"Fy",+Fy.toFixed(4))}</div>
+      </div>
+      <div class="props-field-row">
+        <div class="props-field"><label>M (${u.momentof})</label>${inp(gi,"M",c.M)}</div>
+        <div class="props-field" style="align-self:flex-end"><button class="btn btn-ghost btn-sm" data-insp-del-carga="cargas_nodales:${gi}" style="width:100%;color:var(--ml-warning)">× Quitar</button></div>
+      </div>
     </div>`;
-  }).join("")}</div>`;
+  }).join("");
 }
 
 function renderPropsElemento(e, idx){
@@ -2785,6 +2901,8 @@ function renderPropsElemento(e, idx){
         Elemento · <strong>L = ${L} ${u.longitud}</strong>
       </span>
     </div>
+
+    ${renderPropsResultadosElem(e)}
 
     <div class="props-section">
       <div class="props-section-title">Identificación</div>
@@ -2879,6 +2997,8 @@ function bindInspectorEvents(){
     const item = state.modelo[coll][idx]; if(!item) return;
     let val = el.type==="checkbox" ? el.checked : (el.type==="number" ? el.value : el.value);
     if (["x","y"].includes(field)) { val = parseFloat(val)||0; }
+    // Editar Fx/Fy/M de una carga nodal desde el panel la pasa a modo componentes.
+    if (coll==="cargas_nodales" && ["Fx","Fy","M"].includes(field)) item.modo="comp";
     if (sub && sub!=="undefined" && sub){ item[sub]=item[sub]||{}; item[sub][field]=val; }
     else { item[field]=val; }
     scheduleAutoSave(); drawPreview();
@@ -2908,7 +3028,14 @@ function bindInspectorEvents(){
     const addElem = e.target.closest("[data-insp-add-carga-elem]");
     if (addElem){
       pushUndo();
-      state.modelo.cargas_elementos.push({elem:+addElem.dataset.inspAddCargaElem, tipo:"distribuida", subtipo:"uniforme", wy:0, wx:0});
+      state.modelo.cargas_elementos.push({elem:+addElem.dataset.inspAddCargaElem, tipo:"distribuida", subtipo:"uniforme", dir:"vert", q:0});
+      renderEditor(); renderInspector(); drawPreview(); return;
+    }
+    const delCarga = e.target.closest("[data-insp-del-carga]");
+    if (delCarga){
+      const [coll, gi] = delCarga.dataset.inspDelCarga.split(":");
+      pushUndo();
+      (state.modelo[coll]||[]).splice(+gi, 1);
       renderEditor(); renderInspector(); drawPreview(); return;
     }
     const delNudo = e.target.closest("[data-delete-nudo]");
