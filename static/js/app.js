@@ -969,7 +969,7 @@ function drawPreview(){
   const W=400, H=300, pad=40;
   const m = state.modelo;
   const nodos = m.nudos.map(n => ({...n, x:num(n.x), y:num(n.y)}));
-  if (nodos.length===0){ state._pv = {ox:200, oy:150, scale:30}; const defs=svg.querySelector("defs"); svg.innerHTML = ""; if(defs) svg.appendChild(defs); svg.insertAdjacentHTML("beforeend", `<text x="200" y="150" text-anchor="middle" fill="#7AADB8" font-size="13" font-family="Inter">Agrega nudos para ver el modelo</text>`); $("#preview-legend").textContent=""; svg.classList.toggle("mode-nudo", state.emode==="nudo"); return; }
+  if (nodos.length===0){ state._pv = {ox:200, oy:150, scale:30}; const grp=$("#preview-content"); if(grp) grp.innerHTML=`<text x="200" y="150" text-anchor="middle" fill="#7AADB8" font-size="13" font-family="Inter">Agrega nudos para ver el modelo</text>`; $("#preview-legend").textContent=""; svg.classList.toggle("mode-nudo", state.emode==="nudo"); return; }
 
   const xs=nodos.map(n=>n.x), ys=nodos.map(n=>n.y);
   let minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
@@ -1100,9 +1100,8 @@ function drawPreview(){
     }
   });
 
-  const defs = svg.querySelector("defs");
-  svg.innerHTML = g.join("");
-  if (defs) svg.insertBefore(defs, svg.firstChild);
+  const grp = $("#preview-content");
+  if (grp) grp.innerHTML = g.join("");
   svg.classList.toggle("mode-mover", state.emode==="mover");
   svg.classList.toggle("mode-nudo", state.emode==="nudo");
   svg.classList.toggle("mode-conectar", state.emode==="conectar");
