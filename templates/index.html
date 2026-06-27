@@ -457,8 +457,24 @@
           </div>
 
           <!-- Cuerpo del canvas (vista previa) -->
-          <div class="canvas-body">
-            <svg id="preview-svg" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Vista previa del modelo estructural"></svg>
+          <div class="canvas-body" id="canvas-body">
+            <svg id="preview-svg" viewBox="0 0 400 300" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Vista previa del modelo estructural">
+              <defs>
+                <filter id="glow-teal" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="3" result="blur"/>
+                  <feFlood flood-color="#508C9B" flood-opacity="0.5" result="color"/>
+                  <feComposite in="color" in2="blur" operator="in" result="glow"/>
+                  <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+                <filter id="glow-delete" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="2" result="blur"/>
+                  <feFlood flood-color="#D4855A" flood-opacity="0.6" result="color"/>
+                  <feComposite in="color" in2="blur" operator="in" result="glow"/>
+                  <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+            </svg>
+            <div class="node-drag-coord hidden" id="drag-tooltip"></div>
             <div class="preview-zoom">
               <button type="button" id="pv-zoom-in" title="Acercar" aria-label="Acercar">+</button>
               <button type="button" id="pv-zoom-out" title="Alejar" aria-label="Alejar">−</button>

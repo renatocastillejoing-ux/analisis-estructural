@@ -429,10 +429,44 @@ input:focus, select:focus { border-color:var(--ml-teal); box-shadow:0 0 0 3px rg
 .snap-chk { font-size:11.5px; color:var(--ml-ink-soft); display:inline-flex; align-items:center; gap:5px; cursor:pointer; }
 #preview-svg { touch-action:none; }
 #preview-svg .node-hit { cursor:grab; }
-#preview-svg.dragging .node-hit { cursor:grabbing; }
+#preview-svg.dragging { cursor:grabbing !important; }
+#preview-svg.dragging .node-hit { cursor:grabbing !important; }
 #preview-svg.mode-nudo { cursor:crosshair; }
+#preview-svg.mode-nudo .node-hit, #preview-svg.mode-nudo line { cursor:crosshair; }
 #preview-svg.mode-conectar { cursor:pointer; }
-#preview-svg.mode-delete { cursor:crosshair; }
+#preview-svg.mode-conectar .node-hit { cursor:crosshair; }
+#preview-svg.mode-delete { cursor:default; }
+#preview-svg.mode-delete .node-hit { cursor:pointer; }
+#preview-svg.mode-delete .node-hit:hover circle { filter:url(#glow-delete); }
+
+/* Drag visual feedback */
+.node-drag-ghost {
+  fill:rgba(80,140,155,.18); stroke:var(--ml-teal); stroke-width:2;
+  stroke-dasharray:5 3; pointer-events:none;
+}
+.node-drag-coord {
+  position:absolute; pointer-events:none; z-index:10;
+  background:var(--ml-navy); color:#fff; font-size:11px; font-weight:600;
+  padding:4px 8px; border-radius:6px; white-space:nowrap;
+  box-shadow:0 2px 8px rgba(32,30,67,.2);
+  transform:translate(-50%,-140%);
+  transition:opacity 100ms;
+}
+
+/* Element hover glow */
+#preview-svg .elem-hit:hover + line,
+#preview-svg .elem-hit:hover ~ line.elem-highlight {
+  stroke:var(--ml-teal) !important; stroke-opacity:.4;
+}
+
+/* Node hover pulse */
+@keyframes node-pulse {
+  0%,100% { r:6; }
+  50% { r:8; }
+}
+#preview-svg.mode-mover .node-hit:hover ~ circle:last-of-type {
+  animation:node-pulse 1s ease-in-out infinite;
+}
 
 /* Diagrama interactivo */
 .diag-interactive { position:relative; background:linear-gradient(180deg,#fff,#FAFCFD); border:1px solid var(--ml-border); border-radius:var(--r-md); overflow:hidden; min-height:360px; }

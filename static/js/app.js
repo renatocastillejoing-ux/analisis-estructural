@@ -969,7 +969,7 @@ function drawPreview(){
   const W=400, H=300, pad=40;
   const m = state.modelo;
   const nodos = m.nudos.map(n => ({...n, x:num(n.x), y:num(n.y)}));
-  if (nodos.length===0){ state._pv = {ox:200, oy:150, scale:30}; svg.innerHTML = `<text x="200" y="150" text-anchor="middle" fill="#7AADB8" font-size="13" font-family="Inter">Agrega nudos para ver el modelo</text>`; $("#preview-legend").textContent=""; svg.classList.toggle("mode-nudo", state.emode==="nudo"); return; }
+  if (nodos.length===0){ state._pv = {ox:200, oy:150, scale:30}; const defs=svg.querySelector("defs"); svg.innerHTML = ""; if(defs) svg.appendChild(defs); svg.insertAdjacentHTML("beforeend", `<text x="200" y="150" text-anchor="middle" fill="#7AADB8" font-size="13" font-family="Inter">Agrega nudos para ver el modelo</text>`); $("#preview-legend").textContent=""; svg.classList.toggle("mode-nudo", state.emode==="nudo"); return; }
 
   const xs=nodos.map(n=>n.x), ys=nodos.map(n=>n.y);
   let minX=Math.min(...xs), maxX=Math.max(...xs), minY=Math.min(...ys), maxY=Math.max(...ys);
@@ -1025,7 +1025,7 @@ function drawPreview(){
       g.push(`<text x="${lmx}" y="${lmy}" text-anchor="middle" font-size="8" fill="#7AADB8" font-family="Inter">${L.toFixed(2)}${u.longitud}</text>`);
     }
     // transparent hit target for element selection
-    g.push(`<line class="elem-hit" data-elem="${eIdx}" x1="${SX(a.x)}" y1="${SY(a.y)}" x2="${SX(b.x)}" y2="${SY(b.y)}" stroke="transparent" stroke-width="14" stroke-linecap="round" style="cursor:pointer"/>`);
+    g.push(`<line class="elem-hit" data-elem="${eIdx}" x1="${SX(a.x)}" y1="${SY(a.y)}" x2="${SX(b.x)}" y2="${SY(b.y)}" stroke="transparent" stroke-width="18" stroke-linecap="round"/>`);
   });
 
   // cargas en elementos
@@ -1048,13 +1048,13 @@ function drawPreview(){
     g.push(drawApoyo(n, SX, SY));
     const selConn = state._connectFirst===n.id;
     const selInsp = state.selected.type==="nudo" && state.selected.idx===idx;
-    if (selInsp) g.push(`<circle cx="${SX(n.x)}" cy="${SY(n.y)}" r="13" fill="rgba(80,140,155,.15)" stroke="#508C9B" stroke-width="2" stroke-dasharray="5 3"/>`);
-    if (selConn) g.push(`<circle cx="${SX(n.x)}" cy="${SY(n.y)}" r="9" fill="none" stroke="#508C9B" stroke-width="2"/>`);
+    if (selInsp) g.push(`<circle cx="${SX(n.x)}" cy="${SY(n.y)}" r="14" fill="rgba(80,140,155,.12)" stroke="#508C9B" stroke-width="2" stroke-dasharray="5 3"/>`);
+    if (selConn) g.push(`<circle cx="${SX(n.x)}" cy="${SY(n.y)}" r="10" fill="none" stroke="#508C9B" stroke-width="2"/>`);
     g.push(`<circle cx="${SX(n.x)}" cy="${SY(n.y)}" r="${(selConn||selInsp)?6:4.5}" fill="${(selConn||selInsp)?"#508C9B":"#201E43"}"/>`);
     if (state._labelToggles.nombres){
       g.push(`<text x="${SX(n.x)+7}" y="${SY(n.y)-6}" font-size="9.5" fill="${selInsp?"#3A6B78":"#3A6B78"}" font-weight="600" font-family="Inter">${esc(n.nombre||("N"+n.id))}</text>`);
     }
-    g.push(`<circle class="node-hit" data-node="${idx}" cx="${SX(n.x)}" cy="${SY(n.y)}" r="12" fill="transparent" style="cursor:pointer"/>`);
+    g.push(`<circle class="node-hit" data-node="${idx}" cx="${SX(n.x)}" cy="${SY(n.y)}" r="14" fill="transparent"/>`);
   });
 
   // cargas nodales
@@ -1100,7 +1100,10 @@ function drawPreview(){
     }
   });
 
+  const defs = svg.querySelector("defs");
   svg.innerHTML = g.join("");
+  if (defs) svg.insertBefore(defs, svg.firstChild);
+  svg.classList.toggle("mode-mover", state.emode==="mover");
   svg.classList.toggle("mode-nudo", state.emode==="nudo");
   svg.classList.toggle("mode-conectar", state.emode==="conectar");
   svg.classList.toggle("mode-delete", state.emode==="eliminar");
@@ -1335,6 +1338,15 @@ function svgToModel(svg, evt){
   if ($("#chk-snap")?.checked){ x = Math.round(x/0.5)*0.5; y = Math.round(y/0.5)*0.5; }
   return {x, y};
 }
+function modelToScreen(svg, mx, my){
+  const pv = state._pv; if(!pv || !svg) return null;
+  const sx = pv.ox + mx * pv.scale;
+  const sy = pv.oy - my * pv.scale;
+  const ctm = svg.getScreenCTM(); if(!ctm) return null;
+  const pt = svg.createSVGPoint(); pt.x = sx; pt.y = sy;
+  const sp = pt.matrixTransform(ctm);
+  return {x: sp.x, y: sp.y};
+}
 function syncNodeInputs(idx){
   const card = $$("#tb-nudos .nd-item")[idx]; if(!card) return;
   const n = state.modelo.nudos[idx];
@@ -1342,31 +1354,74 @@ function syncNodeInputs(idx){
   const ix = card.querySelector('input[data-field="x"]'); if(ix) ix.value = r(n.x);
   const iy = card.querySelector('input[data-field="y"]'); if(iy) iy.value = r(n.y);
 }
+function setEditorMode(mode){
+  state.emode = mode; state._connectFirst = null; state._mousePos = null;
+  $$("#seg-modo-editor button").forEach(x=>x.classList.toggle("is-active", x.dataset.emode===mode));
+  const svg = $("#preview-svg");
+  if(svg){
+    svg.classList.remove("mode-mover","mode-nudo","mode-conectar","mode-delete");
+    svg.classList.add("mode-"+mode);
+  }
+  drawPreview();
+}
 function bindGraphEditor(){
   const svg = $("#preview-svg");
+  const tooltip = $("#drag-tooltip");
+
+  // --- Editor mode buttons ---
   $("#seg-modo-editor")?.addEventListener("click",(e)=>{
     const b = e.target.closest("button"); if(!b) return;
-    state.emode = b.dataset.emode; state._connectFirst = null; state._mousePos = null;
-    $$("#seg-modo-editor button").forEach(x=>x.classList.toggle("is-active", x===b));
-    drawPreview();
+    setEditorMode(b.dataset.emode);
   });
+
+  // --- Keyboard shortcuts for modes ---
+  document.addEventListener("keydown",(e)=>{
+    if (e.target.tagName==="INPUT" || e.target.tagName==="SELECT" || e.target.tagName==="TEXTAREA") return;
+    if (e.key==="v" || e.key==="V"){ setEditorMode("mover"); }
+    else if (e.key==="n" || e.key==="N"){ setEditorMode("nudo"); }
+    else if (e.key==="c" || e.key==="C"){ setEditorMode("conectar"); }
+    else if (e.key==="x" || e.key==="X"){ setEditorMode("eliminar"); }
+  });
+
+  // --- Drag / click / pan state ---
   let dragIdx = null, _dragPending = false, _panning = false, _panStart = null, _dragMoved = false;
-  let _downPos = null, _moved = false;   // distinguir clic (selección) de arrastre real
+  let _downPos = null, _moved = false;
   const nodeIdxAt = (evt)=>{ const t = evt.target.closest("[data-node]"); return t? +t.dataset.node : null; };
 
+  // --- Drag coordinate tooltip ---
+  function showDragTooltip(svg, evt, x, y){
+    if(!tooltip) return;
+    const u = getUnidad();
+    tooltip.textContent = `${x.toFixed(2)}, ${y.toFixed(2)} ${u.longitud}`;
+    tooltip.classList.remove("hidden");
+    // Position near cursor but inside canvas-body
+    const body = tooltip.parentElement;
+    if(!body) return;
+    const br = body.getBoundingClientRect();
+    let tx = evt.clientX - br.left;
+    let ty = evt.clientY - br.top - 12;
+    if(ty < 20) ty = evt.clientY - br.top + 20;
+    tooltip.style.left = tx + "px";
+    tooltip.style.top = ty + "px";
+  }
+  function hideDragTooltip(){ if(tooltip) tooltip.classList.add("hidden"); }
+
+  // --- Pointer down ---
   svg.addEventListener("pointerdown",(evt)=>{
     const m = state.modelo; if(!m) return;
+    // Pan: shift+click or middle mouse
     if (evt.shiftKey || evt.button===1){
       _panning = true; _panStart = {x:evt.clientX, y:evt.clientY, px:_previewPanX, py:_previewPanY};
       try{ svg.setPointerCapture(evt.pointerId); }catch(_){}
+      svg.style.cursor = "grabbing";
       return;
     }
     if (state.emode==="mover"){
       const idx = nodeIdxAt(evt);
       if (idx!=null){
-        // Aún no es arrastre: solo lo será si el puntero se mueve > umbral.
         dragIdx = idx; _dragPending = true; _moved = false;
         _downPos = {x:evt.clientX, y:evt.clientY};
+        svg.style.cursor = "grabbing";
       }
     } else if (state.emode==="nudo"){
       const p = svgToModel(svg, evt); if(!p) return;
@@ -1407,6 +1462,8 @@ function bindGraphEditor(){
       }
     }
   });
+
+  // --- Pointer move ---
   svg.addEventListener("pointermove",(evt)=>{
     // status bar coordinates
     const pCoord = svgToModel(svg, evt);
@@ -1414,24 +1471,28 @@ function bindGraphEditor(){
       const sc = $("#status-coords");
       if (sc) sc.textContent = `x: ${pCoord.x.toFixed(2)} · y: ${pCoord.y.toFixed(2)} ${getUnidad().longitud}`;
     }
+    // Pan
     if (_panning && _panStart){
       _previewPanX = _panStart.px + (evt.clientX - _panStart.x);
       _previewPanY = _panStart.py + (evt.clientY - _panStart.y);
       drawPreview(); return;
     }
+    // Node drag
     if (dragIdx!=null){
       if (!_moved){
         const dx = evt.clientX - (_downPos?.x ?? evt.clientX);
         const dy = evt.clientY - (_downPos?.y ?? evt.clientY);
-        if (Math.hypot(dx, dy) < 4) return;        // todavía es un clic, no arrastre
+        if (Math.hypot(dx, dy) < 3) return;
         _moved = true; svg.classList.add("dragging");
         try{ svg.setPointerCapture(evt.pointerId); }catch(_){}
       }
       if (_dragPending){ pushUndo(); _dragPending=false; }
       const p = svgToModel(svg, evt); if(!p) return;
       const n = state.modelo.nudos[dragIdx]; n.x = p.x; n.y = p.y;
+      showDragTooltip(svg, evt, p.x, p.y);
       drawPreview(); syncNodeInputs(dragIdx);
     }
+    // Connect line following cursor
     if (state.emode==="conectar" && state._connectFirst!=null){
       const p = svgToModel(svg, evt); if(!p) return;
       state._mousePos = p;
@@ -1439,10 +1500,10 @@ function bindGraphEditor(){
     }
   });
 
-  // Click-to-select in mover mode (separate from drag)
+  // --- Click-to-select in mover mode ---
   svg.addEventListener("click",(evt)=>{
     if (state.emode !== "mover") return;
-    if (_dragMoved) { _dragMoved = false; return; } // was a drag, not a click
+    if (_dragMoved) { _dragMoved = false; return; }
     const nodeEl = evt.target.closest("[data-node]");
     const elemEl = evt.target.closest("[data-elem]");
     if (nodeEl) {
@@ -1453,11 +1514,39 @@ function bindGraphEditor(){
       selectObject(null, null);
     }
   });
-  const endDrag = ()=>{ _panning=false; _panStart=null; if (dragIdx!=null){ _dragMoved=_moved; dragIdx=null; _dragPending=false; svg.classList.remove("dragging"); if(_moved){ renderEditor(); scheduleAutoSave(); } } };
+
+  // --- Double-click to focus node in inspector ---
+  svg.addEventListener("dblclick",(evt)=>{
+    if (state.emode !== "mover") return;
+    const nodeEl = evt.target.closest("[data-node]");
+    if (nodeEl) {
+      const idx = +nodeEl.dataset.node;
+      selectObject("nudo", idx);
+      // Focus the X input in the inspector
+      setTimeout(()=>{
+        const card = $$("#tb-nudos .nd-item")[idx];
+        if(card){
+          const ix = card.querySelector('input[data-field="x"]');
+          if(ix) ix.focus();
+        }
+      }, 80);
+    }
+  });
+
+  // --- End drag ---
+  const endDrag = ()=>{
+    _panning=false; _panStart=null; hideDragTooltip();
+    if(svg) svg.style.cursor = "";
+    if (dragIdx!=null){
+      _dragMoved=_moved; dragIdx=null; _dragPending=false;
+      svg.classList.remove("dragging");
+      if(_moved){ renderEditor(); scheduleAutoSave(); }
+    }
+  };
   svg.addEventListener("pointerup", endDrag);
   svg.addEventListener("pointercancel", endDrag);
 
-  // zoom controls
+  // --- Zoom controls ---
   $("#pv-zoom-in")?.addEventListener("click", ()=>{ _previewZoom = Math.min(_previewZoom * 1.25, 4); drawPreview(); });
   $("#pv-zoom-out")?.addEventListener("click", ()=>{ _previewZoom = Math.max(_previewZoom / 1.25, 0.25); drawPreview(); });
   $("#pv-zoom-reset")?.addEventListener("click", ()=>{ _previewZoom = 1; _previewPanX = 0; _previewPanY = 0; drawPreview(); });
@@ -1481,6 +1570,8 @@ function bindGraphEditor(){
     };
     img.src = url;
   });
+
+  // --- Wheel zoom ---
   svg.addEventListener("wheel",(evt)=>{
     if (!state.modelo) return;
     evt.preventDefault();
