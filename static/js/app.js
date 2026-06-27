@@ -1845,9 +1845,14 @@ function renderDiagrama(tipo){
   // Convenio de lado del diagrama (ver fnx/fny dentro del bucle):
   //   M  → siempre del LADO TRACCIONADO (sagging hacia el lado opuesto a +y local).
   //   V,N → del lado de la normal +y local; o lado tracción si el toggle está activo.
+  // Convenio de dibujo (M, V y N): el diagrama se desplaza hacia (dwy, −dwx),
+  // es decir −local_y, multiplicado por el VALOR con su signo. Esto equivale al
+  // "lado de tracción" del momento y es independiente del sentido i→j del
+  // elemento (porque tanto la normal como el signo del esfuerzo se invierten
+  // juntos). Resultado: columna → derecha; viga: M(+)→abajo, V(−)→arriba.
   elems.forEach(e=>{
     const [ax,ay]=W(e.xi,e.yi), [bx,by]=W(e.xj,e.yj);
-    const L=Math.hypot(e.xj-e.xi,e.yj-e.yi)||1, dwx=(e.xj-e.xi)/L, dwy=(e.yj-e.yi)/L, nx=-dwy, ny=dwx;
+    const L=Math.hypot(e.xj-e.xi,e.yj-e.yi)||1, dwx=(e.xj-e.xi)/L, dwy=(e.yj-e.yi)/L;
     if (tipo==="deformada"){
       g.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#C9CFD8" stroke-width="2" vector-effect="non-scaling-stroke"/>`);
       const pts=[]; for(let k=0;k<e.s.length;k++){
@@ -1859,8 +1864,7 @@ function renderDiagrama(tipo){
       // Build baseline and diagram points
       // M  → siempre del lado traccionado (sagging)
       // V,N → siempre perpendicular al elemento (convención estándar)
-      const isM = dk==="M";
-      const fnx = isM ? dwy : nx, fny = isM ? -dwx : ny;
+      const fnx = dwy, fny = -dwx;
       const bPts=[], dPts=[];
       for(let k=0;k<e.s.length;k++){
         const t=e.s[k]/L;
@@ -1926,10 +1930,9 @@ function renderDiagrama(tipo){
     const ctm = svg.getScreenCTM(); if(!ctm) return;
     const p = pt.matrixTransform(ctm.inverse());
     let found=null, bestDist=Infinity;
-    const isM = dk==="M";
     for(const e of elems){
       const L=Math.hypot(e.xj-e.xi,e.yj-e.yi)||1, dwx=(e.xj-e.xi)/L, dwy=(e.yj-e.yi)/L;
-      const fnx = isM ? dwy : -dwy, fny = isM ? -dwx : dwx;
+      const fnx = dwy, fny = -dwx;
       for(let k=0;k<e.s.length;k++){
         const t=e.s[k]/L;
         let mx=e.xi+(e.xj-e.xi)*t, my=e.yi+(e.yj-e.yi)*t;
