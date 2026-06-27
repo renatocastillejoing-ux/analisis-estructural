@@ -1328,23 +1328,55 @@ function drawApoyo(n, SX, SY){
    EDITOR GRÁFICO
    ============================================================ */
 function svgToModel(svg, evt){
-  const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
-  const ctm = svg.getScreenCTM(); if(!ctm) return null;
-  const p = pt.matrixTransform(ctm.inverse());
   const pv = state._pv; if(!pv) return null;
-  let x = (p.x - pv.ox) / pv.scale;
-  let y = (pv.oy - p.y) / pv.scale;
+  const rect = svg.getBoundingClientRect();
+  if(rect.width===0 || rect.height===0) return null;
+  const vbW = 400, vbH = 300;
+  const containerAspect = rect.width / rect.height;
+  const vbAspect = vbW / vbH;
+  let scale, contentX, contentY, contentW, contentH;
+  if (containerAspect > vbAspect) {
+    scale = rect.height / vbH;
+    contentH = rect.height;
+    contentW = vbW * scale;
+    contentX = rect.left + (rect.width - contentW) / 2;
+    contentY = rect.top;
+  } else {
+    scale = rect.width / vbW;
+    contentW = rect.width;
+    contentH = vbH * scale;
+    contentX = rect.left;
+    contentY = rect.top + (rect.height - contentH) / 2;
+  }
+  const svgX = (evt.clientX - contentX) / scale;
+  const svgY = (evt.clientY - contentY) / scale;
+  let x = (svgX - pv.ox) / pv.scale;
+  let y = (pv.oy - svgY) / pv.scale;
   if ($("#chk-snap")?.checked){ x = Math.round(x/0.5)*0.5; y = Math.round(y/0.5)*0.5; }
   return {x, y};
 }
 function modelToScreen(svg, mx, my){
   const pv = state._pv; if(!pv || !svg) return null;
-  const sx = pv.ox + mx * pv.scale;
-  const sy = pv.oy - my * pv.scale;
-  const ctm = svg.getScreenCTM(); if(!ctm) return null;
-  const pt = svg.createSVGPoint(); pt.x = sx; pt.y = sy;
-  const sp = pt.matrixTransform(ctm);
-  return {x: sp.x, y: sp.y};
+  const rect = svg.getBoundingClientRect();
+  if(rect.width===0 || rect.height===0) return null;
+  const vbW = 400, vbH = 300;
+  const containerAspect = rect.width / rect.height;
+  const vbAspect = vbW / vbH;
+  let scale, contentX, contentY, contentW, contentH;
+  if (containerAspect > vbAspect) {
+    scale = rect.height / vbH;
+    contentH = rect.height; contentW = vbW * scale;
+    contentX = rect.left + (rect.width - contentW) / 2;
+    contentY = rect.top;
+  } else {
+    scale = rect.width / vbW;
+    contentW = rect.width; contentH = vbH * scale;
+    contentX = rect.left;
+    contentY = rect.top + (rect.height - contentH) / 2;
+  }
+  const svgX = pv.ox + mx * pv.scale;
+  const svgY = pv.oy - my * pv.scale;
+  return { x: contentX + svgX * scale, y: contentY + svgY * scale };
 }
 function syncNodeInputs(idx){
   const card = $$("#tb-nudos .nd-item")[idx]; if(!card) return;

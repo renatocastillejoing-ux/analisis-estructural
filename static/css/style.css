@@ -264,7 +264,8 @@ input:focus, select:focus { border-color:var(--ml-teal); box-shadow:0 0 0 3px rg
   background:linear-gradient(180deg,#fff, var(--ml-pearl)); border:1px solid rgba(216,220,228,.5);
   border-radius:var(--r-md); aspect-ratio:4/3; overflow:hidden;
 }
-#preview-svg { width:100%; height:100%; display:block; touch-action:none; }
+#preview-svg { width:100%; height:100%; display:block; touch-action:none; user-select:none; -webkit-user-select:none; }
+#preview-svg text { user-select:none; -webkit-user-select:none; pointer-events:none; }
 .canvas-body {
   position:relative; flex:1; min-height:0;
 }
