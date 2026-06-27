@@ -1328,55 +1328,30 @@ function drawApoyo(n, SX, SY){
    EDITOR GRÁFICO
    ============================================================ */
 function svgToModel(svg, evt){
+  const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+  const ctm = svg.getScreenCTM(); if(!ctm) return null;
+  const p = pt.matrixTransform(ctm.inverse());
   const pv = state._pv; if(!pv) return null;
-  const rect = svg.getBoundingClientRect();
-  if(rect.width===0 || rect.height===0) return null;
-  const vbW = 400, vbH = 300;
-  const containerAspect = rect.width / rect.height;
-  const vbAspect = vbW / vbH;
-  let scale, contentX, contentY, contentW, contentH;
-  if (containerAspect > vbAspect) {
-    scale = rect.height / vbH;
-    contentH = rect.height;
-    contentW = vbW * scale;
-    contentX = rect.left + (rect.width - contentW) / 2;
-    contentY = rect.top;
-  } else {
-    scale = rect.width / vbW;
-    contentW = rect.width;
-    contentH = vbH * scale;
-    contentX = rect.left;
-    contentY = rect.top + (rect.height - contentH) / 2;
-  }
-  const svgX = (evt.clientX - contentX) / scale;
-  const svgY = (evt.clientY - contentY) / scale;
-  let x = (svgX - pv.ox) / pv.scale;
-  let y = (pv.oy - svgY) / pv.scale;
+  let x = (p.x - pv.ox) / pv.scale;
+  let y = (pv.oy - p.y) / pv.scale;
   if ($("#chk-snap")?.checked){ x = Math.round(x/0.5)*0.5; y = Math.round(y/0.5)*0.5; }
   return {x, y};
 }
+function svgToModelRaw(svg, evt){
+  const pt = svg.createSVGPoint(); pt.x = evt.clientX; pt.y = evt.clientY;
+  const ctm = svg.getScreenCTM(); if(!ctm) return null;
+  const p = pt.matrixTransform(ctm.inverse());
+  const pv = state._pv; if(!pv) return null;
+  return { x: (p.x - pv.ox) / pv.scale, y: (pv.oy - p.y) / pv.scale };
+}
 function modelToScreen(svg, mx, my){
   const pv = state._pv; if(!pv || !svg) return null;
-  const rect = svg.getBoundingClientRect();
-  if(rect.width===0 || rect.height===0) return null;
-  const vbW = 400, vbH = 300;
-  const containerAspect = rect.width / rect.height;
-  const vbAspect = vbW / vbH;
-  let scale, contentX, contentY, contentW, contentH;
-  if (containerAspect > vbAspect) {
-    scale = rect.height / vbH;
-    contentH = rect.height; contentW = vbW * scale;
-    contentX = rect.left + (rect.width - contentW) / 2;
-    contentY = rect.top;
-  } else {
-    scale = rect.width / vbW;
-    contentW = rect.width; contentH = vbH * scale;
-    contentX = rect.left;
-    contentY = rect.top + (rect.height - contentH) / 2;
-  }
-  const svgX = pv.ox + mx * pv.scale;
-  const svgY = pv.oy - my * pv.scale;
-  return { x: contentX + svgX * scale, y: contentY + svgY * scale };
+  const sx = pv.ox + mx * pv.scale;
+  const sy = pv.oy - my * pv.scale;
+  const ctm = svg.getScreenCTM(); if(!ctm) return null;
+  const pt = svg.createSVGPoint(); pt.x = sx; pt.y = sy;
+  const sp = pt.matrixTransform(ctm);
+  return {x: sp.x, y: sp.y};
 }
 function syncNodeInputs(idx){
   const card = $$("#tb-nudos .nd-item")[idx]; if(!card) return;
@@ -1417,6 +1392,8 @@ function bindGraphEditor(){
   // --- Drag / click / pan state ---
   let dragIdx = null, _dragPending = false, _panning = false, _panStart = null, _dragMoved = false;
   let _downPos = null, _moved = false;
+  let _grabOffset = null; // {dx, dy} screen-space offset from cursor to node center at grab moment
+  let _grabNodeStart = null; // {x, y} model coords of node at grab moment
   const nodeIdxAt = (evt)=>{ const t = evt.target.closest("[data-node]"); return t? +t.dataset.node : null; };
 
   // --- Drag coordinate tooltip ---
@@ -1452,6 +1429,12 @@ function bindGraphEditor(){
       if (idx!=null){
         dragIdx = idx; _dragPending = true; _moved = false;
         _downPos = {x:evt.clientX, y:evt.clientY};
+        // Record screen-space offset from cursor to node center
+        const n = state.modelo.nudos[idx];
+        const screenPos = modelToScreen(svg, n.x, n.y);
+        if (screenPos) _grabOffset = {dx: screenPos.x - evt.clientX, dy: screenPos.y - evt.clientY};
+        else _grabOffset = {dx:0, dy:0};
+        _grabNodeStart = {x: n.x, y: n.y};
         svg.style.cursor = "grabbing";
       }
     } else if (state.emode==="nudo"){
@@ -1508,7 +1491,7 @@ function bindGraphEditor(){
       _previewPanY = _panStart.py + (evt.clientY - _panStart.y);
       drawPreview(); return;
     }
-    // Node drag
+    // Node drag — use screen deltas + grab offset (no repeated svgToModel)
     if (dragIdx!=null){
       if (!_moved){
         const dx = evt.clientX - (_downPos?.x ?? evt.clientX);
@@ -1518,9 +1501,17 @@ function bindGraphEditor(){
         try{ svg.setPointerCapture(evt.pointerId); }catch(_){}
       }
       if (_dragPending){ pushUndo(); _dragPending=false; }
-      const p = svgToModel(svg, evt); if(!p) return;
-      const n = state.modelo.nudos[dragIdx]; n.x = p.x; n.y = p.y;
-      showDragTooltip(svg, evt, p.x, p.y);
+      // Convert screen delta to model delta
+      const pv = state._pv;
+      const screenDx = evt.clientX - (_downPos?.x ?? evt.clientX);
+      const screenDy = evt.clientY - (_downPos?.y ?? evt.clientY);
+      const modelDx = screenDx / pv.scale;
+      const modelDy = -screenDy / pv.scale; // screen Y is inverted
+      const n = state.modelo.nudos[dragIdx];
+      n.x = _grabNodeStart.x + modelDx;
+      n.y = _grabNodeStart.y + modelDy;
+      if ($("#chk-snap")?.checked){ n.x = Math.round(n.x/0.5)*0.5; n.y = Math.round(n.y/0.5)*0.5; }
+      showDragTooltip(svg, evt, n.x, n.y);
       drawPreview(); syncNodeInputs(dragIdx);
     }
     // Connect line following cursor
