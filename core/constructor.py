@@ -19,7 +19,7 @@ _APOYOS = {
 }
 
 
-def _seccion_desde(s):
+def _seccion_desde(s, conv_l=1.0):
     nombre = s["nombre"]
     modo = s.get("modo", "rect")
     def _fin(sec):
@@ -27,33 +27,30 @@ def _seccion_desde(s):
             sec.k_corte = float(s["k_corte"])
         return sec
     if modo == "AI" or ("A" in s and "b" not in s and "tipo" not in s):
-        return _fin(Seccion(float(s["A"]), float(s["I"]), nombre=nombre))
+        A = float(s["A"]) * conv_l**2
+        I = float(s["I"]) * conv_l**4
+        return _fin(Seccion(A, I, nombre=nombre))
     if modo == "calc" and s.get("tipo"):
-        dims = {k: v for k, v in s.items()
+        dims = {k: float(v) * conv_l for k, v in s.items()
                 if k not in ("nombre", "modo", "tipo", "k_corte")}
         A, I = Secc.calcular(s["tipo"], **dims)
         sec = Seccion(A, I, nombre=nombre)
         sec.tipo_seccion = s["tipo"]
         return _fin(sec)
-    return _fin(Seccion.rectangular(float(s["b"]), float(s["h"]), nombre=nombre))
+    b = float(s["b"]) * conv_l
+    h = float(s["h"]) * conv_l
+    return _fin(Seccion.rectangular(b, h, nombre=nombre))
 
 
 def construir(datos):
     # ------------------------------------------------------------------
-    #  UNIDADES — el método de rigidez es AGNÓSTICO a unidades: si todas
+    #  UNIDADES. El método de rigidez es agnóstico a unidades: si todas
     #  las magnitudes (E, cargas, longitudes) están en un mismo sistema
     #  consistente (p. ej. kN, m), los resultados salen en ese sistema.
     #  Por eso NO se reescalan internamente las entradas; el sistema solo
     #  fija las ETIQUETAS y la fórmula empírica f'c→E (que está en kgf/cm²).
     #  Factores hacia la base tonf·m (usados solo para f'c→E):
     # ------------------------------------------------------------------
-    UNIDADES_CONV = {
-        "tonf_m":  {"f": 1.0,      "l": 1.0},
-        "kN_m":    {"f": 1/9.81,   "l": 1.0},
-        "kgf_cm":  {"f": 1/1000,   "l": 1/100},
-        "lb_ft":   {"f": 1/2204.62,"l": 1/3.281},
-        "N_mm":    {"f": 1/9810,   "l": 1/1000},
-    }
     FORCE_FACTORS = {
         "tonf": 1.0, "kgf": 1/1000, "N": 1/9810, "kN": 1/9.81,
         "MN": 1/0.00981, "GN": 1/0.00000981, "lbf": 1/2204.62, "kip": 1/2.20462,
@@ -61,20 +58,24 @@ def construir(datos):
     LENGTH_FACTORS = {
         "m": 1.0, "mm": 1/1000, "cm": 1/100, "km": 1000, "ft": 1/3.281, "in": 1/39.37,
     }
-    # Support both old combined key and new separate keys
+    _OLD_MAP = {
+        "tonf_m": ("tonf", "m"), "kN_m": ("kN", "m"),
+        "kgf_cm": ("kgf", "cm"), "lb_ft": ("lbf", "ft"),
+        "N_mm": ("N", "mm"),
+    }
     if "unidad_fuerza" in datos or "unidad_longitud" in datos:
         f_key = datos.get("unidad_fuerza", "tonf")
         l_key = datos.get("unidad_longitud", "m")
-        conv = {"f": FORCE_FACTORS.get(f_key, 1.0), "l": LENGTH_FACTORS.get(l_key, 1.0)}
     else:
-        unidad_key = datos.get("unidad", "tonf_m")
-        conv = UNIDADES_CONV.get(unidad_key, UNIDADES_CONV["tonf_m"])
+        f_key, l_key = _OLD_MAP.get(datos.get("unidad", "tonf_m"), ("tonf", "m"))
+    cf = FORCE_FACTORS.get(f_key, 1.0)   # 1 user force unit = cf tonf
+    cl = LENGTH_FACTORS.get(l_key, 1.0)  # 1 user length unit = cl m
 
-    # Conversión identidad: se trabaja directamente en las unidades del usuario.
-    def conv_fuerza(val):      return float(val)
-    def conv_longitud(val):    return float(val)
-    def conv_momento(val):     return float(val)
-    def conv_carga_dist(val):  return float(val)
+    # --- Conversión de unidades del usuario → base tonf/m ---
+    def _f(v):  return float(v) * cf              # fuerza → tonf
+    def _l(v):  return float(v) * cl              # longitud → m
+    def _m(v):  return float(v) * cf * cl         # momento → tonf·m
+    def _cd(v): return float(v) * cf / cl         # carga distribuida → tonf/m
 
     est = Estructura(nombre=datos.get("nombre", "Portico"),
                      despreciar_axial=bool(datos.get("despreciar_axial", False)),
@@ -86,15 +87,15 @@ def construir(datos):
     def _mat_desde(md):
         dens = float(md.get("densidad", 0) or 0)
         nu = float(md.get("nu", 0.2) or 0.2)
-        alpha = float(md.get("alpha", 0) or 0)   # coef. dilatación térmica
+        alpha = float(md.get("alpha", 0) or 0)
         if md.get("modo") == "fc" or ("fc" in md and "E" not in md):
-            # E.060: Ec = 15000·√(f'c[kgf/cm²]). desde_fc devuelve E en tonf/m²;
-            # se convierte a las unidades del usuario:  E_user = E_tonf · l² / f
+            # desde_fc devuelve E en tonf/m², se usa directamente (ya en base)
             mat = Material.desde_fc(float(md["fc"]), unidad="tonf/m2")
-            mat.E = mat.E * conv["l"]**2 / conv["f"]
             mat.densidad = dens; mat.nu = nu; mat.alpha = alpha
         else:
-            mat = Material(float(md["E"]), md.get("nombre", "material"),
+            # E del usuario → convertir a tonf/m²
+            E_base = float(md["E"]) * cf / cl**2
+            mat = Material(E_base, md.get("nombre", "material"),
                            densidad=dens, nu=nu, alpha=alpha)
         return mat
 
@@ -103,20 +104,22 @@ def construir(datos):
     est._material = mat_global
     materiales = {m["nombre"]: _mat_desde(m) for m in datos.get("materiales", [])}
 
-    secs = {s["nombre"]: _seccion_desde(s) for s in datos["secciones"]}
+    secs = {s["nombre"]: _seccion_desde(s, cl) for s in datos["secciones"]}
 
     nudos = {}
     for nd in datos["nudos"]:
         restr = nd.get("restriccion") or _APOYOS[nd.get("apoyo", "libre")]
-        n = Nudo(nd["id"], float(nd["x"]), float(nd["y"]),
+        n = Nudo(nd["id"], _l(float(nd["x"])), _l(float(nd["y"])),
                  restriccion=tuple(restr), nombre=nd.get("nombre"))
         r = nd.get("resorte")
         if r:
-            n.aplicar_resorte(float(r.get("kx", 0)), float(r.get("ky", 0)),
-                              float(r.get("kg", 0)))
+            n.aplicar_resorte(float(r.get("kx", 0)) * cf / cl,
+                              float(r.get("ky", 0)) * cf / cl,
+                              float(r.get("kg", 0)) * cf * cl)
         a = nd.get("asentamiento")
         if a:
-            n.aplicar_asentamiento(float(a.get("dx", 0)), float(a.get("dy", 0)),
+            n.aplicar_asentamiento(_l(float(a.get("dx", 0))),
+                                   _l(float(a.get("dy", 0))),
                                    float(a.get("giro", 0)))
         nudos[nd["id"]] = n
         est.agregar_nudo(n)
@@ -128,22 +131,40 @@ def construir(datos):
                      secs[ed["seccion"]], nombre=ed.get("nombre"),
                      release_i=bool(ed.get("release_i", False)),
                      release_j=bool(ed.get("release_j", False)))
+        # --- tramos (barra no prismatica): seccion/material por tramo ---
+        segs_in = ed.get("segmentos") or ed.get("tramos") or []
+        segs_in = [s for s in segs_in if s and float(s.get("L", 0) or 0) > 0]
+        if len(segs_in) >= 2:      # 0 o 1 tramo => barra prismatica normal
+            segmentos = []
+            for s in segs_in:
+                sec_s = secs.get(s.get("seccion")) or secs[ed["seccion"]]
+                mat_s = materiales.get(s.get("material")) or mat_e
+                segmentos.append({"L": _l(float(s["L"])), "mat": mat_s,
+                                  "sec": sec_s,
+                                  "sec_nombre": s.get("seccion") or ed["seccion"]})
+            # normaliza para que las longitudes sumen exactamente la geometrica
+            suma = sum(sg["L"] for sg in segmentos)
+            if suma > 0 and abs(suma - e.L) > 1e-9:
+                fac = e.L / suma
+                for sg in segmentos:
+                    sg["L"] *= fac
+            e.segmentos = segmentos
         elementos[ed["id"]] = e
         est.agregar_elemento(e)
 
     for cn in datos.get("cargas_nodales", []):
-        nudos[cn["nudo"]].aplicar_carga(Fx=conv_fuerza(cn.get("Fx", 0)),
-                                        Fy=conv_fuerza(cn.get("Fy", 0)),
-                                        M=conv_momento(cn.get("M", 0)))
+        nudos[cn["nudo"]].aplicar_carga(Fx=_f(cn.get("Fx", 0)),
+                                        Fy=_f(cn.get("Fy", 0)),
+                                        M=_m(cn.get("M", 0)))
 
-    # --- helper: resolve direction-based loads to global components ---
+    # --- auxiliar: pasa las cargas dadas por dirección a componentes globales ---
     def _resolve_dir(c, e):
-        """Convert dir/q to wx/wy (or Px/Py) if needed. Returns the load dict
-        with global components always present."""
+        """Convierte dir/q en wx/wy (o Px/Py) cuando hace falta. Devuelve el
+        diccionario de carga con las componentes globales siempre presentes."""
         d = dict(c)
         dir_mode = d.get("dir")
         if dir_mode is None or dir_mode == "comp":
-            return d  # already in global components
+            return d  # ya viene en componentes globales
         cx, cy = e.cos, e.sin
         # perpendicular orientada hacia arriba-derecha (igual que el frontend):
         # columna -> +X (derecha), viga -> +Y (arriba).
@@ -154,7 +175,7 @@ def construir(datos):
             "vert":  (0.0, 1.0),
             "horiz": (1.0, 0.0),
             "perp":  (ppx, ppy),
-            "axial": (cx, cy),     # along element axis
+            "axial": (cx, cy),     # a lo largo del eje del elemento
         }
         if dir_mode == "angle":
             import math
@@ -182,27 +203,27 @@ def construir(datos):
         ce = _resolve_dir(ce, e)
         t = ce["tipo"]
         a = ce.get("a"); b = ce.get("b")
-        a = conv_longitud(a) if a not in (None, "") else None
-        b = conv_longitud(b) if b not in (None, "") else None
+        a = _l(a) if a not in (None, "") else None
+        b = _l(b) if b not in (None, "") else None
         if t == "distribuida":
             if ce.get("subtipo") == "trapezoidal":
                 e.agregar_carga(CargaDistribuida(
-                    wx1=conv_carga_dist(ce.get("wx1", 0)), wy1=conv_carga_dist(ce.get("wy1", 0)),
-                    wx2=conv_carga_dist(ce.get("wx2", 0)), wy2=conv_carga_dist(ce.get("wy2", 0)),
+                    wx1=_cd(ce.get("wx1", 0)), wy1=_cd(ce.get("wy1", 0)),
+                    wx2=_cd(ce.get("wx2", 0)), wy2=_cd(ce.get("wy2", 0)),
                     a=a, b=b))
             else:
                 e.agregar_carga(CargaDistribuida(
-                    wx=conv_carga_dist(ce.get("wx", 0)), wy=conv_carga_dist(ce.get("wy", 0)),
+                    wx=_cd(ce.get("wx", 0)), wy=_cd(ce.get("wy", 0)),
                     a=a, b=b))
         elif t == "puntual":
             aa = ce.get("a")
-            e.agregar_carga(CargaPuntual(Px=conv_fuerza(ce.get("Px", 0)),
-                                         Py=conv_fuerza(ce.get("Py", 0)),
-                                         a=conv_longitud(aa) if aa not in (None, "") else None))
+            e.agregar_carga(CargaPuntual(Px=_f(ce.get("Px", 0)),
+                                         Py=_f(ce.get("Py", 0)),
+                                         a=_l(aa) if aa not in (None, "") else None))
         elif t == "momento":
             aa = ce.get("a")
-            e.agregar_carga(CargaMomento(M=conv_momento(ce.get("M", 0)),
-                                         a=conv_longitud(aa) if aa not in (None, "") else None))
+            e.agregar_carga(CargaMomento(M=_m(ce.get("M", 0)),
+                                         a=_l(aa) if aa not in (None, "") else None))
         elif t == "termica":
             e.agregar_carga(CargaTermica(dT=float(ce.get("dT", 0) or 0),
                                          dT_grad=float(ce.get("dT_grad", 0) or 0)))
@@ -210,6 +231,8 @@ def construir(datos):
     if datos.get("peso_propio"):
         est.aplicar_peso_propio()
 
+    est._conv_f = cf
+    est._conv_l = cl
     return est
 
 
@@ -233,15 +256,24 @@ def _cond_warning(cond, despreciar_axial):
 
 
 def extraer_resultados(est):
-    """Devuelve un dict JSON-serializable con todos los resultados numericos."""
+    """Devuelve un dict JSON-serializable con todos los resultados numericos.
+    Los valores se convierten de base (tonf/m) a las unidades del usuario."""
     nl = est.n_libres
+    cf = getattr(est, '_conv_f', 1.0)
+    cl = getattr(est, '_conv_l', 1.0)
+
+    # --- Funciones de reverse-conversión: base → usuario ---
+    def _rf(v):   return float(v) / cf if cf else float(v)         # tonf → user force
+    def _rl(v):   return float(v) / cl if cl else float(v)         # m → user length
+    def _rm(v):   return float(v) / (cf * cl) if (cf * cl) else float(v)  # tonf·m → user moment
+    def _rE(v):   return float(v) * cl**2 / cf if cf else float(v) # tonf/m² → user E
 
     desplazamientos = []
     for nd in est.nudos:
         desplazamientos.append({
             "nudo": nd.nombre,
-            "ux": float(est.D[nd.gdl[0]]),
-            "uy": float(est.D[nd.gdl[1]]),
+            "ux": _rl(est.D[nd.gdl[0]]),
+            "uy": _rl(est.D[nd.gdl[1]]),
             "giro": float(est.D[nd.gdl[2]]),
             "restringido": list(nd.restriccion),
         })
@@ -254,11 +286,12 @@ def extraer_resultados(est):
             for k in range(3):
                 g = nd.gdl[k]
                 if g >= nl:
-                    r.append(float(est.R[g - nl]))
+                    val = float(est.R[g - nl])
                 elif nd.resorte[k] != 0:
-                    r.append(float(-nd.resorte[k] * est.D[g]))
+                    val = float(-nd.resorte[k] * est.D[g])
                 else:
-                    r.append(0.0)
+                    val = 0.0
+                r.append(_rf(val) if k < 2 else _rm(val))
             reacciones.append({"nudo": nd.nombre, "Rx": r[0], "Ry": r[1], "M": r[2]})
 
     fuerzas = []
@@ -269,16 +302,14 @@ def extraer_resultados(est):
         ina = int(np.argmax(np.abs(N)))
         Mmax_glob = max(Mmax_glob, abs(M[im])); Vmax_glob = max(Vmax_glob, abs(V[iv]))
         Nmax_glob = max(Nmax_glob, abs(N[ina]))
-        # Se reportan FUERZAS INTERNAS en los extremos (mismo convenio que los
-        # diagramas): N tracción +, V según diagrama, M sagging (+) / hogging (−).
         fuerzas.append({
             "elem": e.nombre,
-            "Ni": float(N[0]),  "Vi": float(V[0]),  "Mi": float(M[0]),
-            "Nj": float(N[-1]), "Vj": float(V[-1]), "Mj": float(M[-1]),
-            "Mmax": float(abs(M[im])), "xMmax": float(xs[im]),
-            "Vmax": float(abs(V[iv])), "xVmax": float(xs[iv]),
-            "Nmax": float(abs(N[ina])), "xNmax": float(xs[ina]),
-            "L": float(e.L), "angulo": float(e.angulo),
+            "Ni": _rf(N[0]),  "Vi": _rf(V[0]),  "Mi": _rm(M[0]),
+            "Nj": _rf(N[-1]), "Vj": _rf(V[-1]), "Mj": _rm(M[-1]),
+            "Mmax": _rm(abs(M[im])), "xMmax": _rl(xs[im]),
+            "Vmax": _rf(abs(V[iv])), "xVmax": _rl(xs[iv]),
+            "Nmax": _rf(abs(N[ina])), "xNmax": _rl(xs[ina]),
+            "L": _rl(e.L), "angulo": float(e.angulo),
         })
 
     umax = max(max(abs(d["ux"]), abs(d["uy"])) for d in desplazamientos)
@@ -289,6 +320,9 @@ def extraer_resultados(est):
             lbl[nd.gdl[k]] = f"{nd.nombre}.{['ux','uy','g'][k]}"
 
     equilibrio = est.verificar_equilibrio()
+    if isinstance(equilibrio, dict):
+        equilibrio = {k: _rf(v) if k.startswith("F") else _rm(v)
+                      for k, v in equilibrio.items()}
 
     # --- datos numericos para diagramas interactivos en el navegador ---
     NP = 41
@@ -305,27 +339,43 @@ def extraer_resultados(est):
         N1 = 1-3*xi**2+2*xi**3; N2 = L*(xi-2*xi**2+xi**3)
         N3 = 3*xi**2-2*xi**3;   N4 = L*(-xi**2+xi**3)
         v = N1*vi + N2*ti + N3*vj + N4*tj
-        gx = c*u - s*v; gy = s*u + c*v          # offset global SIN escalar
+        gx = c*u - s*v; gy = s*u + c*v
+        # tramos (barra no prismatica): fronteras s0..s1 y nombre de seccion
+        tramos = []
+        if getattr(e, "segmentos", None):
+            s0 = 0.0
+            for sg in e.segmentos:
+                s1 = s0 + sg["L"]
+                tramos.append({"s0": _rl(s0), "s1": _rl(s1),
+                               "sec": sg.get("sec_nombre", "")})
+                s0 = s1
         diag_elems.append({
             "elem": e.nombre,
-            "xi": float(e.ni.x), "yi": float(e.ni.y),
-            "xj": float(e.nj.x), "yj": float(e.nj.y),
-            "L": float(e.L),
-            "s":  [float(t) for t in xs],
-            "N":  [float(t) for t in N],
-            "V":  [float(t) for t in V],
-            "M":  [float(t) for t in M],
-            "defx": [float(t) for t in gx],
-            "defy": [float(t) for t in gy],
+            "xi": _rl(e.ni.x), "yi": _rl(e.ni.y),
+            "xj": _rl(e.nj.x), "yj": _rl(e.nj.y),
+            "L": _rl(e.L),
+            "s":  [_rl(t) for t in xs],
+            "N":  [_rf(t) for t in N],
+            "V":  [_rf(t) for t in V],
+            "M":  [_rm(t) for t in M],
+            "defx": [_rl(t) for t in gx],
+            "defy": [_rl(t) for t in gy],
+            "tramos": tramos,
         })
     diag_nudos = []
     for nd in est.nudos:
-        ux = float(est.D[nd.gdl[0]]); uy = float(est.D[nd.gdl[1]])
+        ux = _rl(est.D[nd.gdl[0]]); uy = _rl(est.D[nd.gdl[1]])
         dmax_def = max(dmax_def, abs(ux), abs(uy))
+        # resorte: [kx(kgf/m→tonf/m), ky, kg(kgf·m→tonf·m)] → reverse
+        res_user = [
+            float(nd.resorte[0]) * cl / cf if cf else float(nd.resorte[0]),
+            float(nd.resorte[1]) * cl / cf if cf else float(nd.resorte[1]),
+            float(nd.resorte[2]) / (cf * cl) if (cf * cl) else float(nd.resorte[2]),
+        ]
         diag_nudos.append({
-            "nombre": nd.nombre, "x": float(nd.x), "y": float(nd.y),
+            "nombre": nd.nombre, "x": _rl(nd.x), "y": _rl(nd.y),
             "restr": list(nd.restriccion),
-            "resorte": [float(r) for r in nd.resorte],
+            "resorte": res_user,
             "ux": ux, "uy": uy,
         })
     diagramas = {"elementos": diag_elems, "nudos": diag_nudos,
@@ -336,11 +386,11 @@ def extraer_resultados(est):
         "n_elementos": len(est.elementos),
         "n_gdl": est.n_gdl,
         "n_libres": est.n_libres,
-        "Mmax": float(Mmax_glob),
-        "Vmax": float(Vmax_glob),
-        "Nmax": float(Nmax_glob),
+        "Mmax": _rm(Mmax_glob),
+        "Vmax": _rf(Vmax_glob),
+        "Nmax": _rf(Nmax_glob),
         "umax": float(umax),
-        "E": float(est._material.E),
+        "E": _rE(est._material.E),
         "fc": float(getattr(est._material, "fc", 0)) or None,
         "despreciar_axial": bool(est.despreciar_axial),
         "timoshenko": bool(getattr(est, "timoshenko", False)),
@@ -402,13 +452,20 @@ def resolver_combinaciones(datos):
         dc["cargas_nodales"] = caso.get("cargas_nodales", [])
         dc["cargas_elementos"] = caso.get("cargas_elementos", [])
         est = construir(dc); est.resolver()
+        cf_c = getattr(est, '_conv_f', 1.0)
+        cl_c = getattr(est, '_conv_l', 1.0)
+        def _rf_c(v): return float(v) / cf_c if cf_c else float(v)
+        def _rl_c(v): return float(v) / cl_c if cl_c else float(v)
+        def _rm_c(v): return float(v) / (cf_c * cl_c) if (cf_c * cl_c) else float(v)
         edict = {}
         if elem_orden is None: elem_orden = [e.nombre for e in est.elementos]
         for e in est.elementos:
             xs, N, V, M = est.fuerzas_internas(e, NP)
-            edict[e.nombre] = {"N": N, "V": V, "M": M,
-                               "xi": e.ni.x, "yi": e.ni.y,
-                               "xj": e.nj.x, "yj": e.nj.y, "s": xs}
+            edict[e.nombre] = {"N": [_rf_c(t) for t in N], "V": [_rf_c(t) for t in V],
+                               "M": [_rm_c(t) for t in M],
+                               "xi": _rl_c(e.ni.x), "yi": _rl_c(e.ni.y),
+                               "xj": _rl_c(e.nj.x), "yj": _rl_c(e.nj.y),
+                               "s": [_rl_c(t) for t in xs]}
         # reacciones por nombre de nudo
         reac = {}
         nl = est.n_libres
@@ -417,14 +474,15 @@ def resolver_combinaciones(datos):
                 r = []
                 for k in range(3):
                     g = nd.gdl[k]
-                    if g >= nl: r.append(float(est.R[g-nl]))
-                    elif nd.resorte[k] != 0: r.append(float(-nd.resorte[k]*est.D[g]))
-                    else: r.append(0.0)
+                    if g >= nl: val = float(est.R[g-nl])
+                    elif nd.resorte[k] != 0: val = float(-nd.resorte[k]*est.D[g])
+                    else: val = 0.0
+                    r.append(_rf_c(val) if k < 2 else _rm_c(val))
                 reac[nd.nombre] = r
         res_casos[caso["nombre"]] = {"elem": edict, "reac": reac}
         if xs_ref is None:
             xs_ref = list(edict[elem_orden[0]]["s"])
-            nudos_ref = [{"nombre": nd.nombre, "x": float(nd.x), "y": float(nd.y),
+            nudos_ref = [{"nombre": nd.nombre, "x": _rl_c(nd.x), "y": _rl_c(nd.y),
                           "restr": list(nd.restriccion)} for nd in est.nudos]
 
     # combinaciones (si no hay, una por caso con factor 1)

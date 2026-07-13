@@ -1,7 +1,7 @@
 /* ============================================================
-   Análisis Estructural · Método de Rigidez — Front (vanilla JS)
-   v4.0: Auto-save, Undo/Redo, Delete mode, Keyboard shortcuts,
-         Template gallery, Improved UX
+   Análisis Estructural · Método de Rigidez. Front (vanilla JS)
+   v4.0: guardado automático, deshacer/rehacer, modo borrar, atajos
+         de teclado, galería de plantillas, mejoras de UX
    ============================================================ */
 "use strict";
 
@@ -251,7 +251,7 @@ function setVista(v){
 }
 
 /* ============================================================
-   EDITOR — campos estáticos
+   EDITOR: campos estáticos
    ============================================================ */
 function renderEstaticos(){
   const m = state.modelo;
@@ -294,7 +294,7 @@ function renderUnidadInfo(){
 function updateAccDots(m){}
 
 /* ============================================================
-   EDITOR — tablas dinámicas
+   EDITOR: tablas dinámicas
    ============================================================ */
 function optsNudos(sel){
   return state.modelo.nudos.map(n =>
@@ -327,19 +327,21 @@ function renderEditor(){
   $("#tb-secciones").innerHTML = m.secciones.map((s,i)=>renderSeccionItem(s,i)).join("");
   $("#tb-nudos").innerHTML = m.nudos.map((n,i)=>renderNudoItem(n,i)).join("");
   $("#tb-materiales").innerHTML = (m.materiales||[]).map((x,i)=>renderMaterialItem(x,i)).join("");
-  $("#tb-elementos").innerHTML = m.elementos.map((e,i)=>`
+  $("#tb-elementos").innerHTML = m.elementos.map((e,i)=>{
+    const nseg = (e.segmentos && e.segmentos.length>=2) ? e.segmentos.length : 0;
+    return `
     <tr>
       <td><input type="text" value="${esc(e.nombre||("E"+e.id))}" data-coll="elementos" data-idx="${i}" data-field="nombre" style="min-width:54px"></td>
       <td><select data-coll="elementos" data-idx="${i}" data-field="i">${optsNudos(e.i)}</select></td>
       <td><select data-coll="elementos" data-idx="${i}" data-field="j">${optsNudos(e.j)}</select></td>
-      <td><select data-coll="elementos" data-idx="${i}" data-field="seccion">${optsSecciones(e.seccion)}</select></td>
+      <td><select data-coll="elementos" data-idx="${i}" data-field="seccion" ${nseg?'disabled title="Sección definida por tramos"':''}>${optsSecciones(e.seccion)}</select>${nseg?`<span class="seg-badge" title="${nseg} tramos (sección/material variable)">▦${nseg}</span>`:''}</td>
       <td><select data-coll="elementos" data-idx="${i}" data-field="material">${optsMateriales(e.material)}</select></td>
       <td><div class="rot-cell">
         <input type="checkbox" ${e.release_i?"checked":""} data-coll="elementos" data-idx="${i}" data-field="release_i" title="Rótula en i">
         <input type="checkbox" ${e.release_j?"checked":""} data-coll="elementos" data-idx="${i}" data-field="release_j" title="Rótula en j">
       </div></td>
-      <td><button class="btn-del" data-dup="elementos" data-idx="${i}" title="Duplicar elemento" aria-label="Duplicar elemento">⧉</button> <button class="btn-del" data-del="elementos" data-idx="${i}" title="Eliminar elemento" aria-label="Eliminar elemento">×</button></td>
-    </tr>`).join("");
+      <td class="ele-actions"><button class="btn-del btn-tramos ${nseg?'has-seg':''}" data-tramos="${i}" title="Definir dimensiones: sección/material por tramo (placas)" aria-label="Definir dimensiones del elemento">▦</button> <button class="btn-del" data-dup="elementos" data-idx="${i}" title="Duplicar elemento" aria-label="Duplicar elemento">⧉</button> <button class="btn-del" data-del="elementos" data-idx="${i}" title="Eliminar elemento" aria-label="Eliminar elemento">×</button></td>
+    </tr>`;}).join("");
   $("#tb-cargas_nodales").innerHTML = m.cargas_nodales.map((c,i)=>renderCargaNodal(c,i)).join("");
   $("#tb-cargas_elementos").innerHTML = m.cargas_elementos.map((c,i)=>renderCargaItem(c,i)).join("");
   const casos = m.casos || (m.casos = []);
@@ -634,6 +636,38 @@ function itemPorDefecto(coll){
 }
 
 /* ============================================================
+   ACORDEONES: apertura/cierre animado sin recortar el contenido
+   ------------------------------------------------------------
+   El estado abierto en CSS es max-height:none (sin tope), así una lista larga
+   de elementos/nudos nunca se recorta. La animación se logra fijando max-height
+   en px SOLO durante la transición y liberándola al terminar.
+   ============================================================ */
+function expandAcc(acc){
+  const body = acc.querySelector(".acc-body");
+  acc.classList.remove("is-collapsed");
+  if(!body) return;
+  body.style.maxHeight = "0px";
+  void body.offsetHeight;                       // reflujo: fija el punto de partida
+  body.style.maxHeight = body.scrollHeight + "px";
+  const done = (ev)=>{
+    if(ev.propertyName !== "max-height") return;
+    body.style.maxHeight = "";                   // vuelve a CSS (none): sin recorte
+    body.removeEventListener("transitionend", done);
+  };
+  body.addEventListener("transitionend", done);
+}
+function collapseAcc(acc){
+  const body = acc.querySelector(".acc-body");
+  if(body && !acc.classList.contains("is-collapsed")){
+    body.style.maxHeight = body.scrollHeight + "px";  // alto actual en px
+    void body.offsetHeight;                            // reflujo
+    body.style.maxHeight = "0px";                       // anima hasta cerrar
+  }
+  acc.classList.add("is-collapsed");
+  acc.querySelector(".acc-head")?.setAttribute("aria-expanded","false");
+}
+
+/* ============================================================
    DELEGACIÓN DE EVENTOS DEL EDITOR
    ============================================================ */
 function bindEditor(){
@@ -644,24 +678,24 @@ function bindEditor(){
     const wasCollapsed = acc.classList.contains("is-collapsed");
     const parentGroup = acc.closest(".acc-group");
     if (wasCollapsed) {
-      // Collapse sibling accordions within same group
+      // colapsa los acordeones hermanos dentro del mismo grupo
       if (parentGroup){
-        parentGroup.querySelectorAll(".acc").forEach(a => { a.classList.add("is-collapsed"); a.querySelector(".acc-head")?.setAttribute("aria-expanded","false"); });
+        parentGroup.querySelectorAll(".acc").forEach(a => { if(a!==acc) collapseAcc(a); });
       } else {
-        $$("#rail .acc").forEach(a => { a.classList.add("is-collapsed"); a.querySelector(".acc-head")?.setAttribute("aria-expanded","false"); });
+        $$("#rail .acc").forEach(a => { if(a!==acc) collapseAcc(a); });
       }
-      acc.classList.remove("is-collapsed");
+      expandAcc(acc);
       h.setAttribute("aria-expanded","true");
-      // Activate workflow step for this group
+      // activa el paso del flujo para este grupo
       if (parentGroup) setWorkflowActiveForGroup(parentGroup.dataset.group);
     } else {
-      acc.classList.add("is-collapsed");
+      collapseAcc(acc);
       h.setAttribute("aria-expanded","false");
     }
     updateAccOpenCount();
   }));
 
-  /* --- Drag & Drop reorder --- */
+  /* --- reordenar arrastrando y soltando --- */
   let _dragSrc = null;
   cont.addEventListener("dragstart",(e)=>{
     const item = e.target.closest("[data-drag]");
@@ -774,6 +808,8 @@ function bindEditor(){
       if (item){ pushUndo(); item.modo=cnm.dataset.cnmodo;
         if (item.modo==="ang" && item.mag==null){ item.mag=0; item.ang=0; }
         renderEditor(); drawPreview(); } return; }
+    const tram = e.target.closest("[data-tramos]");
+    if (tram){ openSegEditor(+tram.dataset.tramos); return; }
     const dup = e.target.closest("[data-dup]");
     if (dup){
       pushUndo();
@@ -866,7 +902,7 @@ function bindEditor(){
     e.target.value = "";
   });
 
-  /* --- Resultados buttons --- */
+  /* --- botones de Resultados --- */
   const bv=$("#btn-volver-editar"); if(bv) bv.addEventListener("click",()=>setVista("modelo"));
   const bm=$("#btn-exp-memoria"); if(bm) bm.addEventListener("click",exportarMemoria);
   const bc=$("#btn-exp-csv"); if(bc) bc.addEventListener("click",exportarCSV);
@@ -1009,6 +1045,28 @@ function drawPreview(){
     const strokeW = isSelElem ? 5 : 3.5;
     if (isSelElem) g.push(`<line x1="${SX(a.x)}" y1="${SY(a.y)}" x2="${SX(b.x)}" y2="${SY(b.y)}" stroke="rgba(80,140,155,.22)" stroke-width="14" stroke-linecap="round"/>`);
     g.push(`<line x1="${SX(a.x)}" y1="${SY(a.y)}" x2="${SX(b.x)}" y2="${SY(b.y)}" stroke="${strokeC}" stroke-width="${strokeW}" stroke-linecap="round"/>`);
+    // tramos (barra no prismatica): banda + marcas + etiqueta de seccion
+    if (e.segmentos && e.segmentos.length>=2){
+      const sumL = e.segmentos.reduce((s,sg)=>s+(num(sg.L)||0),0) || 1;
+      const ax=SX(a.x), ay=SY(a.y), bx=SX(b.x), by=SY(b.y);
+      const dxs=bx-ax, dys=by-ay, len=Math.hypot(dxs,dys)||1;
+      const pxu=-dys/len, pyu=dxs/len;   // perpendicular unitario (pantalla)
+      g.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="pv-seg-wall"/>`);
+      let acc=0;
+      for (let s=0; s<e.segmentos.length-1; s++){
+        acc += num(e.segmentos[s].L)||0;
+        const t=acc/sumL, tx=ax+dxs*t, ty=ay+dys*t;
+        g.push(`<line class="pv-seg-tick" x1="${tx-pxu*6}" y1="${ty-pyu*6}" x2="${tx+pxu*6}" y2="${ty+pyu*6}"/>`);
+      }
+      if (state._labelToggles.secciones){
+        let a0=0;
+        e.segmentos.forEach(sg=>{
+          const tmid=(a0 + (num(sg.L)||0)/2)/sumL; a0+=num(sg.L)||0;
+          const lx=ax+dxs*tmid + pxu*11, ly=ay+dys*tmid + pyu*11;
+          g.push(`<text x="${lx}" y="${ly}" text-anchor="middle" font-size="7.5" fill="#3A6B78" font-family="Inter">${esc(sg.seccion||"")}</text>`);
+        });
+      }
+    }
     const mx=(SX(a.x)+SX(b.x))/2, my=(SY(a.y)+SY(b.y))/2;
     if (state._labelToggles.secciones){
       const elemLabel = esc(e.nombre || ("E"+e.id));
@@ -1024,7 +1082,7 @@ function drawPreview(){
       const lmy = (my) + 12*Math.sin(ang+Math.PI/2);
       g.push(`<text x="${lmx}" y="${lmy}" text-anchor="middle" font-size="8" fill="#7AADB8" font-family="Inter">${L.toFixed(2)}${u.longitud}</text>`);
     }
-    // transparent hit target for element selection
+    // zona de clic transparente para seleccionar el elemento
     g.push(`<line class="elem-hit" data-elem="${eIdx}" x1="${SX(a.x)}" y1="${SY(a.y)}" x2="${SX(b.x)}" y2="${SY(b.y)}" stroke="transparent" stroke-width="18" stroke-linecap="round"/>`);
   });
 
@@ -1037,7 +1095,7 @@ function drawPreview(){
     });
   }
 
-  // rubber-band line when connecting
+  // línea elástica que sigue al cursor mientras se conecta
   if (state.emode==="conectar" && state._connectFirst!=null && state._mousePos){
     const a = nodos.find(n=>n.id===state._connectFirst);
     if (a) g.push(`<line x1="${SX(a.x)}" y1="${SY(a.y)}" x2="${state._mousePos.x}" y2="${state._mousePos.y}" stroke="#508C9B" stroke-width="2" stroke-dasharray="6 4"/>`);
@@ -1141,7 +1199,7 @@ function arrow(x1,y1,x2,y2,color){
 }
 
 /* ============================================================
-   CARGAS EN ELEMENTOS — resolución de dirección a ejes globales
+   CARGAS EN ELEMENTOS: resolución de dirección a ejes globales
    El backend trabaja con componentes globales (wx, wy). Aquí se
    convierte la dirección elegida (vertical, horizontal, perpendicular,
    axial, ángulo, componentes) a componentes globales para dibujar y
@@ -1374,13 +1432,13 @@ function bindGraphEditor(){
   const svg = $("#preview-svg");
   const tooltip = $("#drag-tooltip");
 
-  // --- Editor mode buttons ---
+  // --- botones de modo del editor ---
   $("#seg-modo-editor")?.addEventListener("click",(e)=>{
     const b = e.target.closest("button"); if(!b) return;
     setEditorMode(b.dataset.emode);
   });
 
-  // --- Keyboard shortcuts for modes ---
+  // --- atajos de teclado para los modos ---
   document.addEventListener("keydown",(e)=>{
     if (e.target.tagName==="INPUT" || e.target.tagName==="SELECT" || e.target.tagName==="TEXTAREA") return;
     if (e.key==="v" || e.key==="V"){ setEditorMode("mover"); }
@@ -1389,20 +1447,20 @@ function bindGraphEditor(){
     else if (e.key==="x" || e.key==="X"){ setEditorMode("eliminar"); }
   });
 
-  // --- Drag / click / pan state ---
+  // --- estado de arrastre / clic / paneo ---
   let dragIdx = null, _dragPending = false, _panning = false, _panStart = null, _dragMoved = false;
   let _downPos = null, _moved = false;
-  let _grabOffset = null; // {dx, dy} screen-space offset from cursor to node center at grab moment
-  let _grabNodeStart = null; // {x, y} model coords of node at grab moment
+  let _grabOffset = null; // {dx, dy}: desfase en pantalla entre el cursor y el centro del nudo al agarrar
+  let _grabNodeStart = null; // {x, y}: coordenadas de modelo del nudo al agarrar
   const nodeIdxAt = (evt)=>{ const t = evt.target.closest("[data-node]"); return t? +t.dataset.node : null; };
 
-  // --- Drag coordinate tooltip ---
+  // --- tooltip de coordenadas durante el arrastre ---
   function showDragTooltip(svg, evt, x, y){
     if(!tooltip) return;
     const u = getUnidad();
     tooltip.textContent = `${x.toFixed(2)}, ${y.toFixed(2)} ${u.longitud}`;
     tooltip.classList.remove("hidden");
-    // Position near cursor but inside canvas-body
+    // posiciona cerca del cursor pero dentro de canvas-body
     const body = tooltip.parentElement;
     if(!body) return;
     const br = body.getBoundingClientRect();
@@ -1414,10 +1472,10 @@ function bindGraphEditor(){
   }
   function hideDragTooltip(){ if(tooltip) tooltip.classList.add("hidden"); }
 
-  // --- Pointer down ---
+  // --- al presionar el puntero ---
   svg.addEventListener("pointerdown",(evt)=>{
     const m = state.modelo; if(!m) return;
-    // Pan: shift+click or middle mouse
+    // paneo: shift+clic o botón central del ratón
     if (evt.shiftKey || evt.button===1){
       _panning = true; _panStart = {x:evt.clientX, y:evt.clientY, px:_previewPanX, py:_previewPanY};
       try{ svg.setPointerCapture(evt.pointerId); }catch(_){}
@@ -1429,7 +1487,7 @@ function bindGraphEditor(){
       if (idx!=null){
         dragIdx = idx; _dragPending = true; _moved = false;
         _downPos = {x:evt.clientX, y:evt.clientY};
-        // Record screen-space offset from cursor to node center
+        // guarda el desfase en pantalla entre el cursor y el centro del nudo
         const n = state.modelo.nudos[idx];
         const screenPos = modelToScreen(svg, n.x, n.y);
         if (screenPos) _grabOffset = {dx: screenPos.x - evt.clientX, dy: screenPos.y - evt.clientY};
@@ -1477,21 +1535,21 @@ function bindGraphEditor(){
     }
   });
 
-  // --- Pointer move ---
+  // --- al mover el puntero ---
   svg.addEventListener("pointermove",(evt)=>{
-    // status bar coordinates
+    // coordenadas para la barra de estado
     const pCoord = svgToModel(svg, evt);
     if (pCoord) {
       const sc = $("#status-coords");
       if (sc) sc.textContent = `x: ${pCoord.x.toFixed(2)} · y: ${pCoord.y.toFixed(2)} ${getUnidad().longitud}`;
     }
-    // Pan
+    // paneo
     if (_panning && _panStart){
       _previewPanX = _panStart.px + (evt.clientX - _panStart.x);
       _previewPanY = _panStart.py + (evt.clientY - _panStart.y);
       drawPreview(); return;
     }
-    // Node drag — use screen deltas + grab offset (no repeated svgToModel)
+    // arrastre de nudo: usa deltas de pantalla y el desfase de agarre (sin repetir svgToModel)
     if (dragIdx!=null){
       if (!_moved){
         const dx = evt.clientX - (_downPos?.x ?? evt.clientX);
@@ -1501,12 +1559,12 @@ function bindGraphEditor(){
         try{ svg.setPointerCapture(evt.pointerId); }catch(_){}
       }
       if (_dragPending){ pushUndo(); _dragPending=false; }
-      // Convert screen delta to model delta
+      // convierte el delta de pantalla a delta de modelo
       const pv = state._pv;
       const screenDx = evt.clientX - (_downPos?.x ?? evt.clientX);
       const screenDy = evt.clientY - (_downPos?.y ?? evt.clientY);
       const modelDx = screenDx / pv.scale;
-      const modelDy = -screenDy / pv.scale; // screen Y is inverted
+      const modelDy = -screenDy / pv.scale; // la Y de pantalla está invertida
       const n = state.modelo.nudos[dragIdx];
       n.x = _grabNodeStart.x + modelDx;
       n.y = _grabNodeStart.y + modelDy;
@@ -1514,7 +1572,7 @@ function bindGraphEditor(){
       showDragTooltip(svg, evt, n.x, n.y);
       drawPreview(); syncNodeInputs(dragIdx);
     }
-    // Connect line following cursor
+    // línea de conexión que sigue al cursor
     if (state.emode==="conectar" && state._connectFirst!=null){
       const p = svgToModel(svg, evt); if(!p) return;
       state._mousePos = p;
@@ -1522,7 +1580,7 @@ function bindGraphEditor(){
     }
   });
 
-  // --- Click-to-select in mover mode ---
+  // --- clic para seleccionar en modo mover ---
   svg.addEventListener("click",(evt)=>{
     if (state.emode !== "mover") return;
     if (_dragMoved) { _dragMoved = false; return; }
@@ -1537,14 +1595,14 @@ function bindGraphEditor(){
     }
   });
 
-  // --- Double-click to focus node in inspector ---
+  // --- doble clic para enfocar el nudo en el inspector ---
   svg.addEventListener("dblclick",(evt)=>{
     if (state.emode !== "mover") return;
     const nodeEl = evt.target.closest("[data-node]");
     if (nodeEl) {
       const idx = +nodeEl.dataset.node;
       selectObject("nudo", idx);
-      // Focus the X input in the inspector
+      // enfoca el campo X del inspector
       setTimeout(()=>{
         const card = $$("#tb-nudos .nd-item")[idx];
         if(card){
@@ -1555,7 +1613,7 @@ function bindGraphEditor(){
     }
   });
 
-  // --- End drag ---
+  // --- fin del arrastre ---
   const endDrag = ()=>{
     _panning=false; _panStart=null; hideDragTooltip();
     if(svg) svg.style.cursor = "";
@@ -1869,7 +1927,7 @@ function renderResultados(data){
 }
 
 /* ============================================================
-   ANÁLISIS MODAL — tabla + forma modal
+   ANÁLISIS MODAL: tabla + forma modal
    ============================================================ */
 function renderModal(modal){
   const card = $("#res-modal-card"); if(!card) return;
@@ -2026,7 +2084,7 @@ function renderDiagrama(tipo){
         const [wx,wy]=W(mx,my); pts.push([wx,wy]); }
       g.push(`<polyline points="${pts.map(p=>p[0].toFixed(4)+","+p[1].toFixed(4)).join(" ")}" fill="none" stroke="${color}" stroke-width="2.5" vector-effect="non-scaling-stroke"/>`);
     } else {
-      // Build baseline and diagram points
+      // arma la línea base y los puntos del diagrama
       // M  → siempre del lado traccionado (sagging)
       // V,N → siempre perpendicular al elemento (convención estándar)
       const fnx = dwy, fny = -dwx;
@@ -2038,10 +2096,10 @@ function renderDiagrama(tipo){
         const val=(e[dk]||[])[k]||0;
         dPts.push(W(mx+fnx*val*scale, my+fny*val*scale));
       }
-      // Filled polygon: baseline + diagram curve
+      // polígono relleno: línea base + curva del diagrama
       const poly=[...bPts, ...dPts.slice().reverse()];
       g.push(`<polygon points="${poly.map(p=>p[0].toFixed(4)+","+p[1].toFixed(4)).join(" ")}" fill="${color}" fill-opacity="0.22" stroke="none"/>`);
-      // Baseline
+      // línea base
       g.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="#C9CFD8" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>`);
       // Diagram curve outline
       g.push(`<polyline points="${dPts.map(p=>p[0].toFixed(4)+","+p[1].toFixed(4)).join(" ")}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`);
@@ -2052,7 +2110,7 @@ function renderDiagrama(tipo){
           g.push(`<line x1="${bxk}" y1="${byk}" x2="${dxk}" y2="${dyk}" stroke="${color}" stroke-width="0.7" stroke-opacity="0.3" vector-effect="non-scaling-stroke"/>`);
         }
       }
-      // Max and min value markers
+      // marcadores de valor máximo y mínimo
       const arr=e[dk]||[];
       if(arr.length>0){
         let iMax=0, iMin=0;
@@ -2072,7 +2130,7 @@ function renderDiagrama(tipo){
         if(iMin!==iMax) drawMark(iMin,1);
         else if(arr.length>1) drawMark(arr.length-1,1);
       }
-      // Zero-crossing marker
+      // marcador del cruce por cero
       for(let k=1;k<arr.length;k++){
         if((arr[k-1]<0&&arr[k]>0)||(arr[k-1]>0&&arr[k]<0)){
           const t0=-arr[k-1]/(arr[k]-arr[k-1]);
@@ -2552,13 +2610,13 @@ function renderTemplateGallery(){
         }).join("");
     }
   }
-  // empty state
+  // estado vacío
   if(!builtIn && !customHtml){
     grid.innerHTML = `<div class="tpl-empty"><div class="tpl-empty-icon">🔍</div>No se encontraron plantillas</div>`;
   } else {
     grid.innerHTML = (builtIn||"") + customHtml;
   }
-  // click handlers
+  // manejadores de clic
   grid.onclick = (e)=>{
     const delBtn = e.target.closest("[data-del-tpl]");
     if(delBtn){ e.stopPropagation(); eliminarPlantillaCustom(delBtn.dataset.delTpl); return; }
@@ -3227,7 +3285,7 @@ function setWorkflowStep(step){
     // Abrir el primer acordeón del grupo si todos están colapsados
     const accs = grp.querySelectorAll(".acc");
     const anyOpen = Array.from(accs).some(a=>!a.classList.contains("is-collapsed"));
-    if (!anyOpen && accs[0]) accs[0].classList.remove("is-collapsed");
+    if (!anyOpen && accs[0]) expandAcc(accs[0]);
   }
   // Llevar el rail al inicio al cambiar de paso
   const rail = $("#rail"); if (rail) rail.scrollTop = 0;
@@ -3307,9 +3365,9 @@ function initCollapseAll(){
     const accs = activeRailAccs();
     const anyOpen = accs.some(a => !a.classList.contains("is-collapsed"));
     if (anyOpen){
-      accs.forEach(a => a.classList.add("is-collapsed"));
+      accs.forEach(a => collapseAcc(a));
     } else if (accs[0]) {
-      accs[0].classList.remove("is-collapsed");
+      expandAcc(accs[0]);
     }
     updateAccOpenCount();
   });
@@ -3363,17 +3421,17 @@ function initTplModal(){
   if(btnToggle) btnToggle.addEventListener("click", openTpl);
   if(btnClose) btnClose.addEventListener("click", closeTpl);
 
-  // Close on overlay click
+  // cerrar al hacer clic en el fondo
   if(panel) panel.addEventListener("click",(e)=>{
     if(e.target === panel) closeTpl();
   });
 
-  // Close on Escape
+  // cerrar con Escape
   document.addEventListener("keydown",(e)=>{
     if(e.key==="Escape" && panel && !panel.classList.contains("hidden")) closeTpl();
   });
 
-  // Search input
+  // campo de búsqueda
   if(search) search.addEventListener("input",(e)=>{
     _tplSearchQuery = e.target.value;
     renderTemplateGallery();
@@ -3423,11 +3481,257 @@ function initStatusSnap(){
 /* ============================================================
    INIT
    ============================================================ */
+/* ============================================================
+   EDITOR DE TRAMOS ("Definir dimensiones")
+   Permite dar sección/material distintos a partes de un elemento
+   (p. ej. una placa embebida) sin partirlo nodo-a-nodo.
+   ============================================================ */
+function elemLenById(e){
+  const ni = state.modelo.nudos.find(n=>n.id===e.i);
+  const nj = state.modelo.nudos.find(n=>n.id===e.j);
+  if(!ni || !nj) return 0;
+  return Math.hypot((nj.x-ni.x), (nj.y-ni.y));
+}
+function openSegEditor(idx){
+  const e = state.modelo.elementos[idx]; if(!e) return;
+  const L = elemLenById(e);
+  if(!(L>0)){ toast("Define primero los nudos i y j del elemento.", "err", 3000); return; }
+  let rows;
+  if(e.segmentos && e.segmentos.length>=2){
+    rows = e.segmentos.map(s=>({L:num(s.L), seccion:s.seccion||e.seccion, material:s.material||e.material||""}));
+  } else {
+    rows = [{L:L, seccion:e.seccion, material:e.material||""}];
+  }
+  state._segEdit = { idx, L, rows };
+  renderSegEditor();
+  const ov = $("#seg-overlay"); ov.classList.remove("hidden");
+}
+function closeSegEditor(){
+  const ov = $("#seg-overlay"); if(ov) ov.classList.add("hidden");
+  state._segEdit = null;
+}
+function renderSegEditor(){
+  const se = state._segEdit; if(!se) return;
+  const e = state.modelo.elementos[se.idx]; if(!e) return;
+  const u = getUnidad();
+  $("#seg-title").textContent = `Definir dimensiones · ${e.nombre||('E'+e.id)}`;
+  $("#seg-sub").innerHTML = `Longitud del elemento: <strong>${se.L.toFixed(3)} ${u.longitud}</strong> (de ${optNombreNudo(e.i)} a ${optNombreNudo(e.j)}).`;
+  const rowsHtml = se.rows.map((r,k)=>`
+    <div class="seg-row" data-segrow="${k}">
+      <span class="seg-row-n">${k+1}</span>
+      <div class="seg-field seg-field-L"><label>Longitud (${u.longitud})</label>
+        <input type="number" step="any" min="0" value="${r.L??''}" data-segfield="L" data-k="${k}"></div>
+      <div class="seg-field"><label>Sección</label>
+        <select data-segfield="seccion" data-k="${k}">${optsSecciones(r.seccion)}</select></div>
+      <div class="seg-field"><label>Material</label>
+        <select data-segfield="material" data-k="${k}">${optsMateriales(r.material)}</select></div>
+      <button class="btn-del" data-segdel="${k}" title="Quitar tramo" aria-label="Quitar tramo" ${se.rows.length<=1?'disabled':''}>×</button>
+    </div>`).join("");
+  $("#seg-body").innerHTML = rowsHtml + `
+    <div class="seg-actions">
+      <button class="btn btn-secondary btn-sm" data-segact="add" type="button">+ Agregar tramo</button>
+      <button class="btn btn-secondary btn-sm" data-segact="equal" type="button" title="Igualar la longitud de todos los tramos">Distribuir igual</button>
+    </div>`;
+  const sum = se.rows.reduce((a,r)=>a+(num(r.L)||0),0);
+  const diff = sum - se.L;
+  const ok = Math.abs(diff) < 1e-4;
+  $("#seg-sum").innerHTML = `Σ tramos = <strong>${sum.toFixed(3)}</strong> / ${se.L.toFixed(3)} ${u.longitud} ` +
+    (ok ? `<span class="seg-ok">✓</span>`
+        : `<span class="seg-warn">Δ ${diff>0?'+':''}${diff.toFixed(3)} · se normalizará a ${se.L.toFixed(3)} al guardar</span>`);
+}
+function optNombreNudo(id){
+  const n = state.modelo.nudos.find(x=>x.id===id);
+  return n ? esc(n.nombre||("N"+n.id)) : ("N"+id);
+}
+function saveSegEditor(){
+  const se = state._segEdit; if(!se) return;
+  const e = state.modelo.elementos[se.idx]; if(!e) return;
+  const rows = se.rows.filter(r=>num(r.L)>0);
+  pushUndo();
+  if(rows.length<=1){
+    delete e.segmentos;
+    toast("Elemento prismático (sin tramos).", "ok", 2000);
+  } else {
+    const sum = rows.reduce((a,r)=>a+num(r.L),0);
+    const fac = sum>0 ? se.L/sum : 1;
+    e.segmentos = rows.map(r=>({ L: +(num(r.L)*fac).toFixed(6),
+                                 seccion: r.seccion,
+                                 material: r.material||"" }));
+    toast(`${rows.length} tramos guardados en ${e.nombre||('E'+e.id)}.`, "ok", 2200);
+  }
+  closeSegEditor();
+  renderEditor(); drawPreview();
+}
+function initSegEditor(){
+  const ov = $("#seg-overlay"); if(!ov) return;
+  $("#seg-close").addEventListener("click", closeSegEditor);
+  $("#seg-save").addEventListener("click", saveSegEditor);
+  $("#seg-clear").addEventListener("click", ()=>{
+    if(!state._segEdit) return;
+    state._segEdit.rows = [{L:state._segEdit.L,
+                            seccion:(state.modelo.elementos[state._segEdit.idx]||{}).seccion,
+                            material:""}];
+    renderSegEditor();
+  });
+  ov.addEventListener("click",(ev)=>{ if(ev.target===ov) closeSegEditor(); });
+  // edición de campos dentro del cuerpo
+  const onSegEdit = (ev)=>{
+    const el = ev.target.closest("[data-segfield]"); if(!el) return;
+    const se = state._segEdit; if(!se) return;
+    const k = +el.dataset.k, f = el.dataset.segfield;
+    if(!se.rows[k]) return;
+    se.rows[k][f] = (f==="L") ? el.value : el.value;
+    if(f==="L") renderSegSum();       // no re-render completo (no perder foco)
+  };
+  $("#seg-body").addEventListener("input", onSegEdit);
+  $("#seg-body").addEventListener("change", onSegEdit);
+  $("#seg-body").addEventListener("click",(ev)=>{
+    const se = state._segEdit; if(!se) return;
+    const del = ev.target.closest("[data-segdel]");
+    if(del){ const k=+del.dataset.segdel; if(se.rows.length>1){ se.rows.splice(k,1); renderSegEditor(); } return; }
+    const act = ev.target.closest("[data-segact]");
+    if(act){
+      if(act.dataset.segact==="add"){
+        const last = se.rows[se.rows.length-1] || {};
+        se.rows.push({L: 0, seccion:last.seccion||(state.modelo.secciones[0]||{}).nombre, material:last.material||""});
+      } else if(act.dataset.segact==="equal"){
+        const n = se.rows.length; const each = se.L/n;
+        se.rows.forEach(r=>r.L = +each.toFixed(6));
+      }
+      renderSegEditor();
+    }
+  });
+  document.addEventListener("keydown",(ev)=>{
+    if(ev.key==="Escape" && !$("#seg-overlay").classList.contains("hidden")) closeSegEditor();
+  });
+}
+function renderSegSum(){
+  const se = state._segEdit; if(!se) return;
+  const u = getUnidad();
+  const sum = se.rows.reduce((a,r)=>a+(num(r.L)||0),0);
+  const diff = sum - se.L;
+  const ok = Math.abs(diff) < 1e-4;
+  $("#seg-sum").innerHTML = `Σ tramos = <strong>${sum.toFixed(3)}</strong> / ${se.L.toFixed(3)} ${u.longitud} ` +
+    (ok ? `<span class="seg-ok">✓</span>`
+        : `<span class="seg-warn">Δ ${diff>0?'+':''}${diff.toFixed(3)} · se normalizará a ${se.L.toFixed(3)} al guardar</span>`);
+}
+
+/* ============================================================
+   GENERADOR DE PORTICO MULTI-PISO
+   ============================================================ */
+function parseNums(str, fallback){
+  const arr = String(str||"").split(/[,;\s]+/).map(s=>parseFloat(s))
+              .filter(v=>isFinite(v) && v>0);
+  return arr.length ? arr : (fallback||[]);
+}
+function generarPortico(opts){
+  const luces = opts.luces, alturas = opts.alturas;
+  const nb = luces.length, np = alturas.length;
+  const xs = [0]; luces.forEach(l=>xs.push(xs[xs.length-1]+l));
+  const ys = [0]; alturas.forEach(h=>ys.push(ys[ys.length-1]+h));
+  const nudos = [], elementos = [], idAt = {};
+  let nid = 1;
+  for (let lv=0; lv<=np; lv++){
+    for (let cx=0; cx<=nb; cx++){
+      const ap = (lv===0) ? opts.apoyo : "libre";
+      nudos.push({id:nid, nombre:"N"+nid, x:+xs[cx].toFixed(4), y:+ys[lv].toFixed(4), apoyo:ap});
+      idAt[cx+","+lv] = nid; nid++;
+    }
+  }
+  let eid = 1, nc = 0, nv = 0;
+  for (let cx=0; cx<=nb; cx++)
+    for (let lv=0; lv<np; lv++){
+      nc++;
+      elementos.push({id:eid, nombre:"C"+nc, i:idAt[cx+","+lv], j:idAt[cx+","+(lv+1)],
+                      seccion:opts.secCol, release_i:false, release_j:false}); eid++;
+    }
+  for (let lv=1; lv<=np; lv++)
+    for (let cx=0; cx<nb; cx++){
+      nv++;
+      elementos.push({id:eid, nombre:"V"+nv, i:idAt[cx+","+lv], j:idAt[(cx+1)+","+lv],
+                      seccion:opts.secViga, release_i:false, release_j:false}); eid++;
+    }
+  return {nudos, elementos};
+}
+function openGenModal(){
+  const secs = state.modelo.secciones || [];
+  const opt = s=>`<option value="${esc(s.nombre)}">${esc(s.nombre)}</option>`;
+  const colSel = $("#gen-sec-col"), vigaSel = $("#gen-sec-viga");
+  if (secs.length){
+    colSel.innerHTML = secs.map(opt).join("");
+    vigaSel.innerHTML = secs.map(opt).join("");
+    // heurística: columna = mayor área; viga = la primera distinta
+    let best = secs[0];
+    secs.forEach(s=>{ const [A]=calcAI(s); const [Ab]=calcAI(best); if((A||0)>(Ab||0)) best=s; });
+    colSel.value = best.nombre;
+    const other = secs.find(s=>s.nombre!==best.nombre) || best;
+    vigaSel.value = other.nombre;
+  } else {
+    colSel.innerHTML = `<option value="col">col (se creará 0.40×0.40)</option>`;
+    vigaSel.innerHTML = `<option value="viga">viga (se creará 0.30×0.50)</option>`;
+  }
+  $("#gen-overlay").classList.remove("hidden");
+  updateGenInfo();
+}
+function closeGenModal(){ const o=$("#gen-overlay"); if(o) o.classList.add("hidden"); }
+function updateGenInfo(){
+  const np = Math.max(1, Math.round(num($("#gen-pisos").value)||1));
+  const luces = parseNums($("#gen-luces").value, [5]);
+  const nb = luces.length;
+  const nNodos = (nb+1)*(np+1);
+  const nCol = (nb+1)*np, nViga = nb*np;
+  const u = getUnidad();
+  const ancho = luces.reduce((a,b)=>a+b,0);
+  $("#gen-info").innerHTML = `${nb} vano(s), ancho total ${ancho.toFixed(2)} ${u.longitud}. `+
+    `Generará <strong>${nNodos} nudos</strong>, ${nCol} columnas y ${nViga} vigas.`;
+  $("#gen-sum").innerHTML = state.modelo.elementos.length
+    ? `<span class="seg-warn">Reemplazará la geometría actual (${state.modelo.nudos.length} nudos, ${state.modelo.elementos.length} elementos).</span>`
+    : "";
+}
+function crearPorticoDesdeModal(){
+  const np = Math.max(1, Math.round(num($("#gen-pisos").value)||1));
+  const luces = parseNums($("#gen-luces").value, [5]);
+  let alturas = parseNums($("#gen-alturas").value, [3]);
+  if (alturas.length===1) alturas = Array(np).fill(alturas[0]);
+  else if (alturas.length < np){ while(alturas.length<np) alturas.push(alturas[alturas.length-1]); }
+  else alturas = alturas.slice(0, np);
+  const apoyo = $("#gen-apoyo").value;
+  let secCol = $("#gen-sec-col").value, secViga = $("#gen-sec-viga").value;
+  const m = JSON.parse(JSON.stringify(state.modelo));
+  m.secciones = m.secciones || [];
+  if (!m.secciones.some(s=>s.nombre===secCol)){ m.secciones.push({nombre:"col",  tipo:"rectangular", b:0.40, h:0.40}); secCol="col"; }
+  if (!m.secciones.some(s=>s.nombre===secViga)){ m.secciones.push({nombre:"viga", tipo:"rectangular", b:0.30, h:0.50}); secViga="viga"; }
+  const g = generarPortico({luces, alturas, apoyo, secCol, secViga});
+  m.nudos = g.nudos; m.elementos = g.elementos;
+  m.cargas_nodales = []; m.cargas_elementos = [];
+  cargarModeloEnEditor(m);
+  closeGenModal();
+  setWorkflowStep("modelar");
+  toast(`Pórtico ${np} piso(s) × ${luces.length} vano(s) generado.`, "ok", 2600);
+}
+function initGenModal(){
+  const btn = $("#btn-generar"); const ov = $("#gen-overlay");
+  if (!ov) return;
+  if (btn) btn.addEventListener("click", ()=>{ const menu=$("#ham-menu"); if(menu) menu.classList.add("hidden"); openGenModal(); });
+  $("#gen-close").addEventListener("click", closeGenModal);
+  $("#gen-cancel").addEventListener("click", closeGenModal);
+  $("#gen-create").addEventListener("click", crearPorticoDesdeModal);
+  ov.addEventListener("click",(ev)=>{ if(ev.target===ov) closeGenModal(); });
+  ["gen-pisos","gen-luces","gen-alturas"].forEach(id=>{
+    const el=$("#"+id); if(el) el.addEventListener("input", updateGenInfo);
+  });
+  document.addEventListener("keydown",(ev)=>{
+    if(ev.key==="Escape" && !ov.classList.contains("hidden")) closeGenModal();
+  });
+}
+
 function init(){
   if (!autoRestore()){
     limpiarModelo();
   }
   bindEditor();
+  initSegEditor();
+  initGenModal();
   bindGraphEditor();
   bindKeyboard();
   initWorkflowStepper();

@@ -139,6 +139,36 @@ class CargaTermica:
 
 
 # ==============================================================================
+#  RIGIDEZ PRISMATICA LOCAL (viga-columna 2D, 6x6)  -  helper reutilizable
+# ==============================================================================
+def _k_beam_local(E, A, I, L, factor_axial=1.0, timoshenko=False, nu=0.2,
+                  kcz=1.2):
+    """Matriz de rigidez local 6x6 de una barra prismatica en ejes locales
+    [u_i, v_i, g_i, u_j, v_j, g_j]. Con Timoshenko incluye la deformacion por
+    cortante mediante el factor phi. Se usa tanto para barras prismaticas como
+    para cada tramo de una barra segmentada (no prismatica)."""
+    EA_L = E*A/L*factor_axial
+    EI = E*I
+    phi = 0.0
+    if timoshenko:
+        G = E/(2*(1+nu))
+        As = A/kcz
+        phi = 12*EI/(G*As*L**2) if (G*As) > 0 else 0.0
+    b = 1.0/(1.0+phi)
+    k = np.zeros((6, 6))
+    k[0, 0] = EA_L; k[0, 3] = -EA_L; k[3, 0] = -EA_L; k[3, 3] = EA_L
+    k11 = 12*EI/L**3*b
+    k12 = 6*EI/L**2*b
+    k22 = (4+phi)*EI/L*b
+    k25 = (2-phi)*EI/L*b
+    k[1, 1] = k11;   k[1, 2] = k12;   k[1, 4] = -k11;  k[1, 5] = k12
+    k[2, 1] = k12;   k[2, 2] = k22;   k[2, 4] = -k12;  k[2, 5] = k25
+    k[4, 1] = -k11;  k[4, 2] = -k12;  k[4, 4] = k11;   k[4, 5] = -k12
+    k[5, 1] = k12;   k[5, 2] = k25;   k[5, 4] = -k12;  k[5, 5] = k22
+    return k
+
+
+# ==============================================================================
 #  ELEMENTO
 # ==============================================================================
 class Elemento:
@@ -154,6 +184,12 @@ class Elemento:
         self.usar_geometrica = False  # incluir rigidez geometrica (2do orden)
         self.release_i = bool(release_i)   # rotula (libera momento) en extremo i
         self.release_j = bool(release_j)   # rotula (libera momento) en extremo j
+        # Tramos (barra NO prismatica): lista ordenada de dicts
+        #   {"L": longitud_tramo, "mat": Material, "sec": Seccion}
+        # Vacia => barra prismatica (usa self.mat / self.sec en toda su longitud).
+        self.segmentos = []
+        self._despreciar_axial = False     # lo fija la Estructura al ensamblar
+        self._penal_axial = 1.0e5
 
         dx = nudo_j.x - nudo_i.x; dy = nudo_j.y - nudo_i.y
         self.L = np.hypot(dx, dy)
@@ -165,31 +201,189 @@ class Elemento:
     def agregar_carga(self, carga):
         self.cargas.append(carga); return self
 
-    # ---------------- rigidez local base (sin releases) ----------------
+    # ---------------- ¿barra segmentada (no prismatica)? -------------------
+    def es_segmentada(self):
+        return bool(self.segmentos) and len(self.segmentos) >= 1
+
+    def _seg_props(self, seg):
+        """Devuelve (E, A, I, L, nu, kcz, factor_axial) de un tramo."""
+        mat = seg.get("mat") or self.mat
+        sec = seg.get("sec") or self.sec
+        E = mat.E; A = sec.A; I = sec.I; L = float(seg["L"])
+        nu = getattr(mat, "nu", 0.2)
+        kcz = getattr(sec, "k_corte", 1.2)
+        if self._despreciar_axial:
+            # misma filosofia que en modo prismatico: EA >> rigidez de flexion,
+            # calculada por tramo para no desestabilizar el condicionamiento.
+            fa = self._penal_axial * 12*I/(A*L**2)
+        else:
+            fa = 1.0
+        return E, A, I, L, nu, kcz, fa
+
+    # ---------------- cadena local de tramos + su vector de cargas ---------
+    def _cadena_KP(self):
+        """Ensambla, en ejes LOCALES, la barra como una cadena de sub-tramos
+        prismaticos con nudos internos (3 GDL c/u). Devuelve (K, P) de la
+        cadena, con P = cargas nodales consistentes de las cargas del elemento
+        repartidas a cada tramo. El orden de GDL es [u,v,g] por nudo, de i a j."""
+        segs = self.segmentos
+        n = len(segs)
+        ndof = 3*(n+1)
+        K = np.zeros((ndof, ndof))
+        P = np.zeros(ndof)
+        s0 = 0.0
+        estaciones = [0.0]
+        for k, seg in enumerate(segs):
+            E, A, I, L, nu, kcz, fa = self._seg_props(seg)
+            kseg = _k_beam_local(E, A, I, L, factor_axial=fa,
+                                 timoshenko=self.timoshenko, nu=nu, kcz=kcz)
+            idx = [3*k, 3*k+1, 3*k+2, 3*(k+1), 3*(k+1)+1, 3*(k+1)+2]
+            K[np.ix_(idx, idx)] += kseg
+            s1 = s0 + L
+            # cargas del tramo (distribuidas recortadas + termica del tramo)
+            peq = self._peq_tramo_dist_term(seg, s0, s1)
+            P[idx] += peq
+            estaciones.append(s1)
+            s0 = s1
+        # cargas puntuales y momentos: van al tramo que contiene su estacion
+        for carga in self.cargas:
+            if carga.tipo == "puntual":
+                a = carga.a if carga.a is not None else self.L/2.0
+                k = self._tramo_de(a, estaciones)
+                if k is None:
+                    continue
+                s0k = estaciones[k]; Lk = estaciones[k+1] - s0k
+                aa = a - s0k; bb = Lk - aa
+                c, s = self.cos, self.sin
+                Pa = carga.Px*c + carga.Py*s
+                Pp = -carga.Px*s + carga.Py*c
+                idx = [3*k, 3*k+1, 3*k+2, 3*(k+1), 3*(k+1)+1, 3*(k+1)+2]
+                P[idx[0]] += Pa*bb/Lk;               P[idx[3]] += Pa*aa/Lk
+                P[idx[1]] += Pp*bb**2*(Lk+2*aa)/Lk**3
+                P[idx[2]] += Pp*aa*bb**2/Lk**2
+                P[idx[4]] += Pp*aa**2*(Lk+2*bb)/Lk**3
+                P[idx[5]] += -Pp*aa**2*bb/Lk**2
+            elif carga.tipo == "momento":
+                a = carga.a if carga.a is not None else self.L/2.0
+                k = self._tramo_de(a, estaciones)
+                if k is None:
+                    continue
+                s0k = estaciones[k]; Lk = estaciones[k+1] - s0k
+                xi = (a - s0k)/Lk; M0 = carga.M
+                N1p = 6*xi*(xi-1)/Lk
+                N2p = 1 - 4*xi + 3*xi**2
+                N3p = 6*xi*(1-xi)/Lk
+                N4p = -2*xi + 3*xi**2
+                idx = [3*k, 3*k+1, 3*k+2, 3*(k+1), 3*(k+1)+1, 3*(k+1)+2]
+                P[idx[1]] += M0*N1p; P[idx[2]] += M0*N2p
+                P[idx[4]] += M0*N3p; P[idx[5]] += M0*N4p
+        return K, P
+
+    @staticmethod
+    def _tramo_de(a, estaciones):
+        """Indice del tramo que contiene la estacion a (elemento coords)."""
+        n = len(estaciones) - 1
+        for k in range(n):
+            lo, hi = estaciones[k], estaciones[k+1]
+            if (a >= lo - 1e-9 and a < hi - 1e-9) or (k == n-1 and a <= hi + 1e-9):
+                return k
+        return None
+
+    def _peq_tramo_dist_term(self, seg, s0, s1):
+        """Cargas nodales consistentes (6-vector local) de un tramo por las
+        cargas DISTRIBUIDAS (recortadas a [s0,s1]) y TERMICAS del elemento."""
+        L = s1 - s0
+        Peq = np.zeros(6)
+        gp = [-0.8611363116, -0.3399810436, 0.3399810436, 0.8611363116]
+        gw = [0.3478548451, 0.6521451549, 0.6521451549, 0.3478548451]
+        for carga in self.cargas:
+            if carga.tipo == "distribuida":
+                a = 0.0 if carga.a is None else max(0.0, carga.a)
+                b = self.L if carga.b is None else min(self.L, carga.b)
+                lo = max(s0, a); hi = min(s1, b)
+                if hi <= lo:
+                    continue
+                for xg, wg in zip(gp, gw):
+                    x = 0.5*(hi-lo)*xg + 0.5*(lo+hi)   # coord del elemento
+                    jac = 0.5*(hi-lo)
+                    wa, wp = self._w_local(carga, x)
+                    xi = (x - s0)/L                    # normalizada en el tramo
+                    Na_i = 1 - xi; Na_j = xi
+                    N1 = 1 - 3*xi**2 + 2*xi**3
+                    N2 = L*(xi - 2*xi**2 + xi**3)
+                    N3 = 3*xi**2 - 2*xi**3
+                    N4 = L*(-xi**2 + xi**3)
+                    Peq[0] += wg*jac*wa*Na_i
+                    Peq[3] += wg*jac*wa*Na_j
+                    Peq[1] += wg*jac*wp*N1
+                    Peq[2] += wg*jac*wp*N2
+                    Peq[4] += wg*jac*wp*N3
+                    Peq[5] += wg*jac*wp*N4
+            elif carga.tipo == "termica":
+                mat = seg.get("mat") or self.mat
+                sec = seg.get("sec") or self.sec
+                E = mat.E; A = sec.A; I = sec.I
+                alpha = getattr(mat, "alpha", 0.0)
+                NT = E*A*alpha*carga.dT
+                Peq[0] += -NT; Peq[3] += NT
+                h = getattr(sec, "h", None)
+                if carga.dT_grad and h:
+                    MT = E*I*alpha*carga.dT_grad/float(h)
+                    Peq[2] += -MT; Peq[5] += MT
+        return Peq
+
+    @staticmethod
+    def _condensar_cadena(K, P):
+        """Condensa los GDL internos de la cadena, dejando los 6 GDL de los
+        extremos (primeros 3 y ultimos 3). Devuelve (K6x6, P6)."""
+        m = K.shape[0]
+        ext = [0, 1, 2, m-3, m-2, m-1]
+        interno = [i for i in range(m) if i not in ext]
+        if not interno:
+            return K.copy(), P.copy()
+        Kee = K[np.ix_(ext, ext)]
+        Kei = K[np.ix_(ext, interno)]
+        Kie = K[np.ix_(interno, ext)]
+        Kii = K[np.ix_(interno, interno)]
+        Kii_inv = np.linalg.inv(Kii)
+        Kc = Kee - Kei @ Kii_inv @ Kie
+        Pc = P[ext] - Kei @ Kii_inv @ P[interno]
+        # guarda lo necesario para recuperar los GDL internos (deformada)
+        return Kc, Pc
+
+    def _resolver_internos(self, d_ext):
+        """Dado el desplazamiento local de los 6 GDL de extremo, recupera los
+        desplazamientos de los nudos internos de la cadena (para la deformada).
+        Devuelve (estaciones, desplazamientos_locales_por_nudo)."""
+        K, P = self._cadena_KP()
+        m = K.shape[0]
+        ext = [0, 1, 2, m-3, m-2, m-1]
+        interno = [i for i in range(m) if i not in ext]
+        d = np.zeros(m)
+        d[ext] = d_ext
+        if interno:
+            Kii = K[np.ix_(interno, interno)]
+            Kie = K[np.ix_(interno, ext)]
+            di = np.linalg.solve(Kii, P[interno] - Kie @ d_ext)
+            d[interno] = di
+        estaciones = [0.0]
+        for seg in self.segmentos:
+            estaciones.append(estaciones[-1] + float(seg["L"]))
+        nodos = [d[3*k:3*k+3] for k in range(len(self.segmentos)+1)]
+        return estaciones, nodos
+
+    # ---------------- rigidez local base (sin liberaciones) ----------------
     def k_local_base(self):
+        if self.es_segmentada():
+            K, P = self._cadena_KP()
+            Kc, Pc = self._condensar_cadena(K, P)
+            self._Peq_cadena = Pc
+            return Kc
         E, A, I, L = self.mat.E, self.sec.A, self.sec.I, self.L
-        EA_L = E*A/L*self.factor_axial
-        EI = E*I
-        # factor de cortante (Timoshenko): phi = 12 E I / (G As L^2)
-        phi = 0.0
-        if self.timoshenko:
-            nu = getattr(self.mat, "nu", 0.2)
-            G = E/(2*(1+nu))
-            kcz = getattr(self.sec, "k_corte", 1.2)   # factor de forma a cortante
-            As = A/kcz
-            phi = 12*EI/(G*As*L**2) if (G*As) > 0 else 0.0
-        b = 1.0/(1.0+phi)
-        k = np.zeros((6, 6))
-        k[0, 0] = EA_L; k[0, 3] = -EA_L; k[3, 0] = -EA_L; k[3, 3] = EA_L
-        k11 = 12*EI/L**3*b
-        k12 = 6*EI/L**2*b
-        k22 = (4+phi)*EI/L*b
-        k25 = (2-phi)*EI/L*b
-        k[1, 1] = k11;   k[1, 2] = k12;   k[1, 4] = -k11;  k[1, 5] = k12
-        k[2, 1] = k12;   k[2, 2] = k22;   k[2, 4] = -k12;  k[2, 5] = k25
-        k[4, 1] = -k11;  k[4, 2] = -k12;  k[4, 4] = k11;   k[4, 5] = -k12
-        k[5, 1] = k12;   k[5, 2] = k25;   k[5, 4] = -k12;  k[5, 5] = k22
-        return k
+        nu = getattr(self.mat, "nu", 0.2)
+        kcz = getattr(self.sec, "k_corte", 1.2)
+        return _k_beam_local(E, A, I, L, factor_axial=self.factor_axial,
+                             timoshenko=self.timoshenko, nu=nu, kcz=kcz)
 
     # ---------------- rigidez geometrica (2do orden / P-Delta) ----------
     def kg_geometrica_local(self):
@@ -215,7 +409,7 @@ class Elemento:
         if self.release_j: c.append(5)
         return c
 
-    # ---------------- condensacion estatica por releases ----------------
+    # ---------------- condensacion estatica por liberaciones ----------------
     def _condensar(self, k, f):
         """Devuelve (k_mod, f_mod) tras liberar los GDL rotacionales con rotula."""
         c = self._dofs_liberados()
@@ -280,8 +474,14 @@ class Elemento:
         T = self.matriz_T()
         return T.T @ self.masa_local(m_lineal) @ T
 
-    # ---------------- fuerzas de empotramiento (base, sin releases) -----
+    # ---------------- fuerzas de empotramiento (base, sin liberaciones) -----
     def ff_local_base(self):
+        if self.es_segmentada():
+            # cargas nodales consistentes condensadas de la cadena de tramos
+            K, P = self._cadena_KP()
+            _, Pc = self._condensar_cadena(K, P)
+            self._Peq_base = Pc
+            return -Pc
         L = self.L; c, s = self.cos, self.sin
         Peq = np.zeros(6)
         for carga in self.cargas:
@@ -445,6 +645,9 @@ class Estructura:
         for e in self.elementos:
             e.timoshenko = self.timoshenko
             e.usar_geometrica = self.pdelta
+            # las barras segmentadas calculan la penalizacion axial por tramo
+            e._despreciar_axial = self.despreciar_axial
+            e._penal_axial = self._PENAL_AXIAL
             if self.despreciar_axial:
                 # rigidez axial ~ PENAL x rigidez de flexion (12EI/L^3):
                 # mantiene el condicionamiento acotado y la deformacion axial ~0

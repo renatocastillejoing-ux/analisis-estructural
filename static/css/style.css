@@ -66,7 +66,7 @@ body {
 .section-title { font-size:16px; font-weight:700; letter-spacing:-.01em; }
 
 /* ===================== LAYOUT MODELO ===================== */
-/* grid-modelo is defined in v6 block with 3 columns */
+/* grid-modelo se define en el bloque v6 con 3 columnas */
 .editor-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:var(--sp4); gap:var(--sp3); flex-wrap:wrap; }
 .editor-actions { display:flex; gap:var(--sp2); flex-wrap:wrap; }
 .col-editor {
@@ -338,7 +338,7 @@ input:focus, select:focus { border-color:var(--ml-teal); box-shadow:0 0 0 3px rg
 .hist-actions { display:flex; gap:var(--sp2); margin-top:var(--sp3); }
 .hist-actions .btn { flex:1; }
 
-/* ===================== EMPTY ===================== */
+/* ===================== ESTADO VACÍO ===================== */
 .empty { display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; border:1px dashed rgba(80,140,155,.3); background:rgba(255,255,255,.5); border-radius:var(--r-xl); padding:64px var(--sp6); }
 .empty-ico { width:56px; height:56px; border-radius:var(--r-lg); background:var(--ml-ice); color:var(--ml-teal); display:flex; align-items:center; justify-content:center; margin-bottom:var(--sp4); }
 .empty h3 { font-size:16px; font-weight:700; }
@@ -440,7 +440,7 @@ input:focus, select:focus { border-color:var(--ml-teal); box-shadow:0 0 0 3px rg
 #preview-svg.mode-delete .node-hit { cursor:pointer; }
 #preview-svg.mode-delete .node-hit:hover circle { filter:url(#glow-delete); }
 
-/* Drag visual feedback */
+/* realimentación visual del arrastre */
 .node-drag-ghost {
   fill:rgba(80,140,155,.18); stroke:var(--ml-teal); stroke-width:2;
   stroke-dasharray:5 3; pointer-events:none;
@@ -454,13 +454,13 @@ input:focus, select:focus { border-color:var(--ml-teal); box-shadow:0 0 0 3px rg
   transition:opacity 100ms;
 }
 
-/* Element hover glow */
+/* brillo del elemento al pasar el cursor */
 #preview-svg .elem-hit:hover + line,
 #preview-svg .elem-hit:hover ~ line.elem-highlight {
   stroke:var(--ml-teal) !important; stroke-opacity:.4;
 }
 
-/* Node hover pulse */
+/* pulso del nudo al pasar el cursor */
 @keyframes node-pulse {
   0%,100% { r:6; }
   50% { r:8; }
@@ -548,7 +548,7 @@ input[title], select[title] { cursor:help; }
 .preview-carga-momento { stroke:#C77B30; }
 
 /* ===================== v4.1: Template Gallery ===================== */
-/* Template modal overlay */
+/* superposición modal de plantillas */
 .tpl-overlay {
   position:fixed; inset:0; z-index:200;
   background:rgba(32,30,67,.45); backdrop-filter:blur(4px);
@@ -568,7 +568,7 @@ input[title], select[title] { cursor:help; }
 }
 @keyframes modalIn { from{opacity:0; transform:translateY(12px) scale(.98);} to{opacity:1; transform:none;} }
 
-/* Modal header */
+/* cabecera del modal */
 .tpl-modal-head {
   padding:var(--sp5) var(--sp6) 0; border-bottom:1px solid var(--ml-border);
   flex-shrink:0;
@@ -588,7 +588,7 @@ input[title], select[title] { cursor:help; }
 }
 .tpl-modal-close:hover { background:var(--ml-warning); color:#fff; border-color:var(--ml-warning); }
 
-/* Search */
+/* Búsqueda */
 .tpl-search-row { margin-bottom:var(--sp3); }
 .tpl-search-wrap { position:relative; }
 .tpl-search-icon {
@@ -628,7 +628,7 @@ input[title], select[title] { cursor:help; }
 .tpl-modal-body::-webkit-scrollbar-track { background:transparent; }
 .tpl-modal-body::-webkit-scrollbar-thumb { background:var(--ml-steel); border-radius:4px; }
 
-/* Template grid - larger cards */
+/* Cuadrícula de plantillas: tarjetas más grandes */
 .template-grid {
   display:grid; grid-template-columns:repeat(auto-fill, minmax(150px, 1fr));
   gap:var(--sp4);
@@ -655,14 +655,14 @@ input[title], select[title] { cursor:help; }
 }
 .template-card:hover .template-card-name { color:var(--ml-teal-dark); }
 
-/* Empty search */
+/* búsqueda sin resultados */
 .tpl-empty {
   text-align:center; padding:var(--sp6) var(--sp4);
   color:var(--ml-ink-soft); font-size:14px;
 }
 .tpl-empty-icon { font-size:32px; margin-bottom:var(--sp2); opacity:.5; }
 
-/* Custom template cards */
+/* tarjetas de plantilla personalizada */
 .tpl-custom-sep {
   width:100%; font-size:9px; font-weight:700; text-transform:uppercase;
   letter-spacing:.08em; color:var(--ml-ink-soft); padding:6px 0 2px;
@@ -681,16 +681,16 @@ input[title], select[title] { cursor:help; }
 .template-card-del:hover { background:#c0392b; }
 .template-card--custom { border-style:dashed; border-color:var(--ml-teal); }
 
-/* Table row hover */
+/* fila de tabla al pasar el cursor */
 .tbl tbody tr { transition:background var(--dur-fast); }
 .tbl tbody tr:hover { background:rgba(80,140,155,.06); }
 .tbl-data tbody tr:hover { background:rgba(80,140,155,.08); }
 
-/* Empty state illustration */
+/* Ilustración de estado vacío */
 .empty-illustration { margin-bottom:var(--sp4); opacity:.7; }
 .empty-illustration svg { width:80px; height:80px; }
 
-/* ===================== v4.2: Drag & Drop reorder ===================== */
+/* ===================== v4.2: reordenar arrastrando y soltando ===================== */
 .drag-handle {
   cursor:grab; color:var(--ml-steel); font-size:12px; font-weight:700;
   padding:2px 4px; border-radius:4px; user-select:none; transition:color var(--dur-fast);
@@ -707,7 +707,7 @@ input[title], select[title] { cursor:help; }
 }
 [draggable="true"] { touch-action:none; }
 
-/* ===================== v4.3: Mobile bottom nav ===================== */
+/* ===================== v4.3: barra de navegación inferior en móvil ===================== */
 .bottom-nav {
   display:none; position:fixed; bottom:0; left:0; right:0; z-index:50;
   background:rgba(255,255,255,.95); backdrop-filter:blur(12px);
@@ -768,7 +768,7 @@ input[title], select[title] { cursor:help; }
   to   { opacity:1; transform:translateY(0); }
 }
 
-/* #10 Empty state mejorado */
+/* #10 Estado vacío mejorado */
 .empty-steps {
   display:flex; gap:var(--sp4); margin-top:var(--sp6);
   flex-wrap:wrap; justify-content:center;
@@ -786,7 +786,7 @@ input[title], select[title] { cursor:help; }
 .empty-step-text { font-size:11.5px; color:rgba(32,30,67,.6); font-weight:500; }
 .empty-step.done .empty-step-num { background:var(--ml-success-soft); color:var(--ml-success); }
 
-/* #12 Drag handle mejorado */
+/* #12 Manija de arrastre mejorada */
 .drag-handle {
   font-size:14px; padding:4px 6px; min-width:24px; text-align:center;
 }
@@ -813,19 +813,23 @@ input[title], select[title] { cursor:help; }
   .kpi-value { font-size:24px; }
 }
 
-/* Acordeón solo-uno: smooth collapse */
+/* Acordeón solo-uno: smooth collapse.
+   El estado ABIERTO usa max-height:none para que el contenido NUNCA se recorte
+   (listas largas de elementos/nudos): antes un tope fijo de 2000px ocultaba las
+   filas a partir de ~29 elementos. La animación de apertura/cierre la controla
+   el JS fijando max-height en píxeles solo mientras dura la transición. */
 .acc-body {
   transition:max-height var(--dur) var(--ease), opacity var(--dur) var(--ease);
   overflow:hidden;
 }
 .acc.is-collapsed .acc-body { max-height:0; opacity:0; padding:0 var(--sp4); }
-.acc:not(.is-collapsed) .acc-body { max-height:2000px; opacity:1; }
+.acc:not(.is-collapsed) .acc-body { max-height:none; opacity:1; }
 
 /* ===================================================================
    v6: WORKFLOW STEPPER + 3-COL LAYOUT + INSPECTOR + STATUS BAR
    =================================================================== */
 
-/* ----- Workflow stepper ----- */
+/* ----- Indicador de pasos del flujo ----- */
 .workflow-stepper {
   display:flex; align-items:center; gap:0;
   background:var(--ml-surface); border:1px solid rgba(216,220,228,.5);
@@ -833,7 +837,7 @@ input[title], select[title] { cursor:help; }
   margin-bottom:var(--sp4); box-shadow:var(--sh-card);
   overflow-x:auto;
 }
-/* Stepper estilo "píldora" (armoniza con la nav del header) */
+/* Indicador de pasos estilo "píldora" (armoniza con la navegación de la cabecera) */
 .wf-step {
   display:flex; align-items:center; gap:9px;
   background:none; border:0; cursor:pointer; font-family:inherit;
@@ -897,7 +901,7 @@ input[title], select[title] { cursor:help; }
 .acc-collapse-all:hover { background:var(--ml-ice); border-color:var(--ml-teal); }
 .acc-collapse-all svg { color:var(--ml-teal); flex:none; }
 
-/* ----- Accordion groups ----- */
+/* ----- Grupos de acordeón ----- */
 .acc-group { display:flex; flex-direction:column; gap:var(--sp2); margin-bottom:var(--sp3); }
 .acc-group-label {
   display:flex; align-items:center; gap:var(--sp2); padding:var(--sp2) var(--sp2);
@@ -908,13 +912,13 @@ input[title], select[title] { cursor:help; }
 .acc-group-label svg { color:var(--ml-teal); flex:none; }
 .acc-group-sub { font-size:9.5px; font-weight:500; color:var(--ml-ink-soft); text-transform:none; letter-spacing:0; margin-left:auto; }
 
-/* Active group highlight */
+/* resaltado del grupo activo */
 .acc-group.is-active > .acc-group-label { color:var(--ml-teal); border-bottom-color:var(--ml-teal); }
 
-/* ----- Options grid para switches compactos ----- */
+/* ----- Cuadrícula de opciones para interruptores compactos ----- */
 .options-grid { display:flex; flex-direction:column; gap:var(--sp2); }
 
-/* ----- Inspector panel ----- */
+/* ----- Panel del inspector ----- */
 .col-inspector { position:sticky; top:88px; }
 .inspector-panel {
   background:var(--ml-surface); border:1px solid rgba(216,220,228,.5);
@@ -953,7 +957,7 @@ input[title], select[title] { cursor:help; }
 .inspector-body::-webkit-scrollbar-track { background:transparent; }
 .inspector-body::-webkit-scrollbar-thumb { background:var(--ml-steel); border-radius:4px; }
 
-/* Inspector empty state */
+/* estado vacío del inspector */
 .insp-empty {
   display:flex; flex-direction:column; align-items:center; text-align:center;
   padding:var(--sp6) var(--sp4); gap:var(--sp3); color:var(--ml-ink-soft);
@@ -961,14 +965,14 @@ input[title], select[title] { cursor:help; }
 .insp-empty p { font-size:12.5px; line-height:1.6; }
 .insp-empty p strong { color:var(--ml-navy); }
 
-/* Inspector section title */
+/* título de sección del inspector */
 .insp-section {
   font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.07em;
   color:var(--ml-teal-dark); padding-bottom:var(--sp2);
   border-bottom:1px solid rgba(216,220,228,.5); margin-bottom:var(--sp1);
 }
 
-/* Inspector compact field */
+/* campo compacto del inspector */
 .insp-field {
   display:flex; align-items:center; gap:var(--sp2);
   padding:3px 0;
@@ -988,7 +992,7 @@ input[title], select[title] { cursor:help; }
 }
 .insp-field input[type=checkbox] { width:auto; flex:none; accent-color:var(--ml-teal); }
 
-/* Inspector badge chip (node/element type) */
+/* etiqueta del inspector (tipo de nudo/elemento) */
 .insp-chip {
   display:inline-flex; align-items:center; gap:4px;
   background:var(--ml-ice); border:1px solid rgba(80,140,155,.25);
@@ -997,7 +1001,7 @@ input[title], select[title] { cursor:help; }
   margin-bottom:var(--sp2);
 }
 
-/* Inspector carga mini-list */
+/* mini-lista de cargas del inspector */
 .insp-carga-list { display:flex; flex-direction:column; gap:var(--sp2); margin-top:var(--sp2); }
 .insp-carga-row {
   display:flex; align-items:center; gap:var(--sp2);
@@ -1019,7 +1023,7 @@ input[title], select[title] { cursor:help; }
 }
 .insp-add-btn:hover { background:var(--ml-ice); border-color:var(--ml-teal); }
 
-/* ----- Canvas status bar ----- */
+/* ----- Barra de estado del lienzo ----- */
 .canvas-status {
   display:flex; align-items:center; gap:var(--sp2);
   padding:5px var(--sp3);
@@ -1030,7 +1034,7 @@ input[title], select[title] { cursor:help; }
 #status-sel { color:var(--ml-teal-dark); font-weight:600; flex:1; }
 .status-hint { margin-left:auto; font-size:10px; color:rgba(32,30,67,.4); }
 
-/* ----- Label toggles ----- */
+/* ----- Botones de etiquetas ----- */
 .preview-head-right { display:flex; align-items:center; gap:var(--sp2); }
 .label-toggles { display:flex; gap:2px; }
 .lbl-toggle {
@@ -1045,27 +1049,27 @@ input[title], select[title] { cursor:help; }
   color:#fff; box-shadow:0 1px 4px rgba(80,140,155,.3);
 }
 
-/* ----- Selection highlight styles (applied in SVG via JS) ----- */
-/* These are referenced from JS drawPreview(); no CSS needed beyond canvas cursor */
+/* ----- Resaltado de selección (se aplica en el SVG desde JS) ----- */
+/* Se referencian desde drawPreview() en JS; aquí solo el cursor del lienzo */
 #preview-svg .elem-hit { cursor:pointer; }
 #preview-svg.mode-mover .elem-hit { cursor:pointer; }
 
-/* ----- Canvas: wider aspect ratio ----- */
+/* ----- Lienzo: relación de aspecto más ancha ----- */
 .svg-box { aspect-ratio:16/10; }
 
-/* ----- Col inspector collapsed state ----- */
+/* ----- Estado colapsado de la columna del inspector ----- */
 .col-inspector.is-collapsed .inspector-panel .inspector-body,
 .col-inspector.is-collapsed .inspector-panel .inspector-subtitle { display:none; }
 .col-inspector.is-collapsed .inspector-toggle { transform:rotate(180deg); }
 
-/* ----- Workflow step done: ✓ en lugar del número ----- */
+/* ----- Paso del flujo completado: ✓ en lugar del número ----- */
 .wf-step.is-done .wf-num .wf-num-n { display:none; }
 .wf-step.is-done .wf-num::after {
   content:"✓"; position:absolute; inset:0; display:flex;
   align-items:center; justify-content:center; font-size:13px; font-weight:800;
 }
 
-/* ----- Group active ring on canvas element highlight ----- */
+/* ----- Anillo del grupo activo en el resaltado del elemento ----- */
 .acc-group.is-active { position:relative; }
 .acc-group.is-active::before {
   content:""; position:absolute; inset:0 -4px; border-left:3px solid var(--ml-teal);
@@ -1087,13 +1091,13 @@ input[title], select[title] { cursor:help; }
   .label-toggles { display:none; }
 }
 
-/* ----- Print: hide workflow, inspector ----- */
+/* ----- Impresión: oculta el flujo y el inspector ----- */
 @media print {
   .workflow-stepper, .model-stepbar, .model-statusbar, .app-col-props, .canvas-status, .label-toggles { display:none !important; }
 }
 
 /* ===================================================================
-   v7: APP-SHELL FULL-VIEWPORT (estilo ETABS) — Modelo a pantalla completa
+   v7: APP-SHELL FULL-VIEWPORT (estilo ETABS): Modelo a pantalla completa
    El paso activo filtra el rail; lienzo grande; status bar inferior.
    =================================================================== */
 
@@ -1109,8 +1113,8 @@ body.app-mode { overflow:hidden; }
 }
 #vista-modelo.app-shell.hidden { display:none; }
 
-/* ---------- STEP BAR — 3 secciones alineadas con las columnas del app-workspace
-   (full-bleed, sin padding ni gap en la grilla; mismo template de columnas). --- */
+/* ---------- STEP BAR: 3 secciones alineadas con las columnas del app-workspace
+   (a sangre completa, sin padding ni gap en la grilla; mismo template de columnas) */
 .model-stepbar {
   flex:none;
   display:grid;
@@ -1124,7 +1128,7 @@ body.app-mode { overflow:hidden; }
 }
 /* la sección izquierda alinea con el contenido del editor (padding sp5) */
 .stepbar-left  { display:flex; align-items:center; gap:var(--sp2); justify-self:start; min-width:0; padding-left:var(--sp5); }
-/* el stepper queda centrado sobre el lienzo (columna central) */
+/* el indicador de pasos queda centrado sobre el lienzo (columna central) */
 .model-steps-wrap { justify-self:center; display:flex; justify-content:center; min-width:0; padding:0 var(--sp3); }
 /* modo + calcular alinean con el panel de propiedades (padding sp5) */
 .stepbar-right { display:flex; align-items:center; gap:var(--sp2); justify-self:end; white-space:nowrap; padding-right:var(--sp5); }
@@ -1175,7 +1179,7 @@ body.app-mode { overflow:hidden; }
 .ham-item--danger:hover { background:var(--ml-warning-soft); }
 .ham-sep { height:1px; background:var(--ml-border); margin:var(--sp1) 2px; }
 
-/* Pasos centrales — píldora contenedora (como la nav del header) */
+/* Pasos centrales: píldora contenedora (como la navegación de la cabecera) */
 .model-steps {
   display:inline-flex; align-items:center; gap:3px;
   background:var(--ml-pearl); border:1px solid var(--ml-border);
@@ -1191,7 +1195,7 @@ body.app-mode { overflow:hidden; }
 }
 .btn-analizar:hover { box-shadow:0 6px 18px rgba(80,140,155,.4); transform:translateY(-1px); }
 
-/* Toggle Simple / Avanzado */
+/* Conmutador Simple / Avanzado */
 .mode-toggle {
   flex:none; display:inline-flex; gap:2px; background:var(--ml-pearl);
   border:1px solid var(--ml-border); border-radius:999px; padding:3px;
@@ -1244,7 +1248,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 .app-col-editor::-webkit-scrollbar-track { background:transparent; }
 .app-col-editor::-webkit-scrollbar-thumb { background:var(--ml-steel); border-radius:4px; }
 
-/* Solo el grupo del paso activo es visible — override the base .acc-group rule */
+/* Solo el grupo del paso activo es visible (anula la regla base de .acc-group) */
 #rail .acc-group { display:none !important; margin-bottom:0; }
 #rail .acc-group.is-active { display:flex !important; flex-direction:column; }
 #rail .acc-group.is-active > .acc-group-label { display:flex; }
@@ -1326,7 +1330,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 .props-body::-webkit-scrollbar-track { background:transparent; }
 .props-body::-webkit-scrollbar-thumb { background:var(--ml-steel); border-radius:4px; }
 
-/* Empty state */
+/* Estado vacío */
 .props-empty {
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   text-align:center; padding:var(--sp8) var(--sp5);
@@ -1336,7 +1340,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 .props-empty p { font-size:13px; line-height:1.6; max-width:200px; }
 .props-empty strong { color:var(--ml-navy); }
 
-/* Sections */
+/* Secciones */
 .props-section {
   margin-bottom:var(--sp5);
 }
@@ -1348,7 +1352,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
   border-bottom:1px solid var(--ml-border);
 }
 
-/* Fields — espaciado generoso, nada aplastado */
+/* Campos: espaciado generoso, nada aplastado */
 .props-field {
   margin-bottom:var(--sp4);
 }
@@ -1372,12 +1376,12 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
   width:16px; height:16px; accent-color:var(--ml-teal);
 }
 
-/* Two-column row */
+/* Fila de dos columnas */
 .props-field-row {
   display:grid; grid-template-columns:1fr 1fr; gap:var(--sp3);
 }
 
-/* Read-only value */
+/* Valor de solo lectura */
 .props-value {
   display:block; height:36px; line-height:36px;
   padding:0 var(--sp3); font-size:13px; color:var(--ml-navy);
@@ -1385,7 +1389,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
   border-radius:var(--r-sm);
 }
 
-/* Toggle switch */
+/* Interruptor */
 .props-toggle {
   position:relative; display:inline-block; width:38px; height:22px;
   cursor:pointer;
@@ -1405,7 +1409,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 }
 .props-toggle input:checked ~ .props-toggle-thumb { transform:translateX(16px); }
 
-/* Quick info row */
+/* Fila de información rápida */
 .props-info {
   display:flex; gap:var(--sp3); flex-wrap:wrap;
   margin-bottom:var(--sp4);
@@ -1418,14 +1422,14 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 }
 .props-info-chip strong { color:var(--ml-navy); }
 
-/* Delete button in props */
+/* Botón de eliminar en el panel de propiedades */
 .props-delete {
   margin-top:var(--sp4); padding-top:var(--sp4);
   border-top:1px solid var(--ml-border);
 }
 .props-delete .btn { width:100%; }
 
-/* Props carga mini-list */
+/* Mini-lista de cargas en el panel de propiedades */
 .props-carga-list { display:flex; flex-direction:column; gap:var(--sp2); margin-top:var(--sp2); }
 .props-carga-row {
   display:flex; align-items:center; gap:var(--sp2);
@@ -1459,7 +1463,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
   .app-col-editor, .app-col-props { display:none; }
 }
 
-/* ---- F1.2/F1.3: Convention tags and table header subtexts ---- */
+/* ---- Etiquetas de convención y subtítulos de cabecera de tabla ---- */
 .convencion-inline { display:flex; gap:var(--sp2); flex-wrap:wrap; margin-bottom:var(--sp3); }
 .conv-tag {
   font-size:11px; font-weight:600; padding:2px 8px; border-radius:4px;
@@ -1472,7 +1476,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 .th-main { display:block; font-weight:600; }
 .th-sub { display:block; font-size:10px; font-weight:400; color:var(--ml-ink-soft); }
 
-/* ---- F1.3: Sign convention legend ---- */
+/* ---- Leyenda de convención de signos ---- */
 .convencion-leyenda {
   display:flex; gap:var(--sp3); flex-wrap:wrap; align-items:center;
   padding:var(--sp2) var(--sp3); margin:var(--sp2) 0 var(--sp3);
@@ -1482,7 +1486,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 .convencion-leyenda strong { color:var(--ml-ink); font-weight:600; }
 .convencion-leyenda .conv-sep { color:var(--ml-border); margin:0 2px; }
 
-/* ---- F3.1: Conditioning warning ---- */
+/* ---- Aviso de condicionamiento ---- */
 .cond-warning {
   display:inline-flex; align-items:center; gap:4px;
   padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600;
@@ -1490,7 +1494,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 .cond-warning.warn-yellow { background:#FFF3CD; color:#856404; border:1px solid #FFE69C; }
 .cond-warning.warn-red { background:#F8D7DA; color:#842029; border:1px solid #F5C2C7; }
 
-/* ---- F3.2: Equilibrium seal ---- */
+/* ---- Sello de verificación de equilibrio ---- */
 .eq-seal {
   display:inline-flex; align-items:center; gap:6px;
   padding:6px 14px; border-radius:var(--r-sm); font-size:12px; font-weight:600;
@@ -1499,7 +1503,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 .eq-seal.ok { background:#D1E7DD; color:#0F5132; border:1px solid #BADbcc; }
 .eq-seal.fail { background:#F8D7DA; color:#842029; border:1px solid #F5C2C7; }
 
-/* ---- Accessibility: skip link ---- */
+/* ---- Accesibilidad: enlace para saltar al contenido ---- */
 .skip-link {
   position:absolute; left:-9999px; top:0; z-index:999;
   padding:var(--sp2) var(--sp4); background:var(--ml-teal); color:#fff;
@@ -1508,13 +1512,13 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 }
 .skip-link:focus { left:0; }
 
-/* ---- Accessibility: screen-reader-only ---- */
+/* ---- Accesibilidad: solo para lectores de pantalla ---- */
 .sr-only {
   position:absolute; width:1px; height:1px; padding:0; margin:-1px;
   overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
 }
 
-/* ---- Accessibility: reduced motion ---- */
+/* ---- Accesibilidad: movimiento reducido ---- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration:0.01ms !important;
@@ -1525,7 +1529,7 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
   .kpi:hover { transform:none; }
 }
 
-/* ---- Accessibility: contrast fixes ---- */
+/* ---- Accesibilidad: ajustes de contraste ---- */
 .tbl th {
   color:#fff; background:var(--ml-teal-dark);
 }
@@ -1535,3 +1539,91 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
 .bottom-nav-btn:not(.is-active) { color:var(--ml-navy); opacity:.75; }
 .lbl-toggle:not(.is-active) { color:var(--ml-navy); opacity:.7; }
 .kpi-label { color:var(--ml-teal-dark); }
+
+/* ============================================================
+   EDITOR DE TRAMOS ("Definir dimensiones") + placas
+   ============================================================ */
+/* botón e indicador en la fila de elementos */
+.ele-actions { white-space:nowrap; }
+.btn-tramos { color:var(--ml-teal-dark); }
+.btn-tramos.has-seg { background:var(--ml-teal); border-color:var(--ml-teal); color:#fff; }
+.seg-badge {
+  display:inline-block; margin-left:4px; font-size:10px; font-weight:800;
+  color:var(--ml-teal-dark); background:var(--ml-ice); border:1px solid var(--ml-border);
+  border-radius:var(--r-sm); padding:0 4px; vertical-align:middle; letter-spacing:.02em;
+}
+
+/* overlay + modal */
+.seg-overlay {
+  position:fixed; inset:0; z-index:120;
+  background:rgba(32,30,67,.42); backdrop-filter:blur(2px);
+  display:flex; align-items:center; justify-content:center; padding:var(--sp4);
+  animation:hamIn var(--dur-fast) var(--ease);
+}
+.seg-overlay.hidden { display:none; }
+.seg-modal {
+  width:min(620px, calc(100% - 32px)); max-height:calc(100vh - 80px);
+  background:var(--ml-surface); border:1px solid var(--ml-border);
+  border-radius:var(--r-lg); box-shadow:0 20px 60px rgba(32,30,67,.25);
+  display:flex; flex-direction:column; overflow:hidden;
+}
+.seg-modal-head {
+  flex:none; display:flex; align-items:flex-start; justify-content:space-between;
+  gap:var(--sp3); padding:var(--sp4) var(--sp5) var(--sp3);
+  border-bottom:1px solid var(--ml-border);
+}
+.seg-modal-title { font-size:16px; font-weight:800; color:var(--ml-navy); }
+.seg-modal-sub { font-size:12.5px; color:var(--ml-ink-soft); margin-top:2px; }
+.seg-modal-close {
+  flex:none; width:32px; height:32px; border-radius:50%; border:1px solid var(--ml-border);
+  background:var(--ml-surface); color:var(--ml-ink-soft); cursor:pointer; font-size:15px;
+  line-height:1; transition:all var(--dur-fast) var(--ease);
+}
+.seg-modal-close:hover { background:var(--ml-warning-soft); color:var(--ml-warning); }
+.seg-legend {
+  flex:none; font-size:12px; line-height:1.5; color:var(--ml-navy);
+  background:var(--ml-pearl); border-bottom:1px solid var(--ml-border);
+  padding:var(--sp3) var(--sp5);
+}
+.seg-modal-body { flex:1; overflow-y:auto; padding:var(--sp4) var(--sp5); }
+.seg-row {
+  display:grid; grid-template-columns:26px 1fr 1.2fr 1.2fr 30px;
+  align-items:end; gap:var(--sp2); margin-bottom:var(--sp3);
+}
+.seg-row-n {
+  width:24px; height:24px; border-radius:50%; background:var(--ml-teal);
+  color:#fff; font-size:12px; font-weight:700; display:flex; align-items:center;
+  justify-content:center; margin-bottom:6px;
+}
+.seg-field { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.seg-field label { font-size:10.5px; font-weight:600; color:var(--ml-ink-soft); }
+.seg-field input, .seg-field select {
+  width:100%; height:36px; padding:0 var(--sp2); font-size:13px; font-family:inherit;
+  border:1.5px solid var(--ml-border); border-radius:var(--r-sm); background:#fff; color:var(--ml-navy);
+}
+.seg-field input:focus, .seg-field select:focus { outline:2px solid var(--ml-teal); outline-offset:1px; }
+.seg-row .btn-del { margin-bottom:5px; }
+.seg-actions { display:flex; gap:var(--sp2); margin-top:var(--sp2); }
+.seg-modal-foot {
+  flex:none; display:flex; align-items:center; justify-content:space-between; gap:var(--sp3);
+  padding:var(--sp3) var(--sp5) var(--sp4); border-top:1px solid var(--ml-border);
+  background:var(--ml-pearl); flex-wrap:wrap;
+}
+.seg-sum { font-size:12.5px; color:var(--ml-navy); }
+.seg-ok { color:var(--ml-success, #2E7D5B); font-weight:800; margin-left:4px; }
+.seg-warn { color:var(--ml-warning); font-weight:600; margin-left:4px; }
+.seg-foot-btns { display:flex; gap:var(--sp2); }
+
+/* tramos en el lienzo (marcas de cambio de sección / placa) */
+.pv-seg-tick { stroke:var(--ml-teal-dark); stroke-width:2; }
+.pv-seg-wall { stroke:var(--ml-teal); stroke-width:7; opacity:.28; stroke-linecap:butt; }
+
+/* generador de pórtico multi-piso */
+.gen-grid { display:grid; grid-template-columns:1fr 1fr; gap:var(--sp3); margin-bottom:var(--sp3); }
+.gen-grid .seg-field-wide { grid-column:1 / -1; }
+.gen-grid label { font-size:11px; font-weight:600; color:var(--ml-ink-soft); }
+.gen-grid input, .gen-grid select {
+  width:100%; height:38px; padding:0 var(--sp3); font-size:13px; font-family:inherit;
+  border:1.5px solid var(--ml-border); border-radius:var(--r-sm); background:#fff; color:var(--ml-navy);
+}
+.gen-grid input:focus, .gen-grid select:focus { outline:2px solid var(--ml-teal); outline-offset:1px; }

@@ -28,7 +28,7 @@ def _viga(restr_i, restr_j, L=6.0, E=2e7, b=0.3, h=0.6):
 
 
 # ----------------------------------------------------------------------
-#  SIGNOS Y MAGNITUDES — casos canónicos
+#  SIGNOS Y MAGNITUDES: casos canónicos
 # ----------------------------------------------------------------------
 def test_viga_simple_udl_sagging_positivo():
     """Viga simple, UDL hacia abajo: Mmax=+wL²/8 (sagging), R=wL/2."""
@@ -93,7 +93,7 @@ def test_inclinado_carga_perpendicular():
 
 
 # ----------------------------------------------------------------------
-#  UNIDADES — agnóstico (mismo problema físico)
+#  UNIDADES: agnóstico (mismo problema físico)
 # ----------------------------------------------------------------------
 def test_unidades_consistentes_tonf_vs_kn():
     """El mismo problema físico en tonf y kN: forces escalan ×g, flecha igual."""
@@ -193,3 +193,83 @@ def test_inestabilidad_detectada():
     e = Elemento(1, n1, n2, mat, sec); est.agregar_elemento(e)
     with pytest.raises(ValueError):
         est.resolver()
+
+
+# ----------------------------------------------------------------------
+#  ELEMENTOS SEGMENTADOS (seccion/material variable por tramos)
+# ----------------------------------------------------------------------
+def _cant_seg(segmentos=None, wy=None, P=None, L=4.0, E=2.1e7, b=0.3, h=0.6):
+    est = Estructura()
+    mat = Material(E); sec = Seccion.rectangular(b, h)
+    n1 = Nudo(1, 0, 0, (1, 1, 1)); n2 = Nudo(2, L, 0, (0, 0, 0))
+    est.agregar_nudo(n1); est.agregar_nudo(n2)
+    e = Elemento(1, n1, n2, mat, sec)
+    if segmentos is not None:
+        e.segmentos = segmentos
+    if wy is not None:
+        e.agregar_carga(CargaDistribuida(wy=wy))
+    if P is not None:
+        e.agregar_carga(CargaPuntual(Py=P, a=L))
+    est.agregar_elemento(e); est.resolver()
+    return est, e, n2
+
+
+def test_seg_un_tramo_igual_prismatico():
+    """Un solo tramo que cubre toda la barra == barra prismatica."""
+    mat = Material(2.1e7); sec = Seccion.rectangular(0.3, 0.6)
+    e0, _, n0 = _cant_seg(P=-5.0)
+    e1, _, n1 = _cant_seg(segmentos=[{"L": 4.0, "mat": mat, "sec": sec}], P=-5.0)
+    assert e1.D[n1.gdl[1]] == pytest.approx(e0.D[n0.gdl[1]], rel=1e-9)
+
+
+def test_seg_dos_tramos_iguales_igual_prismatico():
+    """Dos tramos identicos == barra prismatica (rigidez y cargas)."""
+    mat = Material(2.1e7); sec = Seccion.rectangular(0.3, 0.6)
+    e0, el0, n0 = _cant_seg(wy=-3.0)
+    e1, el1, n1 = _cant_seg(
+        segmentos=[{"L": 2.0, "mat": mat, "sec": sec},
+                   {"L": 2.0, "mat": mat, "sec": sec}], wy=-3.0)
+    assert e1.D[n1.gdl[1]] == pytest.approx(e0.D[n0.gdl[1]], rel=1e-9)
+    _, _, _, M0 = e0.fuerzas_internas(el0, 51)
+    _, _, _, M1 = e1.fuerzas_internas(el1, 51)
+    assert M1[0] == pytest.approx(M0[0], rel=1e-6)   # Mbase = -wL^2/2
+
+
+def test_seg_escalonado_vs_analitico():
+    """Voladizo escalonado (base rigida EI2, punta EI1) con carga en punta.
+    Flecha por el metodo de la carga unitaria: δ=∫M·m/EI dx."""
+    E, L, P = 2.1e7, 4.0, 5.0
+    sec_base = Seccion.rectangular(0.6, 0.6); I2 = 0.6*0.6**3/12
+    sec_pta = Seccion.rectangular(0.3, 0.6);  I1 = 0.3*0.6**3/12
+    mat = Material(E)
+    est, e, n2 = _cant_seg(
+        segmentos=[{"L": 2.0, "mat": mat, "sec": sec_base},
+                   {"L": 2.0, "mat": mat, "sec": sec_pta}], P=-P)
+    delta = P/E*(56.0/(3*I2) + 8.0/(3*I1))   # integral analitica
+    assert abs(est.D[n2.gdl[1]]) == pytest.approx(delta, rel=1e-6)
+    # estatica exacta: Mbase=-P·L, Vbase=P (no dependen de EI)
+    xs, N, V, M = est.fuerzas_internas(e, 101)
+    assert M[0] == pytest.approx(-P*L, rel=1e-6)
+    assert V[0] == pytest.approx(P, rel=1e-6)
+
+
+def test_seg_constructor_equilibrio():
+    """Barra segmentada armada desde el JSON: se resuelve y equilibra."""
+    d = {"unidad": "tonf_m", "material": {"modo": "E", "E": 2.1e6},
+         "secciones": [
+             {"nombre": "viga", "modo": "rect", "b": 0.3, "h": 0.6},
+             {"nombre": "muro", "modo": "rect", "b": 0.3, "h": 1.5}],
+         "nudos": [{"id": 1, "x": 0, "y": 0, "apoyo": "empotrado"},
+                   {"id": 2, "x": 6, "y": 0, "apoyo": "empotrado"}],
+         "elementos": [{"id": 1, "i": 1, "j": 2, "seccion": "viga",
+                        "segmentos": [{"L": 2, "seccion": "viga"},
+                                      {"L": 2, "seccion": "muro"},
+                                      {"L": 2, "seccion": "viga"}]}],
+         "cargas_elementos": [{"elem": 1, "tipo": "distribuida",
+                               "subtipo": "uniforme", "wy": -4}]}
+    est = construir(d); est.resolver()
+    assert est.elementos[0].es_segmentada()
+    eq = est.verificar_equilibrio()
+    assert abs(eq["residuo_Fx"]) < 1e-6
+    assert abs(eq["residuo_Fy"]) < 1e-6
+    assert abs(eq["residuo_M"]) < 1e-6

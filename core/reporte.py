@@ -140,9 +140,23 @@ def generar_reporte(est, archivo=None, dec=3):
     for e in est.elementos:
         P(f"\n{'-'*70}\nELEMENTO {e.nombre}  ({e.ni.nombre} -> {e.nj.nombre})  "
           f"L={e.L:.3f}  angulo={e.angulo:.2f}  cos={e.cos:.4f}  sin={e.sin:.4f}\n{'-'*70}\n")
-        EA = e.mat.E*e.sec.A; EI = e.mat.E*e.sec.I
-        P(f"  EA = {EA:.2f}    EI = {EI:.4f}    EA/L = {EA/e.L:.2f}    "
-          f"EI/L = {EI/e.L:.4f}\n")
+        segmentada = getattr(e, "segmentos", None)
+        if segmentada:
+            P("  Barra NO PRISMATICA: seccion/material variable por tramos.\n")
+            P(f"  {'Tramo':>6}{'desde':>9}{'hasta':>9}{'A':>10}{'I':>13}{'E':>13}\n")
+            s0 = 0.0
+            for kk, sg in enumerate(e.segmentos, 1):
+                s1 = s0 + sg["L"]
+                mat_s = sg.get("mat") or e.mat; sec_s = sg.get("sec") or e.sec
+                P(f"  {kk:>6}{s0:>9.3f}{s1:>9.3f}{sec_s.A:>10.4f}"
+                  f"{sec_s.I:>13.6f}{mat_s.E:>13.1f}\n")
+                s0 = s1
+            P("  La [k]local (6x6) de abajo es la matriz CONDENSADA de la cadena\n"
+              "  de tramos (se eliminan los GDL de los nudos internos).\n")
+        else:
+            EA = e.mat.E*e.sec.A; EI = e.mat.E*e.sec.I
+            P(f"  EA = {EA:.2f}    EI = {EI:.4f}    EA/L = {EA/e.L:.2f}    "
+              f"EI/L = {EI/e.L:.4f}\n")
         dofs = est._dofs_elemento(e)
         etiq = [lbl[d] for d in dofs]
 

@@ -46,7 +46,7 @@
 
       <!-- ===== STEP BAR (app shell: hamburguesa · pasos · analizar) ===== -->
       <div class="model-stepbar">
-        <!-- Cluster izquierdo: menú de modelo -->
+        <!-- Grupo izquierdo: menú de modelo -->
         <div class="stepbar-left">
           <div class="ham-wrap">
             <button class="ham-btn" id="ham-btn" type="button" title="Acciones del modelo" aria-label="Acciones del modelo" aria-expanded="false" aria-controls="ham-menu">
@@ -55,6 +55,7 @@
             <div class="ham-menu hidden" id="ham-menu">
               <span class="ham-menu-title">Modelo</span>
               <button class="ham-item" id="btn-tpl-toggle" type="button"><span class="ham-ico">📋</span> Plantillas</button>
+              <button class="ham-item" id="btn-generar" type="button"><span class="ham-ico">▦</span> Generar pórtico…</button>
               <button class="ham-item" id="btn-guardar-tpl" type="button"><span class="ham-ico">💾</span> Guardar como plantilla</button>
               <button class="ham-item" id="btn-importar" type="button"><span class="ham-ico">⬇</span> Importar JSON</button>
               <button class="ham-item" id="btn-exportar" type="button"><span class="ham-ico">⬆</span> Exportar JSON</button>
@@ -67,7 +68,7 @@
           <span class="stepbar-divider" aria-hidden="true"></span>
         </div>
 
-        <!-- Cluster central: stepper -->
+        <!-- Grupo central: indicador de pasos -->
         <div class="model-steps-wrap">
           <div class="model-steps" id="workflow-stepper" role="tablist">
             <button class="wf-step is-active" data-wf="definir" role="tab" title="Materiales, secciones y configuración del proyecto">
@@ -94,7 +95,7 @@
           </div>
         </div>
 
-        <!-- Cluster derecho: modo + calcular -->
+        <!-- Grupo derecho: modo + calcular -->
         <div class="stepbar-right">
           <div class="mode-toggle" id="mode-toggle" title="Modo simple: datos esenciales · Modo avanzado: masa, térmica, modal, etc.">
             <button type="button" class="mode-btn is-active" data-mode="simple">Simple</button>
@@ -503,7 +504,7 @@
               </div>
             </div>
             <div class="props-body" id="inspector-body">
-              <!-- Empty state -->
+              <!-- Estado vacío -->
               <div class="props-empty">
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
                   <path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>
@@ -769,10 +770,75 @@
 
   </main>
 
+  <!-- ===== Modal: Definir dimensiones (tramos por elemento) ===== -->
+  <div class="seg-overlay hidden" id="seg-overlay" role="dialog" aria-modal="true" aria-labelledby="seg-title">
+    <div class="seg-modal">
+      <div class="seg-modal-head">
+        <div class="seg-modal-titles">
+          <h2 class="seg-modal-title" id="seg-title">Definir dimensiones</h2>
+          <p class="seg-modal-sub" id="seg-sub"></p>
+        </div>
+        <button class="seg-modal-close" id="seg-close" type="button" title="Cerrar" aria-label="Cerrar diálogo">✕</button>
+      </div>
+      <div class="seg-legend">
+        Divide el elemento en <strong>tramos</strong> a lo largo de su eje (de i a j). Cada tramo
+        puede tener su propia <strong>sección</strong> y <strong>material</strong>: p. ej. un tramo con
+        sección de muro define una <strong>placa</strong> embebida en el elemento.
+      </div>
+      <div class="seg-modal-body" id="seg-body"></div>
+      <div class="seg-modal-foot">
+        <span class="seg-sum" id="seg-sum"></span>
+        <div class="seg-foot-btns">
+          <button class="btn btn-secondary btn-sm" id="seg-clear" type="button" title="Volver a un solo tramo (elemento prismático)">Quitar tramos</button>
+          <button class="btn btn-primary btn-sm" id="seg-save" type="button">Guardar tramos</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Modal: Generar pórtico multi-piso ===== -->
+  <div class="seg-overlay hidden" id="gen-overlay" role="dialog" aria-modal="true" aria-labelledby="gen-title">
+    <div class="seg-modal">
+      <div class="seg-modal-head">
+        <div class="seg-modal-titles">
+          <h2 class="seg-modal-title" id="gen-title">Generar pórtico multi-piso</h2>
+          <p class="seg-modal-sub">Crea la malla de nudos, columnas y vigas de un pórtico plano de N pisos.</p>
+        </div>
+        <button class="seg-modal-close" id="gen-close" type="button" title="Cerrar" aria-label="Cerrar diálogo">✕</button>
+      </div>
+      <div class="seg-legend">
+        Ideal para armar rápido un eje resistente (p. ej. el plano de 5 pisos). Después usa
+        <strong>“Definir dimensiones”</strong> en cada elemento para colocar las <strong>placas</strong>.
+      </div>
+      <div class="seg-modal-body">
+        <div class="gen-grid">
+          <div class="seg-field"><label>N.º de pisos</label>
+            <input type="number" id="gen-pisos" min="1" step="1" value="5"></div>
+          <div class="seg-field"><label>Apoyo en la base</label>
+            <select id="gen-apoyo"><option value="empotrado">Empotrado</option><option value="fijo">Articulado</option></select></div>
+          <div class="seg-field seg-field-wide"><label>Luces de vano (separadas por coma)</label>
+            <input type="text" id="gen-luces" value="4.5, 2.5, 2.5, 4.5" placeholder="4.5, 2.5, 2.5, 4.5"></div>
+          <div class="seg-field seg-field-wide"><label>Altura de piso (un valor, o una lista por piso)</label>
+            <input type="text" id="gen-alturas" value="3.5" placeholder="3.5  ó  3.5, 3, 3, 3, 3"></div>
+          <div class="seg-field"><label>Sección de columnas</label><select id="gen-sec-col"></select></div>
+          <div class="seg-field"><label>Sección de vigas</label><select id="gen-sec-viga"></select></div>
+        </div>
+        <p class="hint" id="gen-info"></p>
+      </div>
+      <div class="seg-modal-foot">
+        <span class="seg-sum" id="gen-sum"></span>
+        <div class="seg-foot-btns">
+          <button class="btn btn-secondary btn-sm" id="gen-cancel" type="button">Cancelar</button>
+          <button class="btn btn-primary btn-sm" id="gen-create" type="button">Generar pórtico</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast -->
   <div id="toast" class="toast hidden" role="status" aria-live="polite"></div>
 
-  <!-- Mobile bottom nav -->
+  <!-- Barra de navegación inferior en móvil -->
   <nav class="bottom-nav" id="bottom-nav" aria-label="Navegación móvil">
     <button class="bottom-nav-btn is-active" data-vista="modelo">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>
