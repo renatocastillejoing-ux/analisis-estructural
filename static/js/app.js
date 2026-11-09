@@ -243,9 +243,11 @@ function setVista(v){
   $("#vista-resultados").classList.toggle("hidden", v!=="resultados");
   $("#vista-combinaciones").classList.toggle("hidden", v!=="combinaciones");
   $("#vista-historial").classList.toggle("hidden", v!=="historial");
+  const vp=$("#vista-pasoapaso"); if(vp) vp.classList.toggle("hidden", v!=="pasoapaso");
   // Modo app a pantalla completa solo en la vista Modelo
   document.body.classList.toggle("app-mode", v==="modelo");
   if (v==="historial") cargarHistorial();
+  if (v==="pasoapaso") iniciarPasoAPaso();
   if (v==="modelo") requestAnimationFrame(drawPreview);
   window.scrollTo({top:0, behavior:"smooth"});
 }
@@ -360,6 +362,7 @@ function renderEditor(){
   if (!state.selected || !state.selected.type){
     const ib=$("#inspector-body"); if(ib) ib.innerHTML = renderPropsResumen();
   }
+  renderExplorer();
 }
 
 function cargaKey(c){
@@ -1026,6 +1029,29 @@ function seccionDims(s){                            // {h: peralte, b: ancho}
   if(A>0 && I>0){ const h=Math.sqrt(12*I/A); return {h, b:A/h}; }  // rect equivalente
   return {h:null,b:null};
 }
+/* Categoría de cada sección según cómo se usa (modelos grandes):
+   placa = muro (esbelta, h/b ≥ 4), columna = usada en elementos verticales,
+   viga = usada en horizontales. Con pocas secciones se usa la paleta por sección. */
+const CAT_COLOR = { columna:"#2F6F7E", viga:"#B5646A", placa:"#5E8C3F" };
+function categoriasSeccion(m){
+  const cat={}; const nod=Object.fromEntries((m.nudos||[]).map(n=>[n.id,n]));
+  const cnt={};
+  (m.elementos||[]).forEach(e=>{
+    const a=nod[e.i], b=nod[e.j]; if(!a||!b) return;
+    const L=Math.hypot(num(b.x)-num(a.x), num(b.y)-num(a.y)) || 1;
+    const vert = Math.abs(num(b.x)-num(a.x))/L < 1e-6;
+    const key=e.seccion; if(!key) return;
+    cnt[key]=cnt[key]||{c:0,v:0};
+    if(vert) cnt[key].c++; else cnt[key].v++;
+  });
+  (m.secciones||[]).forEach(s=>{
+    const d=seccionDims(s);
+    const u=cnt[s.nombre]||{c:0,v:0};
+    if(d.b>0 && d.h/d.b>=4 && d.h>=1.0) cat[s.nombre]="placa";
+    else cat[s.nombre]= (u.c>=u.v) ? "columna" : "viga";
+  });
+  return cat;
+}
 function computeSeccionViz(m){
   const secs=m.secciones||[];
   const dims=secs.map(seccionDims);
@@ -1034,11 +1060,13 @@ function computeSeccionViz(m){
   const hmin=hs.length?Math.min(...hs):0, hmax=hs.length?Math.max(...hs):1;
   const bmin=bs.length?Math.min(...bs):0, bmax=bs.length?Math.max(...bs):1;
   const viz={};
+  const porCategoria = secs.length > 8;     // modelos grandes: color = tipo de miembro
+  const cats = porCategoria ? categoriasSeccion(m) : {};
   secs.forEach((s,i)=>{
     const {h,b}=dims[i];
     let th=8;
     if(h>0 && hmax>hmin) th=5+11*((h-hmin)/(hmax-hmin));
-    const base=SEC_PALETTE[i%SEC_PALETTE.length];
+    const base = porCategoria ? CAT_COLOR[cats[s.nombre]||"columna"] : SEC_PALETTE[i%SEC_PALETTE.length];
     let dk=0; if(b>0 && bmax>bmin) dk=0.32*((b-bmin)/(bmax-bmin));
     const wide=(b>0 && bmax>bmin) ? ((b-bmin)/(bmax-bmin) > 0.66) : false;
     viz[s.nombre]={h,b,thickness:th, color:shadeColor(base,-dk), base, wide};
@@ -1099,7 +1127,30 @@ function renderSectionLegend(m, SVIZ, MATIDX){
   const box=$("#pv-section-legend"); if(!box) return;
   const secs=(m.secciones||[]).filter(s=>SVIZ[s.nombre]);
   if(!secs.length){ box.classList.add("hidden"); box.innerHTML=""; return; }
+  if(state._legendOpen===undefined && secs.length>8) state._legendOpen=false;
   const u=getUnidad();
+  const head = `<button type="button" class="pvl-toggle" id="pvl-toggle" aria-expanded="${state._legendOpen!==false}">`+
+               `<span>Secciones</span><span class="pvl-count">${secs.length}</span><span class="pvl-chev">${state._legendOpen===false?"▸":"▾"}</span></button>`;
+  if (secs.length > 8){
+    // agrupada por tipo de miembro: columnas / vigas / placas
+    const cats=categoriasSeccion(m);
+    const grupos={columna:[],viga:[],placa:[]};
+    secs.forEach(s=>grupos[cats[s.nombre]||"columna"].push(s));
+    const etiq={columna:"Columnas",viga:"Vigas",placa:"Placas (muros)"};
+    const filas=Object.keys(grupos).filter(k=>grupos[k].length).map(k=>{
+      const ds=grupos[k].map(seccionDims).filter(d=>d.b>0&&d.h>0);
+      const bmin=Math.min(...ds.map(d=>d.b)), bmax=Math.max(...ds.map(d=>d.b));
+      const hmin=Math.min(...ds.map(d=>d.h)), hmax=Math.max(...ds.map(d=>d.h));
+      const rango = `${bmin.toFixed(2)}–${bmax.toFixed(2)} × ${hmin.toFixed(2)}–${hmax.toFixed(2)} ${u.longitud}`;
+      return `<div class="pvl-row"><span class="pvl-sw" style="background:${CAT_COLOR[k]}"></span>`+
+             `<span class="pvl-nm">${etiq[k]} <span class="pvl-cnt">(${grupos[k].length})</span></span>`+
+             `<span class="pvl-dim">${rango}</span></div>`;
+    }).join("");
+    const aviso = `<div class="pvl-note">Color = tipo de miembro · grosor = peralte h · oscuridad = ancho b</div>`;
+    box.innerHTML = head + `<div class="pvl-body">${filas}${aviso}</div>`;
+    box.classList.remove("hidden"); box.classList.toggle("collapsed", state._legendOpen===false);
+    return;
+  }
   const filas=secs.map(s=>{
     const v=SVIZ[s.nombre]; const d=seccionDims(s);
     const dimTxt = (d.b>0&&d.h>0) ? `${(+d.b).toFixed(2)}×${(+d.h).toFixed(2)} ${u.longitud}` : "";
@@ -1115,8 +1166,18 @@ function renderSectionLegend(m, SVIZ, MATIDX){
       return `<div class="pvl-row"><span class="pvl-sw pvl-mat ${pat}"></span><span class="pvl-nm">${esc(x.nombre||("mat"+(i+1)))}</span></div>`;
     }).join("");
   }
-  box.innerHTML = `<div class="pvl-title">Secciones</div>${filas}${matHtml}`;
-  box.classList.remove("hidden");
+  box.innerHTML = head + `<div class="pvl-body">${filas}${matHtml}</div>`;
+  box.classList.remove("hidden"); box.classList.toggle("collapsed", state._legendOpen===false);
+}
+function initLegendToggle(){
+  const box=$("#pv-section-legend"); if(!box) return;
+  box.addEventListener("click",(ev)=>{
+    if(!ev.target.closest("#pvl-toggle")) return;
+    state._legendOpen = !(state._legendOpen!==false);
+    box.classList.toggle("collapsed", state._legendOpen===false);
+    const ch=box.querySelector(".pvl-chev"); if(ch) ch.textContent = state._legendOpen===false ? "▸" : "▾";
+    box.querySelector("#pvl-toggle")?.setAttribute("aria-expanded", String(state._legendOpen!==false));
+  });
 }
 
 function drawPreview(){
@@ -1158,6 +1219,8 @@ function drawPreview(){
     }
   }
 
+  // modelo denso (muchos elementos/nudos): se ocultan etiquetas secundarias
+  const denso = m.elementos.length > 30 || m.nudos.length > 40;
   // elementos
   m.elementos.forEach((e,eIdx)=>{
     const a=byId[e.i], b=byId[e.j]; if(!a||!b) return;
@@ -1165,16 +1228,16 @@ function drawPreview(){
     const ax=SX(a.x), ay=SY(a.y), bx=SX(b.x), by=SY(b.y);
     if (isSelElem) g.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="rgba(80,140,155,.20)" stroke-width="16" stroke-linecap="round"/>`);
     // barra dibujada como banda(s) según su(s) sección(es): grosor∝h, color=sección
-    g = g.concat(elementoBandas(e, ax, ay, bx, by, SVIZ, MATIDX, isSelElem, state._labelToggles.secciones));
+    g = g.concat(elementoBandas(e, ax, ay, bx, by, SVIZ, MATIDX, isSelElem, state._labelToggles.secciones && (!denso || isSelElem)));
     const mx=(SX(a.x)+SX(b.x))/2, my=(SY(a.y)+SY(b.y))/2;
-    if (state._labelToggles.secciones){
+    if (state._labelToggles.secciones && (!denso || isSelElem)){
       const elemLabel = esc(e.nombre || ("E"+e.id));
       const wRect = Math.max(22, elemLabel.length*6 + 10);
       g.push(`<rect x="${mx-wRect/2}" y="${my-9}" width="${wRect}" height="16" rx="4" fill="${isSelElem?"#EBF3F5":"#fff"}" stroke="${isSelElem?"#508C9B":"#CBDDE1"}"/><text x="${mx}" y="${my+3}" text-anchor="middle" font-size="9" font-weight="700" fill="${isSelElem?"#3A6B78":"#201E43"}" font-family="Inter">${elemLabel}</text>`);
     }
     if (e.release_i){ const px=SX(a.x)+(SX(b.x)-SX(a.x))*0.08, py=SY(a.y)+(SY(b.y)-SY(a.y))*0.08; g.push(`<circle cx="${px}" cy="${py}" r="3.5" fill="#fff" stroke="#201E43" stroke-width="1.5"/>`); }
     if (e.release_j){ const px=SX(b.x)+(SX(a.x)-SX(b.x))*0.08, py=SY(b.y)+(SY(a.y)-SY(b.y))*0.08; g.push(`<circle cx="${px}" cy="${py}" r="3.5" fill="#fff" stroke="#201E43" stroke-width="1.5"/>`); }
-    if (state._labelToggles.valores){
+    if (state._labelToggles.valores && (!denso || isSelElem)){
       const L = Math.hypot(b.x-a.x, b.y-a.y);
       const ang = Math.atan2(SY(b.y)-SY(a.y), SX(b.x)-SX(a.x));
       const lmx = (SX(a.x)+SX(b.x))/2 + 12*Math.cos(ang+Math.PI/2);
@@ -1190,7 +1253,7 @@ function drawPreview(){
     m.cargas_elementos.forEach(c=>{
       const e=m.elementos.find(x=>x.id==c.elem); if(!e) return;
       const a=byId[e.i], b=byId[e.j]; if(!a||!b) return;
-      g = g.concat(drawCargaElem(c, a, b, SX, SY, state._labelToggles.valores));
+      g = g.concat(drawCargaElem(c, a, b, SX, SY, state._labelToggles.valores && !denso, denso));
     });
   }
 
@@ -1208,7 +1271,7 @@ function drawPreview(){
     if (selInsp) g.push(`<circle cx="${SX(n.x)}" cy="${SY(n.y)}" r="14" fill="rgba(80,140,155,.12)" stroke="#508C9B" stroke-width="2" stroke-dasharray="5 3"/>`);
     if (selConn) g.push(`<circle cx="${SX(n.x)}" cy="${SY(n.y)}" r="10" fill="none" stroke="#508C9B" stroke-width="2"/>`);
     g.push(`<circle cx="${SX(n.x)}" cy="${SY(n.y)}" r="${(selConn||selInsp)?6:4.5}" fill="${(selConn||selInsp)?"#508C9B":"#201E43"}"/>`);
-    if (state._labelToggles.nombres){
+    if (state._labelToggles.nombres && (!denso || selInsp || selConn)){
       g.push(`<text x="${SX(n.x)+7}" y="${SY(n.y)-6}" font-size="9.5" fill="${selInsp?"#3A6B78":"#3A6B78"}" font-weight="600" font-family="Inter">${esc(n.nombre||("N"+n.id))}</text>`);
     }
     g.push(`<circle class="node-hit" data-node="${idx}" cx="${SX(n.x)}" cy="${SY(n.y)}" r="14" fill="transparent"/>`);
@@ -1359,7 +1422,7 @@ function globGlyph(gx, gy){
 }
 const fnum = (x)=> String(+(+x).toFixed(2));
 
-function drawCargaElem(c, a, b, SX, SY){
+function drawCargaElem(c, a, b, SX, SY, valores=true, denso=false){
   const out=[];
   const ax=SX(a.x), ay=SY(a.y), bx=SX(b.x), by=SY(b.y);
   const u = getUnidad();
@@ -1383,8 +1446,8 @@ function drawCargaElem(c, a, b, SX, SY){
     if (c.b!=null && c.b!=="") t1=Math.min(Math.max(num(c.b)/Lm,0),1);
     if (t1<t0){ const tmp=t0; t0=t1; t1=tmp; }
     if (t1-t0<1e-3) t1=Math.min(t0+0.001,1);
-    const N=Math.max(3, Math.round(9*(t1-t0)));
-    const Hmin=9, Hmax=30;
+    const N=Math.max(3, Math.round((denso?4:9)*(t1-t0)));
+    const Hmin=denso?7:9, Hmax=denso?20:30;
     const tails=[];
     for(let k=0;k<=N;k++){
       const t=t0+(t1-t0)*k/N;
@@ -1412,7 +1475,7 @@ function drawCargaElem(c, a, b, SX, SY){
     const lbl = sameMag
       ? `${fnum(wmax)} ${u.cargad} ${globGlyph(g.wx1,g.wy1)}`
       : `${fnum(m1)}→${fnum(m2)} ${u.cargad} ${globGlyph(g.wx2,g.wy2)}`;
-    out.push(`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${COL_DISTRIBUIDA}" font-family="Inter" paint-order="stroke" stroke="#fff" stroke-width="2.5">${lbl}</text>`);
+    if (valores) out.push(`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${COL_DISTRIBUIDA}" font-family="Inter" paint-order="stroke" stroke="#fff" stroke-width="2.5">${lbl}</text>`);
   } else if (c.tipo==="puntual"){
     const g = cargaPuntGlobal(c, cx, cy);
     const P=Math.hypot(g.Px,g.Py); if(P<1e-9) return out;
@@ -1423,7 +1486,7 @@ function drawCargaElem(c, a, b, SX, SY){
     const tx=px-dx*len, ty=py-dy*len;
     out.push(`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.6" fill="${COL_PUNTUAL}"/>`);
     out.push(arrow(tx, ty, px, py, COL_PUNTUAL));
-    out.push(`<text x="${(tx-dx*7).toFixed(1)}" y="${(ty-dy*7).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${COL_PUNTUAL}" font-family="Inter" paint-order="stroke" stroke="#fff" stroke-width="2.5">${fnum(P)} ${u.fuerza} ${globGlyph(g.Px,g.Py)}</text>`);
+    if (valores) out.push(`<text x="${(tx-dx*7).toFixed(1)}" y="${(ty-dy*7).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="700" fill="${COL_PUNTUAL}" font-family="Inter" paint-order="stroke" stroke="#fff" stroke-width="2.5">${fnum(P)} ${u.fuerza} ${globGlyph(g.Px,g.Py)}</text>`);
   } else if (c.tipo==="momento"){
     const L=Math.hypot(b.x-a.x,b.y-a.y)||1; const t=(c.a!=null)?Math.min(Math.max(num(c.a)/L,0),1):0.5;
     const px=ax+(bx-ax)*t, py=ay+(by-ay)*t, r=12;
@@ -3825,6 +3888,474 @@ function initGenModal(){
   });
 }
 
+/* ============================================================
+   REPRODUCTOR PASO A PASO (Método Sistematizado de Rigidez, [A])
+   ============================================================ */
+function papFmt(x){
+  x = +x; if(!isFinite(x)) return "—";
+  if(Math.abs(x) < 1e-9) return "0";
+  const a = Math.abs(x);
+  if(a >= 100) return x.toFixed(1);
+  if(a >= 1)   return x.toFixed(3);
+  if(a >= 1e-3) return x.toFixed(5);
+  return x.toExponential(2);
+}
+let papSeq = 0;          // contador para escalonar la aparición de celdas
+function papMat(M, rows, cols){
+  let h = '<table class="pap-matrix"><tbody>';
+  if(cols){ h += '<tr><td class="pap-corner"></td>' + cols.map(c=>`<td class="pap-collbl">${esc(c)}</td>`).join("") + '</tr>'; }
+  (M||[]).forEach((row,r)=>{
+    h += '<tr>';
+    if(rows) h += `<td class="pap-rowlbl">${esc(rows[r]??"")}</td>`;
+    (Array.isArray(row)?row:[row]).forEach(v=>{
+      const d = Math.min(papSeq++ * 32, 1600);
+      h += `<td class="pap-cell" style="animation-delay:${d}ms">${papFmt(v)}</td>`;
+    });
+    h += '</tr>';
+  });
+  return h + '</tbody></table>';
+}
+function papVec(v, labels){ return papMat((v||[]).map(x=>[x]), labels, null); }
+function Dlbl(data){ return data.labels.map((l,i)=>`D${i+1}`); }
+function dlbl(data){ return data.def_labels.map((l,i)=>`d${i+1}`); }
+
+function iniciarPasoAPaso(){
+  papStop();
+  const cont=$("#pap-cont"), err=$("#pap-error");
+  if(cont) cont.classList.add("hidden");
+  if(err) err.classList.add("hidden");
+  if(!state.modelo || !(state.modelo.elementos||[]).length){
+    err.innerHTML='<p>Primero define un modelo (nudos, elementos y cargas) en la vista <strong>Modelo</strong>.</p>';
+    err.classList.remove("hidden"); return;
+  }
+  $("#pap-meta").textContent="Resolviendo con el método [A]…";
+  fetch("/api/metodo_a",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify(state.modelo)})
+    .then(r=>r.json()).then(res=>{
+      if(!res.ok){
+        err.innerHTML=`<p>No se pudo resolver con el método [A]:</p><p><strong>${esc(res.error||"error")}</strong></p>`+
+          `<p class="hint">Este método (sistematizado del profesor) soporta por ahora pórticos ortogonales 2D con columnas empotradas en la base y vigas continuas.</p>`;
+        err.classList.remove("hidden");
+        $("#pap-meta").textContent="Método Sistematizado de Rigidez";
+        return;
+      }
+      if(res.diagramas && (res.diagramas.elementos||[]).length){
+        res.pasos.push({n:13,id:"DMF",titulo:"Diagrama de Momento Flector (DMF)",
+                        desc:"Se traza el momento flector M a lo largo de cada barra, del lado traccionado."});
+        res.pasos.push({n:14,id:"DFC",titulo:"Diagrama de Fuerza Cortante (DFC)",
+                        desc:"Se traza la fuerza cortante V a lo largo de cada barra."});
+      }
+      state._pap={data:res, pasos:res.pasos, cur:0, playing:false, timer:null};
+      $("#pap-meta").textContent=`${res.n_gdl} GDL · ${res.barras.length} barras · ${res.pasos.length} pasos (K = AᵀkA)`;
+      const tl=$("#pap-timeline");
+      tl.innerHTML=res.pasos.map((s,i)=>`<button class="pap-dot" data-step="${i}" title="${esc(s.titulo)}"><span>${s.n}</span></button>`).join("");
+      cont.classList.remove("hidden");
+      papRenderStep(0);
+    }).catch(e=>{ err.innerHTML=`<p>Error de red: ${esc(String(e))}</p>`; err.classList.remove("hidden"); });
+}
+function papRenderStep(i){
+  const pap=state._pap; if(!pap) return;
+  const n=pap.pasos.length; i=Math.max(0,Math.min(n-1,i)); pap.cur=i;
+  const s=pap.pasos[i];
+  $("#pap-step-num").textContent=s.n;
+  $("#pap-step-title").textContent=s.titulo;
+  $("#pap-step-desc").textContent=s.desc||"";
+  $("#pap-stepcount").textContent=`Paso ${i+1} / ${n}`;
+  $("#pap-progress-bar").style.width=((i+1)/n*100)+"%";
+  $$("#pap-timeline .pap-dot").forEach((d,k)=>{d.classList.toggle("is-active",k===i);d.classList.toggle("is-done",k<i);});
+  const body=$("#pap-step-body"); body.innerHTML=papStepHTML(s,pap.data);
+  body.classList.remove("pap-fade"); void body.offsetWidth; body.classList.add("pap-fade");
+  if(s.id==="DMF" || s.id==="DFC") papDrawDiagram(s.id, pap.data.diagramas);
+  if(s.id==="activar") papDrawActivar(s, pap.data);
+  if(s.id==="ensamble") papDrawEnsamble(s, pap.data);
+}
+/* Geometría de la estructura en SVG (escala común para ambos pasos) */
+function papGeom(barras, W, H, pad){
+  let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+  barras.forEach(b=>[[b.xi,b.yi],[b.xj,b.yj]].forEach(([x,y])=>{minx=Math.min(minx,x);maxx=Math.max(maxx,x);miny=Math.min(miny,y);maxy=Math.max(maxy,y);}));
+  const spanx=(maxx-minx)||1, spany=(maxy-miny)||1;
+  const sc=Math.min((W-2*pad)/spanx,(H-2*pad)/spany)||1;
+  const ox=(W-spanx*sc)/2 - minx*sc, oy=(H-spany*sc)/2 + maxy*sc;
+  return {X:x=>ox+x*sc, Y:y=>oy-y*sc};
+}
+function papAnimarSVG(host){
+  const svg=host.querySelector("svg"); if(!svg) return;
+  svg.querySelectorAll(".pap-step-in").forEach((el,i)=>{
+    el.style.opacity="0";
+    requestAnimationFrame(()=>{ el.style.transition=`opacity .45s ease ${el.dataset.d||0}ms, stroke .45s ease ${el.dataset.d||0}ms`; el.style.opacity="1"; });
+  });
+}
+/* Activación de GDL: un GDL a la vez, iluminando las barras que lo contienen */
+function papDrawActivar(s, data){
+  const host=$("#pap-diagram"); if(!host) return;
+  const barras=s.barras||[], labels=s.labels||[];
+  const W=720,H=420; const G=papGeom(barras,W,H,80);
+  let g="";
+  barras.forEach(b=>{ g+=`<line x1="${G.X(b.xi)}" y1="${G.Y(b.yi)}" x2="${G.X(b.xj)}" y2="${G.Y(b.yj)}" stroke="#C9D5DA" stroke-width="5" stroke-linecap="round"/>`; });
+  barras.forEach((b,k)=>{ g+=`<g class="pap-barra-g" data-k="${k}"><line class="pap-bar-hi" x1="${G.X(b.xi)}" y1="${G.Y(b.yi)}" x2="${G.X(b.xj)}" y2="${G.Y(b.yj)}" stroke="#508C9B" stroke-width="5" stroke-linecap="round" opacity="0"/>` +
+    `<text class="pap-bar-lbl" x="${(G.X(b.xi)+G.X(b.xj))/2}" y="${(G.Y(b.yi)+G.Y(b.yj))/2-8}" text-anchor="middle">${esc(b.elem)}</text></g>`; });
+  // nudos y apoyos
+  const nodos=[]; barras.forEach(b=>{nodos.push([b.xi,b.yi]);nodos.push([b.xj,b.yj]);});
+  const uniq=[...new Map(nodos.map(p=>[p.join(","),p])).values()];
+  uniq.forEach(([x,y])=>{ g+=`<circle cx="${G.X(x)}" cy="${G.Y(y)}" r="4" fill="#201E43"/>`; });
+  // marcador del GDL activo
+  g+=`<text id="pap-gdl-tag" class="pap-gdl-tag" x="${W/2}" y="28" text-anchor="middle"></text>`;
+  host.innerHTML=`<div class="pap-gdl-strip" id="pap-gdl-strip">${labels.map((l,i)=>`<span class="pap-gdl-chip" data-g="${i}">D${i+1}</span>`).join("")}</div>`+
+    `<svg viewBox="0 0 ${W} ${H}" class="pap-dia-svg">${g}</svg>`;
+  // secuencia: activar GDL i -> iluminar barras con A[.][i]≠0
+  const tag=host.querySelector("#pap-gdl-tag");
+  const chips=[...host.querySelectorAll(".pap-gdl-chip")];
+  let t=300;
+  labels.forEach((lab,gi)=>{
+    setTimeout(()=>{
+      chips.forEach((c,ci)=>c.classList.toggle("is-on",ci===gi));
+      const short=lab.replace(/^D\d+\(/,"").replace(/\)$/,"");
+      tag.textContent=`Activo: D${gi+1} = ${short}`;
+      host.querySelectorAll(".pap-barra-g").forEach(gg=>{
+        const k=+gg.dataset.k, row=barras[k].A;
+        const afecta = row.some(r=>r[gi]!==0);
+        const hi=gg.querySelector(".pap-bar-hi");
+        hi.style.transition="opacity .4s ease"; hi.setAttribute("opacity", afecta?"1":"0.12");
+        gg.querySelector(".pap-bar-lbl").style.opacity = afecta?"1":"0.3";
+      });
+    }, t); t+=1100;
+  });
+}
+/* Ensamblaje: cada barra aporta su AtKA a K; las celdas se llenan */
+function papDrawEnsamble(s, data){
+  const host=$("#pap-diagram"); if(!host) return;
+  const labels=data.labels, bars=s.barras||[];
+  const n=labels.length;
+  const cell=72, pad=36; const W=pad*2+cell*n+20, H=pad*2+cell*n;
+  const K=s.K;
+  let mat=`<rect x="${pad}" y="${pad}" width="${cell*n}" height="${cell*n}" fill="#fff" stroke="#CBDDE1"/>`;
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+    mat+=`<rect class="pap-ens-cell" data-r="${r}" data-c="${c}" x="${pad+c*cell+2}" y="${pad+r*cell+2}" width="${cell-4}" height="${cell-4}" rx="4" fill="transparent"/>`+
+         `<text class="pap-ens-val" data-r="${r}" data-c="${c}" x="${pad+c*cell+cell/2}" y="${pad+r*cell+cell/2+4}" text-anchor="middle" opacity="0"></text>`;
+  }
+  labels.forEach((l,i)=>{
+    mat+=`<text x="${pad+i*cell+cell/2}" y="${pad-10}" text-anchor="middle" class="pap-ens-hdr">D${i+1}</text>`+
+         `<text x="${pad-10}" y="${pad+i*cell+cell/2+4}" text-anchor="end" class="pap-ens-hdr">D${i+1}</text>`;
+  });
+  host.innerHTML=`<div class="pap-ens-bar" id="pap-ens-bar">Barra: <b id="pap-ens-who">—</b></div><svg viewBox="0 0 ${W} ${H}" class="pap-dia-svg" id="pap-ens-svg">${mat}</svg>`;
+  const svg=host.querySelector("#pap-ens-svg");
+  const who=host.querySelector("#pap-ens-who");
+  // aporte acumulado por barra (suma progresiva hasta llegar a K)
+  let acc=Array.from({length:n},()=>Array(n).fill(0));
+  let t=400;
+  bars.forEach(b=>{
+    setTimeout(()=>{
+      who.textContent=`${b.elem}  →  + [A]ᵀ[K][A]`;
+      const m=b.AtKA;
+      for(let r=0;r<n;r++) for(let c=0;c<n;c++){
+        acc[r][c]+=m[r][c];
+        const v=svg.querySelector(`.pap-ens-val[data-r="${r}"][data-c="${c}"]`);
+        if(!v) continue;
+        if(Math.abs(m[r][c])>1e-12){
+          const cellEl=svg.querySelector(`.pap-ens-cell[data-r="${r}"][data-c="${c}"]`);
+          cellEl.setAttribute("fill","#DDEEF2");
+          setTimeout(()=>{cellEl.setAttribute("fill","transparent");},700);
+        }
+        v.textContent=papFmt(acc[r][c]);
+        v.setAttribute("opacity","1");
+      }
+    }, t); t+=1200;
+  });
+  setTimeout(()=>{ who.textContent="K completa = Σ [A]ᵀ[K][A]"; }, t+200);
+}
+function papDrawDiagram(tipo, diag){
+  const host=$("#pap-diagram"); if(!host) return;
+  const els=(diag&&diag.elementos)||[];
+  if(!els.length){ host.innerHTML="<p class='hint'>Sin datos de diagrama.</p>"; return; }
+  let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+  els.forEach(e=>[[e.xi,e.yi],[e.xj,e.yj]].forEach(([x,y])=>{minx=Math.min(minx,x);maxx=Math.max(maxx,x);miny=Math.min(miny,y);maxy=Math.max(maxy,y);}));
+  const key = tipo==="DMF" ? "M" : "V";
+  let vmax=1e-9; els.forEach(e=>(e[key]||[]).forEach(v=>vmax=Math.max(vmax,Math.abs(v))));
+  const W=720,H=440,pad=70;
+  const spanx=(maxx-minx)||1, spany=(maxy-miny)||1;
+  const sc=Math.min((W-2*pad)/spanx,(H-2*pad)/spany)||1;
+  const ox=(W-spanx*sc)/2 - minx*sc, oy=(H-spany*sc)/2 + maxy*sc;
+  const X=x=>ox+x*sc, Y=y=>oy-y*sc;
+  const dpx = 70/vmax;                         // escala del diagrama (px por unidad)
+  const col = tipo==="DMF" ? "#508C9B" : "#C1666B";
+  let g='';
+  els.forEach(e=>{ g+=`<line x1="${X(e.xi)}" y1="${Y(e.yi)}" x2="${X(e.xj)}" y2="${Y(e.yj)}" stroke="#201E43" stroke-width="2.6" stroke-linecap="round"/>`; });
+  els.forEach(e=>{
+    const s=e.s||[], arr=e[key]||[], n=s.length; if(!n) return;
+    const ax=X(e.xi),ay=Y(e.yi),bx=X(e.xj),by=Y(e.yj);
+    const dx=bx-ax,dy=by-ay,len=Math.hypot(dx,dy)||1;
+    let px=-dy/len, py=dx/len;
+    if(tipo==="DMF"){ px=-px; py=-py; }         // DMF del lado traccionado
+    const smax=s[n-1]||1, base=[], dia=[];
+    for(let k=0;k<n;k++){ const t=s[k]/smax, bxp=ax+dx*t, byp=ay+dy*t;
+      base.push([bxp,byp]); dia.push([bxp+px*arr[k]*dpx, byp+py*arr[k]*dpx]); }
+    const poly=base.map(p=>p.join(",")).concat(dia.slice().reverse().map(p=>p.join(","))).join(" ");
+    const line=dia.map(p=>p.join(",")).join(" ");
+    g+=`<polygon class="pap-dia-fill" points="${poly}" fill="${col}"/>`;
+    g+=`<polyline class="pap-dia-line" points="${line}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round"/>`;
+    // valores en extremos
+    const vi=arr[0], vj=arr[n-1];
+    g+=`<text class="pap-dia-val" x="${dia[0][0]}" y="${dia[0][1]-4}" text-anchor="middle">${papFmt(vi)}</text>`;
+    g+=`<text class="pap-dia-val" x="${dia[n-1][0]}" y="${dia[n-1][1]-4}" text-anchor="middle">${papFmt(vj)}</text>`;
+  });
+  els.forEach(e=>{ g+=`<circle cx="${X(e.xi)}" cy="${Y(e.yi)}" r="3.5" fill="#201E43"/><circle cx="${X(e.xj)}" cy="${Y(e.yj)}" r="3.5" fill="#201E43"/>`; });
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" class="pap-dia-svg" preserveAspectRatio="xMidYMid meet">${g}</svg>`;
+  // animación de "dibujado" progresivo
+  const svg=host.querySelector("svg");
+  svg.querySelectorAll(".pap-dia-line").forEach((ln,i)=>{
+    const L=ln.getTotalLength(); ln.style.strokeDasharray=L; ln.style.strokeDashoffset=L; ln.style.transition="none";
+    requestAnimationFrame(()=>{ ln.style.transition=`stroke-dashoffset .8s ease ${i*0.14}s`; ln.style.strokeDashoffset="0"; });
+  });
+  svg.querySelectorAll(".pap-dia-fill").forEach((f,i)=>{ f.style.opacity="0"; requestAnimationFrame(()=>{ f.style.transition=`opacity .6s ease ${0.25+i*0.14}s`; f.style.opacity="0.2"; }); });
+  svg.querySelectorAll(".pap-dia-val").forEach((t,i)=>{ t.style.opacity="0"; requestAnimationFrame(()=>{ t.style.transition=`opacity .5s ease ${0.5+i*0.07}s`; t.style.opacity="1"; }); });
+}
+function papStepHTML(s,data){
+  papSeq = 0;
+  if(s.id==="DMF" || s.id==="DFC" || s.id==="activar" || s.id==="ensamble")
+    return `<div class="pap-diagram" id="pap-diagram"></div>`;
+  const B=s.barras||[], DL=Dlbl(data);
+  const bcards = (fn)=>`<div class="pap-barras">${B.map(fn).join("")}</div>`;
+  switch(s.id){
+    case "coords":
+      return `<div class="pap-cols">
+        <div><h5>GDL globales {D} (Q–D)</h5><ul class="pap-list">${data.labels.map((l,i)=>`<li><b>D${i+1}</b> = ${esc(l.replace(/^D\d+\(/,"").replace(/\)$/,""))}</li>`).join("")}</ul></div>
+        <div><h5>Deformaciones de barra {d} (q–d)</h5><div class="pap-chips">${data.def_labels.map((l,i)=>`<span class="pap-chip">d${i+1} · ${esc(l)}</span>`).join("")}</div></div></div>`;
+    case "A":
+      return `<div class="pap-matwrap"><div class="pap-matlbl">[A] &nbsp;(${data.def_labels.length}×${data.labels.length}) &nbsp; {d} = [A]{D}</div>${papMat(data.A, dlbl(data), DL)}</div>`+
+        bcards(b=>`<div class="pap-bcard"><b>${esc(b.elem)}</b> <span class="pap-tag">${b.tipo}</span>${papMat(b.A,["i","j"],DL)}</div>`);
+    case "Ki":
+      return bcards(b=>`<div class="pap-bcard"><b>${esc(b.elem)}</b> <span class="pap-tag">${b.tipo}</span><div class="pap-note">EI=${papFmt(b.EI)} · L=${papFmt(b.L)}</div>${papMat(b.K)}</div>`);
+    case "AtKA":
+      return bcards(b=>`<div class="pap-bcard"><b>${esc(b.elem)}</b> · [Aᵢ]ᵀ[Kᵢ][Aᵢ]${papMat(b.AtKA,DL,DL)}</div>`);
+    case "K":
+      return `<div class="pap-matwrap"><div class="pap-matlbl">[K] = Σ [Aᵢ]ᵀ[Kᵢ][Aᵢ]</div>${papMat(s.K,DL,DL)}</div>`;
+    case "r":
+      return bcards(b=>`<div class="pap-bcard"><b>${esc(b.elem)}</b> · {rᵢ}${papVec(b.r,["i","j"])}</div>`);
+    case "R":
+      return `<div class="pap-matwrap"><div class="pap-matlbl">{R} = Σ [Aᵢ]ᵀ{rᵢ}</div>${papVec(s.R,DL)}</div>`;
+    case "Q":
+      return `<div class="pap-cols pap-eq">
+        <div><h5>{Q}nudos</h5>${papVec(s.Qn,DL)}</div><div class="pap-op">−</div>
+        <div><h5>{R}</h5>${papVec(s.R,DL)}</div><div class="pap-op">=</div>
+        <div><h5>{Q}</h5>${papVec(s.Q,DL)}</div></div>`;
+    case "D":
+      return `<div class="pap-matwrap"><div class="pap-matlbl">{D} = [K]⁻¹{Q}</div>${papVec(s.D,DL)}</div>`;
+    case "d":
+      return bcards(b=>`<div class="pap-bcard"><b>${esc(b.elem)}</b> · {dᵢ}=[Aᵢ]{D}${papVec(b.d,["i","j"])}</div>`);
+    case "q":
+      return bcards(b=>`<div class="pap-bcard"><b>${esc(b.elem)}</b> · {qᵢ}=[Kᵢ]{dᵢ}${papVec(b.q,["i","j"])}</div>`);
+    case "qT":
+      return bcards(b=>`<div class="pap-bcard pap-final"><b>${esc(b.elem)}</b> · {qᵢ}+{rᵢ}${papVec(b.qT,["i","j"])}</div>`)+
+        `<p class="hint" style="margin-top:12px">Con estas fuerzas de extremo se trazan los diagramas <strong>DMF/DFC</strong> (vista Resultados).</p>`;
+    default: return "";
+  }
+}
+function papStop(){
+  const p=state._pap; if(p&&p.timer){clearInterval(p.timer);p.timer=null;}
+  if(p) p.playing=false;
+  const b=$("#pap-play"); if(b){b.textContent="▶";b.classList.remove("is-playing");}
+}
+function papPlay(){
+  const p=state._pap; if(!p) return;
+  if(p.playing){ papStop(); return; }
+  if(p.cur>=p.pasos.length-1) papRenderStep(0);
+  p.playing=true;
+  const b=$("#pap-play"); b.textContent="⏸"; b.classList.add("is-playing");
+  const spd=+($("#pap-speed").value||1400);
+  p.timer=setInterval(()=>{ if(!p||p.cur>=p.pasos.length-1){papStop();return;} papRenderStep(p.cur+1); }, spd);
+}
+function initPasoAPaso(){
+  $("#btn-pap-editar")?.addEventListener("click",()=>setVista("modelo"));
+  $("#pap-prev")?.addEventListener("click",()=>{papStop();papRenderStep((state._pap?.cur??0)-1);});
+  $("#pap-next")?.addEventListener("click",()=>{papStop();papRenderStep((state._pap?.cur??0)+1);});
+  $("#pap-first")?.addEventListener("click",()=>{papStop();papRenderStep(0);});
+  $("#pap-last")?.addEventListener("click",()=>{papStop();papRenderStep((state._pap?.pasos.length||1)-1);});
+  $("#pap-play")?.addEventListener("click",papPlay);
+  $("#pap-timeline")?.addEventListener("click",e=>{const d=e.target.closest(".pap-dot"); if(d){papStop();papRenderStep(+d.dataset.step);}});
+}
+
+/* ============================================================
+   TORRE AREQUIPA: elegir y cargar uno de los 24 pórticos
+   ============================================================ */
+let _torreItems = null;
+function openTorreModal(){
+  const menu=$("#ham-menu"); if(menu) menu.classList.add("hidden");
+  const ov=$("#torre-overlay"); ov.classList.remove("hidden");
+  const sel=$("#torre-sel");
+  const pinta=(items)=>{
+    sel.innerHTML = items.map((it,i)=>`<option value="${i}">${esc(it.nombre)} (${it.tipo==="letra"?"horizontal":"vertical"})</option>`).join("");
+  };
+  if (_torreItems){ pinta(_torreItems); return; }
+  fetch("/api/torre/lista").then(r=>r.json()).then(res=>{
+    _torreItems = res.items || []; pinta(_torreItems);
+    $("#torre-info").textContent = `${_torreItems.length} pórticos disponibles.`;
+  }).catch(e=>{ $("#torre-info").textContent = "No se pudo leer la lista: "+e; });
+}
+function cargarTorreSeleccion(){
+  if(!_torreItems) return;
+  const it = _torreItems[+$("#torre-sel").value]; if(!it) return;
+  $("#torre-load").disabled = true; $("#torre-sum").textContent = "Cargando…";
+  fetch(`/api/torre?tipo=${it.tipo}&idx=${it.idx}`).then(r=>r.json()).then(d=>{
+    if(!d || d.ok===false){ toast(d.error||"No se pudo cargar el pórtico.","err",4000); return; }
+    cargarModeloEnEditor(d);
+    $("#torre-overlay").classList.add("hidden");
+    setWorkflowStep("modelar");
+    toast(`${it.nombre} cargado: ${d.nudos.length} nudos, ${d.elementos.length} elementos.`,"ok",3000);
+  }).catch(e=>toast("Error al cargar: "+e,"err",4000))
+    .finally(()=>{ $("#torre-load").disabled=false; $("#torre-sum").textContent=""; });
+}
+function initTorre(){
+  const b=$("#btn-torre"); if(!b) return;
+  b.addEventListener("click", openTorreModal);
+  $("#torre-close").addEventListener("click", ()=>$("#torre-overlay").classList.add("hidden"));
+  $("#torre-cancel").addEventListener("click", ()=>$("#torre-overlay").classList.add("hidden"));
+  $("#torre-load").addEventListener("click", cargarTorreSeleccion);
+  $("#torre-overlay").addEventListener("click",(ev)=>{ if(ev.target.id==="torre-overlay") ev.target.classList.add("hidden"); });
+}
+
+
+/* ============================================================
+   UI ESTILO ETABS: registro de comandos, menús, paleta (Ctrl+K),
+   tema claro/oscuro y árbol del modelo
+   ============================================================ */
+const ACTIONS = [
+  {id:"file-new",      label:"Nuevo modelo",                  run:()=>limpiarModelo()},
+  {id:"file-import",   label:"Importar JSON",                 run:()=>$("#btn-importar")?.click()},
+  {id:"file-export",   label:"Exportar JSON",                 run:()=>$("#btn-exportar")?.click()},
+  {id:"file-template", label:"Guardar como plantilla",        run:()=>$("#btn-guardar-tpl")?.click()},
+  {id:"undo",          label:"Deshacer",                      run:()=>undo()},
+  {id:"redo",          label:"Rehacer",                       run:()=>redo()},
+  {id:"palette",       label:"Buscar comando",                run:()=>openCmdk()},
+  {id:"theme",         label:"Tema claro / oscuro",           run:()=>toggleTheme()},
+  {id:"zoom-reset",    label:"Ajustar vista al modelo",       run:()=>$("#pv-zoom-reset")?.click()},
+  {id:"grid",          label:"Mostrar / ocultar cuadrícula",  run:()=>{const c=$("#chk-grid"); if(c){c.checked=!c.checked; drawPreview();}}},
+  {id:"lbl-N",         label:"Mostrar nombres de nudos",      run:()=>$('[data-lbl="nombres"]')?.click()},
+  {id:"lbl-E",         label:"Mostrar nombres de elementos",  run:()=>$('[data-lbl="secciones"]')?.click()},
+  {id:"lbl-C",         label:"Mostrar cargas",                run:()=>$('[data-lbl="cargas"]')?.click()},
+  {id:"lbl-V",         label:"Mostrar valores numéricos",     run:()=>$('[data-lbl="valores"]')?.click()},
+  {id:"step-definir",  label:"Ir a Definir: materiales y secciones", run:()=>{setVista("modelo"); setWorkflowStep("definir");}},
+  {id:"step-modelar",  label:"Ir a Modelar: nudos y elementos",      run:()=>{setVista("modelo"); setWorkflowStep("modelar");}},
+  {id:"step-cargar",   label:"Ir a Asignar: cargas",                 run:()=>{setVista("modelo"); setWorkflowStep("cargar");}},
+  {id:"tpl",           label:"Abrir plantillas",              run:()=>$("#btn-tpl-toggle")?.click()},
+  {id:"mode-mover",    label:"Modo seleccionar / mover",      run:()=>$('[data-emode="mover"]')?.click()},
+  {id:"mode-nudo",     label:"Modo dibujar nudo",             run:()=>$('[data-emode="nudo"]')?.click()},
+  {id:"mode-conectar", label:"Modo conectar elementos",       run:()=>$('[data-emode="conectar"]')?.click()},
+  {id:"mode-eliminar", label:"Modo eliminar",                 run:()=>$('[data-emode="eliminar"]')?.click()},
+  {id:"calc",          label:"Ejecutar análisis",             run:()=>$("#btn-calcular")?.click()},
+  {id:"pasoapaso",     label:"Paso a paso (método sistematizado)", run:()=>setVista("pasoapaso")},
+  {id:"combos",        label:"Combinaciones y envolventes",   run:()=>setVista("combinaciones")},
+  {id:"resultados",    label:"Resultados: DMF, DFC, DFN",     run:()=>setVista("resultados")},
+  {id:"historial",     label:"Historial de cálculos",         run:()=>setVista("historial")},
+  {id:"gen",           label:"Generar pórtico multi-piso…",   run:()=>$("#btn-generar")?.click()},
+  {id:"torre",         label:"Torre Arequipa: elegir pórtico…", run:()=>$("#btn-torre")?.click()},
+];
+function runAction(id){
+  const a = ACTIONS.find(x=>x.id===id); if(!a) return;
+  closeMenus();
+  try{ a.run(); }catch(e){ toast("Error: "+e.message,"err",3000); }
+}
+function closeMenus(){ $$(".mb-group.open").forEach(g=>g.classList.remove("open")); }
+
+/* --- tema --- */
+function applyTheme(t){
+  document.documentElement.dataset.theme = t;
+  try{ localStorage.setItem("ae_theme", t); }catch(e){}
+}
+function toggleTheme(){
+  const cur = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(cur);
+  toast(cur==="dark" ? "Tema oscuro" : "Tema claro", "ok", 1200);
+}
+function initTheme(){
+  let t = null;
+  try{ t = localStorage.getItem("ae_theme"); }catch(e){}
+  if(!t) t = (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light";
+  applyTheme(t);
+}
+
+/* --- menús --- */
+function initMenus(){
+  $$(".mb-group").forEach(g=>{
+    g.querySelector(".mb-title").addEventListener("click",(ev)=>{
+      ev.stopPropagation();
+      const was = g.classList.contains("open");
+      closeMenus(); if(!was) g.classList.add("open");
+    });
+  });
+  document.addEventListener("click",(ev)=>{
+    const b = ev.target.closest("[data-act]");
+    if(b){ runAction(b.dataset.act); return; }
+    if(!ev.target.closest(".mb-group")) closeMenus();
+  });
+  document.addEventListener("keydown",(ev)=>{ if(ev.key==="Escape") closeMenus(); });
+}
+
+/* --- paleta de comandos --- */
+let _cmdkSel = 0, _cmdkItems = [];
+function openCmdk(){
+  const ov=$("#cmdk"); ov.classList.remove("hidden");
+  const inp=$("#cmdk-input"); inp.value=""; inp.focus();
+  _cmdkSel = 0; renderCmdk("");
+}
+function closeCmdk(){ $("#cmdk").classList.add("hidden"); }
+function renderCmdk(q){
+  const t = q.trim().toLowerCase();
+  _cmdkItems = ACTIONS.filter(a=>!t || a.label.toLowerCase().includes(t));
+  _cmdkSel = Math.min(_cmdkSel, Math.max(0,_cmdkItems.length-1));
+  $("#cmdk-list").innerHTML = _cmdkItems.length
+    ? _cmdkItems.map((a,i)=>`<li class="cmdk-item${i===_cmdkSel?" is-sel":""}" role="option" data-id="${a.id}">${esc(a.label)}</li>`).join("")
+    : `<li class="cmdk-empty">Sin resultados</li>`;
+}
+function initCmdk(){
+  const ov=$("#cmdk"); if(!ov) return;
+  const inp=$("#cmdk-input");
+  inp.addEventListener("input",()=>{ _cmdkSel=0; renderCmdk(inp.value); });
+  inp.addEventListener("keydown",(ev)=>{
+    if(ev.key==="ArrowDown"){ _cmdkSel=Math.min(_cmdkSel+1,_cmdkItems.length-1); renderCmdk(inp.value); ev.preventDefault(); }
+    else if(ev.key==="ArrowUp"){ _cmdkSel=Math.max(_cmdkSel-1,0); renderCmdk(inp.value); ev.preventDefault(); }
+    else if(ev.key==="Enter"){ const a=_cmdkItems[_cmdkSel]; closeCmdk(); if(a) runAction(a.id); }
+    else if(ev.key==="Escape"){ closeCmdk(); }
+  });
+  $("#cmdk-list").addEventListener("click",(ev)=>{
+    const li=ev.target.closest(".cmdk-item"); if(li){ closeCmdk(); runAction(li.dataset.id); }
+  });
+  ov.addEventListener("click",(ev)=>{ if(ev.target===ov) closeCmdk(); });
+  document.addEventListener("keydown",(ev)=>{
+    const mod = ev.ctrlKey || ev.metaKey;
+    const abierta = !ov.classList.contains("hidden");
+    if(mod && ev.key.toLowerCase()==="k"){ ev.preventDefault(); openCmdk(); }
+    else if(mod && ev.key.toLowerCase()==="d"){ ev.preventDefault(); toggleTheme(); }
+    else if(mod && ev.key==="Enter" && !abierta){ ev.preventDefault(); runAction("calc"); }
+  });
+}
+
+/* --- árbol del modelo (panel superior del editor) --- */
+function renderExplorer(){
+  const host=$("#model-tree"); if(!host || !state.modelo) return;
+  const m=state.modelo;
+  const lista=(arr,fn)=> arr.slice(0,150).map((x,i)=>fn(x,i)).join("") +
+       (arr.length>150 ? `<li class="mt-more">… ${arr.length-150} más</li>` : "");
+  host.innerHTML = `
+    <details class="mt-node" open><summary>Materiales <span class="mt-count">${(m.materiales||[]).length}</span></summary>
+      <ul class="mt-list">${lista(m.materiales||[], (x)=>`<li>${esc(x.nombre||"material")}</li>`)}</ul></details>
+    <details class="mt-node" open><summary>Secciones <span class="mt-count">${(m.secciones||[]).length}</span></summary>
+      <ul class="mt-list">${lista(m.secciones||[], (x)=>`<li>${esc(x.nombre)} <em>${esc(x.tipo||"rectangular")}</em></li>`)}</ul></details>
+    <details class="mt-node"><summary>Nudos <span class="mt-count">${m.nudos.length}</span></summary>
+      <ul class="mt-list">${lista(m.nudos, (n,i)=>`<li data-tree="nudo" data-idx="${i}">${esc(n.nombre||("N"+n.id))} <em>(${(+n.x).toFixed(2)}, ${(+n.y).toFixed(2)})</em></li>`)}</ul></details>
+    <details class="mt-node"><summary>Elementos <span class="mt-count">${m.elementos.length}</span></summary>
+      <ul class="mt-list">${lista(m.elementos, (e,i)=>`<li data-tree="elemento" data-idx="${i}">${esc(e.nombre||("E"+e.id))} <em>${esc(e.seccion||"")}</em></li>`)}</ul></details>
+    <details class="mt-node"><summary>Cargas <span class="mt-count">${m.cargas_nodales.length + m.cargas_elementos.length}</span></summary>
+      <ul class="mt-list"><li>${m.cargas_nodales.length} nodales · ${m.cargas_elementos.length} en elementos</li></ul></details>`;
+}
+function initTree(){
+  const host=$("#model-tree"); if(!host) return;
+  host.addEventListener("click",(ev)=>{
+    const li=ev.target.closest("li[data-tree]"); if(!li) return;
+    setVista("modelo");
+    selectObject(li.dataset.tree, +li.dataset.idx);
+  });
+}
+
 function init(){
   if (!autoRestore()){
     limpiarModelo();
@@ -3832,6 +4363,13 @@ function init(){
   bindEditor();
   initSegEditor();
   initGenModal();
+  initTorre();
+  initLegendToggle();
+  initTheme();
+  initMenus();
+  initCmdk();
+  initTree();
+  initPasoAPaso();
   bindGraphEditor();
   bindKeyboard();
   initWorkflowStepper();

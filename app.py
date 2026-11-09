@@ -190,6 +190,51 @@ def api_combinaciones():
         return jsonify({"ok": False, "error": str(e)}), 400
 
 
+@app.route("/api/metodo_a", methods=["POST"])
+def api_metodo_a():
+    """Resuelve por el METODO SISTEMATIZADO DE RIGIDEZ (matriz [A], como el
+    profesor) y devuelve los datos de cada paso para el reproductor animado."""
+    from core.metodo_matricial_A import resolver_sistematizado
+    datos = request.get_json(force=True)
+    try:
+        est = construir(datos)
+        res = resolver_sistematizado(est)
+        # diagramas N/V/M por barra (del motor directo, para dibujar DMF/DFC)
+        try:
+            est.resolver()
+            res["diagramas"] = extraer_resultados(est)["diagramas"]
+        except Exception:
+            res["diagramas"] = None
+        return jsonify(res)
+    except NotImplementedError as e:
+        return jsonify({"ok": False,
+                        "error": f"Caso aun no soportado por el metodo [A]: {e}"}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e),
+                        "detalle": traceback.format_exc()}), 400
+
+
+@app.route("/api/torre/lista", methods=["GET"])
+def api_torre_lista():
+    from core.torre_arequipa import todos_los_pórticos
+    return jsonify({"ok": True, "items": [
+        {"nombre": n, "tipo": t, "idx": i} for n, t, i in todos_los_pórticos()]})
+
+
+@app.route("/api/torre", methods=["GET"])
+def api_torre():
+    """Modelo de un pórtico de la torre (cargas CM/CV combinadas 1.4CM+1.7CV)."""
+    from core.torre_arequipa import portico
+    from core.torre_resultados import carga_combinada
+    tipo = request.args.get("tipo", "letra")
+    idx = int(request.args.get("idx", 0))
+    try:
+        d = carga_combinada(portico(tipo, idx))
+        return jsonify(d)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
 @app.route("/api/seccion", methods=["POST"])
 def api_seccion():
     """Calcula A e I de una seccion segun su tipo y dimensiones."""

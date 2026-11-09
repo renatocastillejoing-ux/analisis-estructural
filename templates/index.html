@@ -15,6 +15,72 @@
   <a href="#rail" class="skip-link">Saltar al contenido principal</a>
 
   <!-- ================= TOPBAR ================= -->
+  <!-- ================= MENÚ ESTILO ETABS ================= -->
+  <nav class="menubar" aria-label="Menú principal">
+    <div class="mb-group" data-menu="file"><button class="mb-title" type="button">Archivo</button>
+      <div class="mb-drop">
+        <button class="mb-item" data-act="file-new"><span>Nuevo modelo</span></button>
+        <button class="mb-item" data-act="file-import"><span>Importar JSON…</span></button>
+        <button class="mb-item" data-act="file-export"><span>Exportar JSON</span><kbd>Ctrl+S</kbd></button>
+        <div class="mb-sep"></div>
+        <button class="mb-item" data-act="file-template"><span>Guardar como plantilla</span></button>
+      </div></div>
+    <div class="mb-group" data-menu="edit"><button class="mb-title" type="button">Editar</button>
+      <div class="mb-drop">
+        <button class="mb-item" data-act="undo"><span>Deshacer</span><kbd>Ctrl+Z</kbd></button>
+        <button class="mb-item" data-act="redo"><span>Rehacer</span><kbd>Ctrl+Y</kbd></button>
+        <div class="mb-sep"></div>
+        <button class="mb-item" data-act="palette"><span>Buscar comando…</span><kbd>Ctrl+K</kbd></button>
+      </div></div>
+    <div class="mb-group" data-menu="view"><button class="mb-title" type="button">Vista</button>
+      <div class="mb-drop">
+        <button class="mb-item" data-act="theme"><span>Tema claro / oscuro</span><kbd>Ctrl+D</kbd></button>
+        <button class="mb-item" data-act="zoom-reset"><span>Ajustar vista</span></button>
+        <button class="mb-item" data-act="grid"><span>Mostrar cuadrícula</span></button>
+        <div class="mb-sep"></div>
+        <button class="mb-item" data-act="lbl-N"><span>Nombres de nudos</span></button>
+        <button class="mb-item" data-act="lbl-E"><span>Nombres de elementos</span></button>
+        <button class="mb-item" data-act="lbl-C"><span>Cargas</span></button>
+        <button class="mb-item" data-act="lbl-V"><span>Valores numéricos</span></button>
+      </div></div>
+    <div class="mb-group" data-menu="define"><button class="mb-title" type="button">Definir</button>
+      <div class="mb-drop">
+        <button class="mb-item" data-act="step-definir"><span>Materiales y secciones</span></button>
+        <button class="mb-item" data-act="tpl"><span>Plantillas…</span></button>
+      </div></div>
+    <div class="mb-group" data-menu="draw"><button class="mb-title" type="button">Dibujar</button>
+      <div class="mb-drop">
+        <button class="mb-item" data-act="mode-mover"><span>Seleccionar / mover</span><kbd>M</kbd></button>
+        <button class="mb-item" data-act="mode-nudo"><span>Dibujar nudo</span><kbd>N</kbd></button>
+        <button class="mb-item" data-act="mode-conectar"><span>Conectar elementos</span><kbd>C</kbd></button>
+        <button class="mb-item" data-act="mode-eliminar"><span>Eliminar</span><kbd>Supr</kbd></button>
+      </div></div>
+    <div class="mb-group" data-menu="assign"><button class="mb-title" type="button">Asignar</button>
+      <div class="mb-drop">
+        <button class="mb-item" data-act="step-cargar"><span>Cargas (nudos y elementos)</span></button>
+        <button class="mb-item" data-act="step-modelar"><span>Nudos y elementos</span></button>
+      </div></div>
+    <div class="mb-group" data-menu="analyze"><button class="mb-title" type="button">Analizar</button>
+      <div class="mb-drop">
+        <button class="mb-item" data-act="calc"><span>Ejecutar análisis</span><kbd>Ctrl+Enter</kbd></button>
+        <button class="mb-item" data-act="pasoapaso"><span>Paso a paso (método sistematizado)</span></button>
+        <button class="mb-item" data-act="combos"><span>Combinaciones y envolventes</span></button>
+      </div></div>
+    <div class="mb-group" data-menu="display"><button class="mb-title" type="button">Mostrar</button>
+      <div class="mb-drop">
+        <button class="mb-item" data-act="resultados"><span>Resultados (DMF, DFC, DFN)</span></button>
+        <button class="mb-item" data-act="historial"><span>Historial</span></button>
+      </div></div>
+    <div class="mb-group" data-menu="tools"><button class="mb-title" type="button">Herramientas</button>
+      <div class="mb-drop">
+        <button class="mb-item" data-act="gen"><span>Generar pórtico…</span></button>
+        <button class="mb-item" data-act="torre"><span>Torre Arequipa (24 ejes)…</span></button>
+      </div></div>
+    <div class="mb-spacer"></div>
+    <button class="mb-search" type="button" data-act="palette" title="Buscar comando (Ctrl+K)">
+      <span>Buscar…</span><kbd>Ctrl+K</kbd></button>
+  </nav>
+
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
@@ -31,6 +97,7 @@
       <nav class="nav" id="nav" aria-label="Navegación principal">
         <button class="nav-btn is-active" data-vista="modelo">Modelo</button>
         <button class="nav-btn" data-vista="resultados">Resultados</button>
+        <button class="nav-btn" data-vista="pasoapaso">Paso a paso</button>
         <button class="nav-btn" data-vista="combinaciones">Combinaciones</button>
         <button class="nav-btn" data-vista="historial">Historial</button>
       </nav>
@@ -56,6 +123,7 @@
               <span class="ham-menu-title">Modelo</span>
               <button class="ham-item" id="btn-tpl-toggle" type="button"><span class="ham-ico">📋</span> Plantillas</button>
               <button class="ham-item" id="btn-generar" type="button"><span class="ham-ico">▦</span> Generar pórtico…</button>
+              <button class="ham-item" id="btn-torre" type="button"><span class="ham-ico">🏢</span> Torre Arequipa (24 ejes)…</button>
               <button class="ham-item" id="btn-guardar-tpl" type="button"><span class="ham-ico">💾</span> Guardar como plantilla</button>
               <button class="ham-item" id="btn-importar" type="button"><span class="ham-ico">⬇</span> Importar JSON</button>
               <button class="ham-item" id="btn-exportar" type="button"><span class="ham-ico">⬆</span> Exportar JSON</button>
@@ -143,6 +211,7 @@
 
         <!-- ===== COLUMNA EDITOR (izquierda) ===== -->
         <aside class="app-col-editor" id="rail">
+          <section class="mt-card" aria-label="Árbol del modelo"><div class="mt-head">Árbol del modelo</div><div id="model-tree"></div></section>
           <div class="acc-toolbar">
             <span class="acc-toolbar-hint" id="acc-open-count"></span>
             <button class="acc-collapse-all" id="btn-collapse-all" type="button" title="Colapsar o expandir todas las secciones" aria-label="Colapsar o expandir todas las secciones">
@@ -754,6 +823,56 @@
       </div>
     </section>
 
+    <!-- ============================================================= -->
+    <!-- ================ VISTA: PASO A PASO (método [A]) ============= -->
+    <!-- ============================================================= -->
+    <section class="vista hidden" id="vista-pasoapaso">
+      <div class="res-head">
+        <div>
+          <h2 class="page-title">Resolución paso a paso · Método Sistematizado de Rigidez</h2>
+          <p class="res-meta" id="pap-meta">Reproduce el procedimiento del profesor con la matriz [A].</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" id="btn-pap-editar">← Editar modelo</button>
+      </div>
+
+      <div id="pap-error" class="empty-state hidden"></div>
+
+      <div id="pap-cont" class="hidden">
+        <!-- Controles del reproductor -->
+        <div class="pap-player card">
+          <span class="card-accent" aria-hidden="true"></span>
+          <div class="pap-controls">
+            <button class="pap-btn" id="pap-first" title="Primer paso" aria-label="Primer paso">⏮</button>
+            <button class="pap-btn" id="pap-prev" title="Paso anterior" aria-label="Paso anterior">◀</button>
+            <button class="pap-btn pap-btn-play" id="pap-play" title="Reproducir" aria-label="Reproducir">▶</button>
+            <button class="pap-btn" id="pap-next" title="Paso siguiente" aria-label="Paso siguiente">▶▶</button>
+            <button class="pap-btn" id="pap-last" title="Último paso" aria-label="Último paso">⏭</button>
+            <span class="pap-sep"></span>
+            <label class="pap-speed">Velocidad
+              <select id="pap-speed"><option value="2200">Lenta</option><option value="1400" selected>Normal</option><option value="800">Rápida</option></select>
+            </label>
+            <span class="pap-flex"></span>
+            <span class="pap-stepcount" id="pap-stepcount">—</span>
+          </div>
+          <div class="pap-progress"><div class="pap-progress-bar" id="pap-progress-bar"></div></div>
+          <div class="pap-timeline" id="pap-timeline"></div>
+        </div>
+
+        <!-- Lienzo del paso actual -->
+        <div class="pap-stage card">
+          <span class="card-accent" aria-hidden="true"></span>
+          <div class="pap-step-head">
+            <span class="pap-step-num" id="pap-step-num">1</span>
+            <div>
+              <h3 class="pap-step-title" id="pap-step-title">—</h3>
+              <p class="pap-step-desc" id="pap-step-desc"></p>
+            </div>
+          </div>
+          <div class="pap-step-body" id="pap-step-body"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- ===================== VISTA: HISTORIAL ====================== -->
     <section class="vista hidden" id="vista-historial">
       <div class="res-head">
@@ -833,6 +952,44 @@
           <button class="btn btn-primary btn-sm" id="gen-create" type="button">Generar pórtico</button>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ===== Modal: Torre Arequipa (elegir uno de los 24 pórticos) ===== -->
+  <div class="seg-overlay hidden" id="torre-overlay" role="dialog" aria-modal="true" aria-labelledby="torre-title">
+    <div class="seg-modal">
+      <div class="seg-modal-head">
+        <div class="seg-modal-titles">
+          <h2 class="seg-modal-title" id="torre-title">Torre Arequipa · pórticos</h2>
+          <p class="seg-modal-sub">10 pisos × 3.00 m · 9 ejes con letra (A–I) y 15 numerados (1–15). Cargas: 1.4·CM + 1.7·CV.</p>
+        </div>
+        <button class="seg-modal-close" id="torre-close" type="button" title="Cerrar" aria-label="Cerrar diálogo">✕</button>
+      </div>
+      <div class="seg-legend">
+        Carga el pórtico en el editor para revisarlo y calcularlo. Cada columna pertenece a dos pórticos
+        (el de su letra y el de su número); cada pórtico se resuelve por separado (análisis 2D por eje).
+        Supuestos en <strong>core/torre_arequipa.py</strong>.
+      </div>
+      <div class="seg-modal-body">
+        <div class="seg-field"><label>Pórtico</label><select id="torre-sel"></select></div>
+        <p class="hint" id="torre-info"></p>
+      </div>
+      <div class="seg-modal-foot">
+        <span class="seg-sum" id="torre-sum"></span>
+        <div class="seg-foot-btns">
+          <button class="btn btn-secondary btn-sm" id="torre-cancel" type="button">Cancelar</button>
+          <button class="btn btn-primary btn-sm" id="torre-load" type="button">Cargar pórtico</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Paleta de comandos (Ctrl+K) ===== -->
+  <div class="cmdk-overlay hidden" id="cmdk" role="dialog" aria-modal="true" aria-label="Buscar comando">
+    <div class="cmdk">
+      <input class="cmdk-input" id="cmdk-input" type="text" placeholder="Escribe un comando… (nudo, calcular, torre, tema)" autocomplete="off">
+      <ul class="cmdk-list" id="cmdk-list" role="listbox"></ul>
+      <div class="cmdk-foot"><span>↑↓ navegar</span><span>↵ ejecutar</span><span>Esc cerrar</span></div>
     </div>
   </div>
 
