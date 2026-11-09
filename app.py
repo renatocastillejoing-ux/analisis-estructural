@@ -14,7 +14,7 @@ import sqlite3
 import datetime
 import traceback
 
-from flask import Flask, request, jsonify, render_template, g
+from flask import Flask, request, jsonify, render_template, g, send_from_directory
 
 from core.constructor import construir, extraer_resultados
 from core.reporte import generar_reporte
@@ -65,6 +65,12 @@ def init_db():
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/nueva")
+def nueva():
+    """Interfaz nueva (React + Tailwind), compilada en static/react/ (npm run build en frontend/)."""
+    return send_from_directory(os.path.join(BASE_DIR, "static", "react"), "index.html")
 
 
 # ----------------------------------------------------------------------------
