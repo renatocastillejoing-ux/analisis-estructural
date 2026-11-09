@@ -1627,3 +1627,25 @@ body[data-mode="avanzado"] .switch.adv-only .switch-label::after {
   border:1.5px solid var(--ml-border); border-radius:var(--r-sm); background:#fff; color:var(--ml-navy);
 }
 .gen-grid input:focus, .gen-grid select:focus { outline:2px solid var(--ml-teal); outline-offset:1px; }
+
+/* Leyenda de secciones/materiales en el lienzo */
+.pv-legend {
+  position:absolute; left:10px; bottom:10px; z-index:5;
+  background:rgba(255,255,255,.92); border:1px solid var(--ml-border);
+  border-radius:var(--r-md); box-shadow:var(--sh-card);
+  padding:7px 9px; font-size:10.5px; color:var(--ml-navy);
+  max-width:190px; max-height:46%; overflow:auto; pointer-events:none;
+  backdrop-filter:blur(2px);
+}
+.pv-legend.hidden { display:none; }
+.pvl-title { font-size:9px; font-weight:800; text-transform:uppercase; letter-spacing:.06em; color:var(--ml-ink-soft); margin-bottom:4px; }
+.pvl-row { display:flex; align-items:center; gap:6px; padding:1px 0; }
+.pvl-sw { position:relative; flex:none; width:15px; height:11px; border-radius:3px; border:1px solid rgba(32,30,67,.35); overflow:hidden; }
+.pvl-hatch { position:absolute; inset:0; background-image:repeating-linear-gradient(45deg, rgba(32,30,67,.5) 0 1px, transparent 1px 4px); }
+.pvl-mat { background:#E7EDF0; }
+.pvl-mat.pv-mat-1 { background-image:repeating-linear-gradient(45deg, rgba(32,30,67,.45) 0 1px, transparent 1px 5px); }
+.pvl-mat.pv-mat-2 { background-image:radial-gradient(rgba(32,30,67,.5) 0.7px, transparent 0.8px); background-size:4px 4px; }
+.pvl-mat.pv-mat-3 { background-image:repeating-linear-gradient(90deg, rgba(32,30,67,.45) 0 1px, transparent 1px 5px); }
+.pvl-nm { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pvl-dim { margin-left:auto; color:var(--ml-ink-soft); font-size:9.5px; white-space:nowrap; }
+.pvl-sep { height:1px; background:var(--ml-border); margin:4px 0; }

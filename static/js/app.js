@@ -1000,6 +1000,125 @@ function updateCnFxFy(idx){
 const SVGNS = "http://www.w3.org/2000/svg";
 let _previewZoom = 1, _previewPanX = 0, _previewPanY = 0;
 
+/* ============================================================
+   REPRESENTACIÓN VISUAL DE SECCIONES / MATERIALES EN EL LIENZO
+   - grosor de la barra  ∝ peralte h  (más alto → más gruesa)
+   - color de relleno    = sección    (paleta categórica)
+   - oscuridad del color ∝ ancho b     (más ancho → más oscuro)
+   - ashurado (hatch)    = secciones anchas tipo muro/placa
+   - textura superpuesta = material    (cuando hay más de uno)
+   ============================================================ */
+const SEC_PALETTE = ["#508C9B","#C1666B","#6E9B54","#B0894E","#7E6C9B",
+                     "#3F7C8C","#C98A3B","#5E7BA6","#9B5D6B","#4F9E86"];
+function _hex2rgb(h){ h=h.replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); const n=parseInt(h,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function _rgb2hex(r,g,b){ const c=v=>('0'+Math.max(0,Math.min(255,Math.round(v))).toString(16)).slice(-2); return '#'+c(r)+c(g)+c(b); }
+function shadeColor(hex, amt){                    // amt<0 oscurece, >0 aclara (0..1)
+  const [r,g,b]=_hex2rgb(hex);
+  if(amt<0){ const f=1+amt; return _rgb2hex(r*f,g*f,b*f); }
+  return _rgb2hex(r+(255-r)*amt, g+(255-g)*amt, b+(255-b)*amt);
+}
+function seccionDims(s){                            // {h: peralte, b: ancho}
+  if(!s) return {h:null,b:null};
+  const t=s.tipo||"rectangular";
+  if((t==="circular"||t==="tubular") && s.d!=null){ const d=num(s.d); return {h:d,b:d}; }
+  if(s.h!=null && s.b!=null) return {h:num(s.h), b:num(s.b)};
+  const [A,I]=calcAI(s);
+  if(A>0 && I>0){ const h=Math.sqrt(12*I/A); return {h, b:A/h}; }  // rect equivalente
+  return {h:null,b:null};
+}
+function computeSeccionViz(m){
+  const secs=m.secciones||[];
+  const dims=secs.map(seccionDims);
+  const hs=dims.map(d=>d.h).filter(v=>v>0);
+  const bs=dims.map(d=>d.b).filter(v=>v>0);
+  const hmin=hs.length?Math.min(...hs):0, hmax=hs.length?Math.max(...hs):1;
+  const bmin=bs.length?Math.min(...bs):0, bmax=bs.length?Math.max(...bs):1;
+  const viz={};
+  secs.forEach((s,i)=>{
+    const {h,b}=dims[i];
+    let th=8;
+    if(h>0 && hmax>hmin) th=5+11*((h-hmin)/(hmax-hmin));
+    const base=SEC_PALETTE[i%SEC_PALETTE.length];
+    let dk=0; if(b>0 && bmax>bmin) dk=0.32*((b-bmin)/(bmax-bmin));
+    const wide=(b>0 && bmax>bmin) ? ((b-bmin)/(bmax-bmin) > 0.66) : false;
+    viz[s.nombre]={h,b,thickness:th, color:shadeColor(base,-dk), base, wide};
+  });
+  viz.__default={thickness:5.5, color:"#3A3A55", base:"#201E43", wide:false};
+  return viz;
+}
+function materialIndexMap(m){
+  const map={}; (m.materiales||[]).forEach((x,i)=>{ if(x.nombre) map[x.nombre]=i+1; });
+  return map;                                       // 0 = global/sólido
+}
+function seccionDefs(){
+  return `<defs>
+    <pattern id="pv-hatch-wall" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="6" stroke="#201E43" stroke-width="1.1" opacity="0.45"/></pattern>
+    <pattern id="pv-mat-1" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#201E43" stroke-width="0.9" opacity="0.32"/></pattern>
+    <pattern id="pv-mat-2" width="6" height="6" patternUnits="userSpaceOnUse">
+      <circle cx="2" cy="2" r="1" fill="#201E43" opacity="0.32"/></pattern>
+    <pattern id="pv-mat-3" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(90)">
+      <line x1="0" y1="0" x2="0" y2="7" stroke="#201E43" stroke-width="0.9" opacity="0.32"/></pattern>
+  </defs>`;
+}
+function elementoBandas(e, ax, ay, bx, by, SVIZ, MATIDX, isSel, showSecLabels){
+  const out=[];
+  const dx=bx-ax, dy=by-ay, len=Math.hypot(dx,dy)||1;
+  const pxu=-dy/len, pyu=dx/len;                    // perpendicular unitario
+  let bands;
+  if(e.segmentos && e.segmentos.length>=2){
+    const sumL=e.segmentos.reduce((s,sg)=>s+(num(sg.L)||0),0)||1;
+    let acc=0;
+    bands=e.segmentos.map(sg=>{ const t0=acc/sumL; acc+=num(sg.L)||0; return {t0, t1:acc/sumL, sec:sg.seccion, mat:sg.material||e.material}; });
+  } else {
+    bands=[{t0:0,t1:1,sec:e.seccion,mat:e.material}];
+  }
+  bands.forEach(bd=>{
+    const cax=ax+dx*bd.t0, cay=ay+dy*bd.t0, cbx=ax+dx*bd.t1, cby=ay+dy*bd.t1;
+    const v=SVIZ[bd.sec]||SVIZ.__default;
+    const hx=pxu*(v.thickness/2), hy=pyu*(v.thickness/2);
+    const pts=`${cax+hx},${cay+hy} ${cbx+hx},${cby+hy} ${cbx-hx},${cby-hy} ${cax-hx},${cay-hy}`;
+    const edge=isSel?"#508C9B":shadeColor(v.base,-0.4);
+    out.push(`<polygon points="${pts}" fill="${v.color}" stroke="${edge}" stroke-width="${isSel?1.4:0.7}" stroke-linejoin="round"/>`);
+    let pat=null;
+    if(v.wide) pat="pv-hatch-wall";
+    else { const mi=MATIDX[bd.mat]||0; if(mi>0) pat="pv-mat-"+(((mi-1)%3)+1); }
+    if(pat) out.push(`<polygon points="${pts}" fill="url(#${pat})"/>`);
+  });
+  if(bands.length>1){
+    for(let i=0;i<bands.length-1;i++){ const t=bands[i].t1, tx=ax+dx*t, ty=ay+dy*t;
+      out.push(`<line x1="${tx-pxu*6}" y1="${ty-pyu*6}" x2="${tx+pxu*6}" y2="${ty+pyu*6}" stroke="#201E43" stroke-width="1.5"/>`); }
+    if(showSecLabels) bands.forEach(bd=>{ const tm=(bd.t0+bd.t1)/2, lx=ax+dx*tm+pxu*13, ly=ay+dy*tm+pyu*13;
+      out.push(`<text x="${lx}" y="${ly}" text-anchor="middle" font-size="7.5" fill="#3A6B78" font-family="Inter">${esc(bd.sec||"")}</text>`); });
+  }
+  out.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="${isSel?'#3A6B78':'#201E43'}" stroke-width="1" stroke-linecap="round" opacity="0.5"/>`);
+  return out;
+}
+function renderSectionLegend(m, SVIZ, MATIDX){
+  const box=$("#pv-section-legend"); if(!box) return;
+  const secs=(m.secciones||[]).filter(s=>SVIZ[s.nombre]);
+  if(!secs.length){ box.classList.add("hidden"); box.innerHTML=""; return; }
+  const u=getUnidad();
+  const filas=secs.map(s=>{
+    const v=SVIZ[s.nombre]; const d=seccionDims(s);
+    const dimTxt = (d.b>0&&d.h>0) ? `${(+d.b).toFixed(2)}×${(+d.h).toFixed(2)} ${u.longitud}` : "";
+    const hatch = v.wide ? `<span class="pvl-hatch"></span>` : "";
+    return `<div class="pvl-row"><span class="pvl-sw" style="background:${v.color}">${hatch}</span>`+
+           `<span class="pvl-nm">${esc(s.nombre)}</span><span class="pvl-dim">${dimTxt}</span></div>`;
+  }).join("");
+  const mats=(m.materiales||[]);
+  let matHtml="";
+  if(mats.length>1){
+    matHtml = `<div class="pvl-sep"></div>` + mats.map((x,i)=>{
+      const pat = i===0?"":`pv-mat-${((i-1)%3)+1}`;
+      return `<div class="pvl-row"><span class="pvl-sw pvl-mat ${pat}"></span><span class="pvl-nm">${esc(x.nombre||("mat"+(i+1)))}</span></div>`;
+    }).join("");
+  }
+  box.innerHTML = `<div class="pvl-title">Secciones</div>${filas}${matHtml}`;
+  box.classList.remove("hidden");
+}
+
 function drawPreview(){
   const svg = $("#preview-svg");
   const W=400, H=300, pad=40;
@@ -1019,8 +1138,10 @@ function drawPreview(){
   const byId=Object.fromEntries(nodos.map(n=>[n.id,n]));
   const d = Math.max(rx,ry);
   const u = getUnidad();
+  const SVIZ = computeSeccionViz(m);
+  const MATIDX = materialIndexMap(m);
 
-  let g = [];
+  let g = [seccionDefs()];
 
   // grid lines
   if ($("#chk-grid")?.checked){
@@ -1041,32 +1162,10 @@ function drawPreview(){
   m.elementos.forEach((e,eIdx)=>{
     const a=byId[e.i], b=byId[e.j]; if(!a||!b) return;
     const isSelElem = state.selected.type==="elemento" && state.selected.idx===eIdx;
-    const strokeC = isSelElem ? "#508C9B" : "#201E43";
-    const strokeW = isSelElem ? 5 : 3.5;
-    if (isSelElem) g.push(`<line x1="${SX(a.x)}" y1="${SY(a.y)}" x2="${SX(b.x)}" y2="${SY(b.y)}" stroke="rgba(80,140,155,.22)" stroke-width="14" stroke-linecap="round"/>`);
-    g.push(`<line x1="${SX(a.x)}" y1="${SY(a.y)}" x2="${SX(b.x)}" y2="${SY(b.y)}" stroke="${strokeC}" stroke-width="${strokeW}" stroke-linecap="round"/>`);
-    // tramos (barra no prismatica): banda + marcas + etiqueta de seccion
-    if (e.segmentos && e.segmentos.length>=2){
-      const sumL = e.segmentos.reduce((s,sg)=>s+(num(sg.L)||0),0) || 1;
-      const ax=SX(a.x), ay=SY(a.y), bx=SX(b.x), by=SY(b.y);
-      const dxs=bx-ax, dys=by-ay, len=Math.hypot(dxs,dys)||1;
-      const pxu=-dys/len, pyu=dxs/len;   // perpendicular unitario (pantalla)
-      g.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" class="pv-seg-wall"/>`);
-      let acc=0;
-      for (let s=0; s<e.segmentos.length-1; s++){
-        acc += num(e.segmentos[s].L)||0;
-        const t=acc/sumL, tx=ax+dxs*t, ty=ay+dys*t;
-        g.push(`<line class="pv-seg-tick" x1="${tx-pxu*6}" y1="${ty-pyu*6}" x2="${tx+pxu*6}" y2="${ty+pyu*6}"/>`);
-      }
-      if (state._labelToggles.secciones){
-        let a0=0;
-        e.segmentos.forEach(sg=>{
-          const tmid=(a0 + (num(sg.L)||0)/2)/sumL; a0+=num(sg.L)||0;
-          const lx=ax+dxs*tmid + pxu*11, ly=ay+dys*tmid + pyu*11;
-          g.push(`<text x="${lx}" y="${ly}" text-anchor="middle" font-size="7.5" fill="#3A6B78" font-family="Inter">${esc(sg.seccion||"")}</text>`);
-        });
-      }
-    }
+    const ax=SX(a.x), ay=SY(a.y), bx=SX(b.x), by=SY(b.y);
+    if (isSelElem) g.push(`<line x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}" stroke="rgba(80,140,155,.20)" stroke-width="16" stroke-linecap="round"/>`);
+    // barra dibujada como banda(s) según su(s) sección(es): grosor∝h, color=sección
+    g = g.concat(elementoBandas(e, ax, ay, bx, by, SVIZ, MATIDX, isSelElem, state._labelToggles.secciones));
     const mx=(SX(a.x)+SX(b.x))/2, my=(SY(a.y)+SY(b.y))/2;
     if (state._labelToggles.secciones){
       const elemLabel = esc(e.nombre || ("E"+e.id));
@@ -1160,6 +1259,7 @@ function drawPreview(){
 
   const grp = $("#preview-content");
   if (grp) grp.innerHTML = g.join("");
+  renderSectionLegend(m, SVIZ, MATIDX);
   svg.classList.toggle("mode-mover", state.emode==="mover");
   svg.classList.toggle("mode-nudo", state.emode==="nudo");
   svg.classList.toggle("mode-conectar", state.emode==="conectar");
