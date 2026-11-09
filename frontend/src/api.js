@@ -6,5 +6,6 @@ const post = (url, body) =>
 export const calcular = (modelo) => post("/api/calcular", modelo);
 export const metodoA = (modelo) => post("/api/metodo_a", modelo);
 export const torreLista = () => fetch("/api/torre/lista").then((r) => r.json());
-export const torreModelo = (tipo, idx) =>
-  fetch(`/api/torre?tipo=${tipo}&idx=${idx}`).then((r) => r.json());
+export const torreModelo = (tipo, idx, casos = false) =>
+  fetch(`/api/torre?tipo=${tipo}&idx=${idx}${casos ? "&casos=1" : ""}`).then((r) => r.json());
+export const combinaciones = (modelo) => post("/api/combinaciones", modelo);

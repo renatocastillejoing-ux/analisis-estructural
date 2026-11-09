@@ -4,4 +4,25 @@
 
 html, body, #root { height: 100%; }
 body { font-family: Inter, system-ui, sans-serif; }
-input, select { @apply rounded-md border border-slate-300 bg-white px-2 py-1 text-sm dark:border-ink-line dark:bg-ink-2; }
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select {
+  @apply rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-900 dark:border-ink-line dark:bg-ink-3 dark:text-slate-100;
+}
+@layer components {
+  .inp { @apply min-w-0 outline-none focus:border-teal focus:ring-2 focus:ring-teal/30; }
+}
+kbd { font-family: inherit; }
+@media print {
+  header, footer, aside[aria-label="Propiedades"], [role="toolbar"] { display: none !important; }
+}
+
+@keyframes celda { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.celda-in { animation: celda .35s ease both; }
+@keyframes aparece { from { opacity: 0; } to { opacity: 1; } }
+.aparece { animation: aparece .6s ease both; }
+@keyframes trazo { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+.trazo { stroke-dasharray: 1; stroke-dashoffset: 1; animation: trazo .9s ease forwards; }
+@keyframes flash { 0% { background-color: rgba(245, 158, 11, .55); } 100% { background-color: transparent; } }
+.flash { animation: flash .9s ease; }
+@keyframes paso-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+.paso-in > * { animation: paso-in .35s ease both; }
+@media (prefers-reduced-motion: reduce) { .celda-in, .aparece, .trazo, .flash, .paso-in > * { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; } }

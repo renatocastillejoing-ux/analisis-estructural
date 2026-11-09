@@ -4349,6 +4349,8 @@ function renderExplorer(){
 }
 function initTree(){
   const host=$("#model-tree"); if(!host) return;
+  const tg=$("#mt-toggle");
+  if(tg) tg.addEventListener("click",()=>{ const c=$("#mt-card"); const open=c.classList.toggle("open"); tg.setAttribute("aria-expanded",String(open)); tg.querySelector(".mt-chev").textContent=open?"▾":"▸"; });
   host.addEventListener("click",(ev)=>{
     const li=ev.target.closest("li[data-tree]"); if(!li) return;
     setVista("modelo");

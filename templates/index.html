@@ -9,7 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
+<body data-mode="avanzado">
 
   <!-- Skip navigation -->
   <a href="#rail" class="skip-link">Saltar al contenido principal</a>
@@ -165,11 +165,7 @@
 
         <!-- Grupo derecho: modo + calcular -->
         <div class="stepbar-right">
-          <div class="mode-toggle" id="mode-toggle" title="Modo simple: datos esenciales · Modo avanzado: masa, térmica, modal, etc.">
-            <button type="button" class="mode-btn is-active" data-mode="simple">Simple</button>
-            <button type="button" class="mode-btn" data-mode="avanzado">Avanzado</button>
-          </div>
-          <span class="stepbar-divider" aria-hidden="true"></span>
+
           <button class="btn btn-primary btn-analizar" id="btn-calcular" type="button">
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3v18M19 3v18M5 9h14M5 15h14M9 3v18M15 3v18"/></svg>
             <span>Calcular estructura</span>
@@ -211,7 +207,7 @@
 
         <!-- ===== COLUMNA EDITOR (izquierda) ===== -->
         <aside class="app-col-editor" id="rail">
-          <section class="mt-card" aria-label="Árbol del modelo"><div class="mt-head">Árbol del modelo</div><div id="model-tree"></div></section>
+          <section class="mt-card" id="mt-card" aria-label="Árbol del modelo"><button type="button" class="mt-head" id="mt-toggle" aria-expanded="false"><span>Árbol del modelo</span><span class="mt-chev">▸</span></button><div id="model-tree"></div></section>
           <div class="acc-toolbar">
             <span class="acc-toolbar-hint" id="acc-open-count"></span>
             <button class="acc-collapse-all" id="btn-collapse-all" type="button" title="Colapsar o expandir todas las secciones" aria-label="Colapsar o expandir todas las secciones">

@@ -192,3 +192,42 @@ def todos_los_pórticos():
     for k in range(N_X):
         out.append((f"Eje {k+1}", "numero", k))
     return out
+
+
+def geometria_3d():
+    """Geometría completa de la torre para el visor 3D (misma fuente que los
+    pórticos 2D). Coordenadas: x = ejes numerados, y = ejes con letra, z = altura."""
+    xs, ys = _coords_X(), _coords_Y()
+    placas = set(PLACAS)
+    columnas, vigas = [], []
+    for lvl in range(N_PISOS):
+        piso = lvl + 1
+        z0, z1 = lvl * H_PISO, (lvl + 1) * H_PISO
+        b = _col_b(piso)
+        for m in range(N_Y):
+            for k in range(N_X):
+                es_placa = (m, k) in placas
+                columnas.append({
+                    "x": xs[k], "y": ys[m], "z0": z0, "z1": z1, "piso": piso,
+                    "bx": PLACA_H if es_placa else b, "by": PLACA_B if es_placa else b,
+                    "placa": es_placa, "letra": chr(ord("A") + m), "numero": k + 1,
+                    "seccion": f"PL{piso}" if es_placa else f"C{piso}",
+                })
+        bv, hv = _viga_bh(piso)
+        for m in range(N_Y):                 # vigas en dirección X (pórticos de letra)
+            for k in range(N_X - 1):
+                vigas.append({"x0": xs[k], "y0": ys[m], "x1": xs[k + 1], "y1": ys[m], "z": z1,
+                              "b": bv, "h": hv, "piso": piso, "dir": "x",
+                              "letra": chr(ord("A") + m), "numero": None, "seccion": f"V{piso}"})
+        for k in range(N_X):                 # vigas en dirección Y (pórticos numerados)
+            for m in range(N_Y - 1):
+                vigas.append({"x0": xs[k], "y0": ys[m], "x1": xs[k], "y1": ys[m + 1], "z": z1,
+                              "b": bv, "h": hv, "piso": piso, "dir": "y",
+                              "letra": None, "numero": k + 1, "seccion": f"V{piso}"})
+    return {
+        "xs": xs, "ys": ys, "n_pisos": N_PISOS, "h_piso": H_PISO,
+        "ejes_x": [str(k + 1) for k in range(N_X)],
+        "ejes_y": [chr(ord("A") + m) for m in range(N_Y)],
+        "columnas": columnas, "vigas": vigas,
+        "supuestos": {"cm": CM_AREA, "cv": CV_AREA, "placa": [PLACA_B, PLACA_H]},
+    }

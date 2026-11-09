@@ -506,7 +506,8 @@ def resolver_combinaciones(datos):
             for cn, f in fac.items():
                 if cn in res_casos:
                     ed = res_casos[cn]["elem"][nom]
-                    Mc += f*ed["M"]; Vc += f*ed["V"]; Nc += f*ed["N"]
+                    f = float(f)
+                    Mc += f*np.asarray(ed["M"]); Vc += f*np.asarray(ed["V"]); Nc += f*np.asarray(ed["N"])
             e = env[nom]
             e["Mmax"] = np.maximum(e["Mmax"], Mc); e["Mmin"] = np.minimum(e["Mmin"], Mc)
             e["Vmax"] = np.maximum(e["Vmax"], Vc); e["Vmin"] = np.minimum(e["Vmin"], Vc)

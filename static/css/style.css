@@ -1889,3 +1889,52 @@ kbd {
 :root[data-theme="dark"] .nav-btn { color:rgba(228,233,243,.7); }
 :root[data-theme="dark"] .nav-btn:hover { color:var(--ml-navy); }
 :root[data-theme="dark"] .nav-btn.is-active { background:#243049; color:#9ED3DE; }
+
+/* v3: sin conmutador Simple/Avanzado: todo el contenido visible, sin etiquetas AV */
+body[data-mode] .adv-only { display:revert !important; }
+body[data-mode="avanzado"] .acc.adv-only > .acc-head .acc-title::after,
+body[data-mode="avanzado"] .field.adv-only > label::after,
+body[data-mode="avanzado"] .switch.adv-only .switch-label::after { content:none !important; }
+/* Árbol del modelo compacto: una línea hasta que se despliega */
+.mt-card { margin:8px 10px 0; }
+.mt-head { width:100%; border:0; background:transparent; font:inherit; cursor:pointer; display:flex; align-items:center; justify-content:space-between; }
+.mt-chev { font-size:11px; color:var(--ml-ink-soft); }
+#model-tree { display:none; }
+.mt-card.open #model-tree { display:block; }
+
+/* Modo oscuro: textos secundarios y etiquetas legibles */
+:root[data-theme="dark"] .muted,
+:root[data-theme="dark"] .hint,
+:root[data-theme="dark"] .convencion-leyenda,
+:root[data-theme="dark"] .acc-group-sub,
+:root[data-theme="dark"] .wf-desc,
+:root[data-theme="dark"] .stepbar-brand,
+:root[data-theme="dark"] .sb-item,
+:root[data-theme="dark"] .props-subtitle,
+:root[data-theme="dark"] .sb-coords,
+:root[data-theme="dark"] .acc-toolbar-hint,
+:root[data-theme="dark"] .res-meta,
+:root[data-theme="dark"] .section-title + p,
+:root[data-theme="dark"] .field label,
+:root[data-theme="dark"] .switch-label,
+:root[data-theme="dark"] .count,
+:root[data-theme="dark"] .sec-row1 select,
+:root[data-theme="dark"] .acc-title,
+:root[data-theme="dark"] .props-title,
+:root[data-theme="dark"] .wf-label,
+:root[data-theme="dark"] .model-steps .wf-step { color:rgba(228,233,243,.78); }
+:root[data-theme="dark"] .switch-label .muted,
+:root[data-theme="dark"] .acc-title .muted { color:rgba(228,233,243,.55); }
+:root[data-theme="dark"] .acc-group-label,
+:root[data-theme="dark"] .acc-group-label span { color:#9ED3DE; }
+:root[data-theme="dark"] .wf-step.is-active .wf-label { color:#9ED3DE; }
+:root[data-theme="dark"] .wf-step { background:transparent; }
+:root[data-theme="dark"] .model-steps { background:#1B2435; border-color:var(--ml-border); }
+:root[data-theme="dark"] .kpi-label,
+:root[data-theme="dark"] .kpi-unit { color:rgba(228,233,243,.7); }
+:root[data-theme="dark"] .tbl td,
+:root[data-theme="dark"] .combo-tabla td { color:var(--ml-navy); border-color:var(--ml-border); }
+:root[data-theme="dark"] .tbl tbody tr:hover td { background:#1F2B40; }
+:root[data-theme="dark"] .btn-secondary { background:#1B2435; color:var(--ml-navy); border-color:var(--ml-border); }
+:root[data-theme="dark"] .ham-menu, :root[data-theme="dark"] .ham-item { color:var(--ml-navy); }
+:root[data-theme="dark"] .ham-item:hover { background:#1F2B40; }

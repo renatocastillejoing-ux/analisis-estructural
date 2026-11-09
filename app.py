@@ -227,6 +227,13 @@ def api_torre_lista():
         {"nombre": n, "tipo": t, "idx": i} for n, t, i in todos_los_pórticos()]})
 
 
+@app.route("/api/torre/3d", methods=["GET"])
+def api_torre_3d():
+    """Geometría completa de la torre para el visor 3D."""
+    from core.torre_arequipa import geometria_3d
+    return jsonify({"ok": True, **geometria_3d()})
+
+
 @app.route("/api/torre", methods=["GET"])
 def api_torre():
     """Modelo de un pórtico de la torre (cargas CM/CV combinadas 1.4CM+1.7CV)."""
@@ -235,6 +242,8 @@ def api_torre():
     tipo = request.args.get("tipo", "letra")
     idx = int(request.args.get("idx", 0))
     try:
+        if request.args.get("casos") in ("1", "true"):
+            return jsonify(portico(tipo, idx))       # con casos CM y CV separados
         d = carga_combinada(portico(tipo, idx))
         return jsonify(d)
     except Exception as e:
