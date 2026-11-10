@@ -16,7 +16,45 @@ export const HERR3D = [
 export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, vista, setVista, avisar, ajusteKey }) {
   const niveles = useMemo(() => [...modelo.niveles].sort((a, b) => a.z - b.z), [modelo.niveles]);
   const escena = useMemo(() => (vista.modo === "3d" ? escena3d(modelo, { sel, nudos: true }) : null), [modelo, sel, vista.modo]);
+  const enPlanoUlt = (m, q) => {
+    if (!q) return false;
+    if (q.modo === "planta") return Math.abs(m.a[2] - q.z) < 1e-6 && Math.abs(m.b[2] - q.z) < 1e-6 || (m.tipo === "columna" || m.tipo === "placa") && (Math.abs(Math.max(m.a[2], m.b[2]) - q.z) < 1e-6);
+    const k = q.eje === "x" ? 1 : 0;
+    return Math.abs(m.a[k] - q.c) < 1e-6 && Math.abs(m.b[k] - q.c) < 1e-6;
+  };
   const [todos, setTodos] = useState(false);
+  const [ajuste, setAjuste] = useState(0.25);
+  const agregar = (tipo) => {
+    const t = tipo === "nivel" ? "Altura z del nuevo nivel (m):" : `Posición ${tipo === "x" ? "x" : "y"} del nuevo eje (m):`;
+    const v = parseFloat(prompt(t, "5")); if (!Number.isFinite(v)) return;
+    commit((m) => {
+      if (tipo === "nivel") { if (!m.niveles.some((n) => Math.abs(n.z - v) < 1e-6)) { m.niveles.push({ nombre: `Nivel ${m.niveles.length}`, z: v }); m.niveles.sort((a, b) => a.z - b.z); } }
+      else { const l = m.ejes[tipo]; if (!l.some((e) => Math.abs(e.c - v) < 1e-6)) { l.push({ nombre: tipo === "x" ? String(l.length + 1) : String.fromCharCode(65 + l.length), c: v }); l.sort((a, b) => a.c - b.c); } }
+    });
+  };
+  // planos de trabajo 2D: elevaciones de cada eje y plantas de cada nivel
+  const planos = useMemo(() => [
+    ...(modelo.ejes?.y || []).map((e) => ({ grupo: "ex", modo: "elevacion", eje: "x", c: e.c, nombre: `Eje ${e.nombre}`, det: `y = ${e.c} m` })),
+    ...(modelo.ejes?.x || []).map((e) => ({ grupo: "ey", modo: "elevacion", eje: "y", c: e.c, nombre: `Eje ${e.nombre}`, det: `x = ${e.c} m` })),
+    ...[...niveles].reverse().map((n) => ({ grupo: "pl", modo: "planta", z: n.z, nombre: n.nombre, det: `z = ${n.z} m` })),
+  ], [modelo.ejes, niveles]);
+  const igual = (q, v) => q && v && q.modo === v.modo && (q.modo === "planta" ? Math.abs(q.z - v.z) < 1e-6 : q.eje === v.eje && Math.abs(q.c - v.c) < 1e-6);
+  const idxPlano = Math.max(0, planos.findIndex((q) => igual(q, vista)));
+  const ultimo2d = planos.find((q) => igual(q, vista.ultimo)) || planos.find((q) => igual(q, vista)) || planos[0];
+  const irPlano = (q) => { if (q) setVista((v) => ({ ...v, modo: q.modo, z: q.z ?? v.z, eje: q.eje ?? v.eje, c: q.c ?? v.c, ultimo: q })); };
+  const vecino = (d) => { const act = planos[idxPlano]; if (!act) return null; const mismos = planos.filter((q) => q.grupo === act.grupo); const k = mismos.findIndex((q) => igual(q, act)); return mismos[k + d] || null; };
+  const mover = (d) => irPlano(vecino(d));
+  const [resaltarPlano, setResaltarPlano] = useState(false);
+  const moverRef = useRef(mover); moverRef.current = vista.modo !== "3d" ? mover : null;
+  useEffect(() => {
+    const h = (e) => {
+      if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName)) return;
+      if (e.key === "PageUp") { e.preventDefault(); moverRef.current?.(-1); }
+      if (e.key === "PageDown") { e.preventDefault(); moverRef.current?.(1); }
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
   const [pend3, setPend3] = useState(null);       // nudo inicial de la barra en 3D
   useEffect(() => { setPend3(null); }, [tool, vista.modo]);
   useEffect(() => {
@@ -43,24 +81,36 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
   return (
     <div className="absolute inset-0 flex flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-ink-line dark:bg-ink-2">
-        <div className="flex rounded-md bg-slate-100 p-0.5 dark:bg-ink-3" role="tablist">
-          {[["3d", "3D"], ["planta", "Planta"], ["elevacion", "Elevación"]].map(([k, l]) => (
-            <button key={k} role="tab" aria-selected={vista.modo === k} onClick={() => setVista((v) => ({ ...v, modo: k, z: v.z ?? niveles[niveles.length - 1]?.z, eje: v.eje || "x", c: v.c ?? modelo.ejes?.y?.[0]?.c ?? 0 }))}
-              className={`rounded px-2.5 py-1 ${vista.modo === k ? "bg-white font-semibold shadow dark:bg-ink-line" : ""}`}>{l}</button>
-          ))}
+        <div className="flex rounded-md bg-slate-100 p-0.5 dark:bg-ink-3" role="tablist" aria-label="Vista 2D o 3D">
+          <button role="tab" aria-selected={vista.modo !== "3d"} onClick={() => irPlano(ultimo2d)} title="Trabajar un eje o un nivel en 2D"
+            className={`rounded px-3 py-1 ${vista.modo !== "3d" ? "bg-white font-semibold shadow dark:bg-ink-line" : ""}`}>2D</button>
+          <button role="tab" aria-selected={vista.modo === "3d"} onClick={() => setVista((v) => ({ ...v, modo: "3d", ultimo: v.modo !== "3d" ? planos[idxPlano] : v.ultimo }))} title="Ver toda la estructura en 3D"
+            className={`rounded px-3 py-1 ${vista.modo === "3d" ? "bg-white font-semibold shadow dark:bg-ink-line" : ""}`}>3D</button>
         </div>
-        {vista.modo === "planta" && (<>
-          <select className="inp !py-0.5 text-xs" value={vista.z} onChange={(e) => setVista((v) => ({ ...v, z: +e.target.value }))} aria-label="Nivel">
-            {[...niveles].reverse().map((n) => <option key={n.z} value={n.z}>{n.nombre} (z = {n.z})</option>)}
+        {vista.modo !== "3d" ? (<>
+          <button onClick={() => mover(-1)} disabled={!vecino(-1)} className="rounded border border-slate-200 px-1.5 py-0.5 disabled:opacity-30 dark:border-ink-line" title="Eje o nivel anterior (RePág)" aria-label="Anterior">◀</button>
+          <select className="inp !py-0.5 text-xs font-semibold" value={idxPlano} onChange={(e) => irPlano(planos[+e.target.value])} aria-label="Eje o nivel en 2D">
+            <optgroup label="Elevaciones · pórticos en X">{planos.map((q, i) => q.grupo === "ex" && <option key={i} value={i}>{q.nombre} · {q.det}</option>)}</optgroup>
+            <optgroup label="Elevaciones · pórticos en Y">{planos.map((q, i) => q.grupo === "ey" && <option key={i} value={i}>{q.nombre} · {q.det}</option>)}</optgroup>
+            <optgroup label="Plantas · niveles">{planos.map((q, i) => q.grupo === "pl" && <option key={i} value={i}>{q.nombre} · {q.det}</option>)}</optgroup>
           </select>
-          <label className="flex items-center gap-1"><input type="checkbox" checked={todos} onChange={(e) => setTodos(e.target.checked)} className="accent-teal-600" /> Dibujar en todos los niveles</label>
-        </>)}
-        {vista.modo === "elevacion" && (
-          <select className="inp !py-0.5 text-xs" value={`${vista.eje}|${vista.c}`} onChange={(e) => { const [eje, c] = e.target.value.split("|"); setVista((v) => ({ ...v, eje, c: +c })); }} aria-label="Eje">
-            {(modelo.ejes?.y || []).map((e) => <option key={`x${e.c}`} value={`x|${e.c}`}>Eje {e.nombre} (y = {e.c})</option>)}
-            {(modelo.ejes?.x || []).map((e) => <option key={`y${e.c}`} value={`y|${e.c}`}>Eje {e.nombre} (x = {e.c})</option>)}
-          </select>
+          <button onClick={() => mover(1)} disabled={!vecino(1)} className="rounded border border-slate-200 px-1.5 py-0.5 disabled:opacity-30 dark:border-ink-line" title="Eje o nivel siguiente (AvPág)" aria-label="Siguiente">▶</button>
+          {vista.modo === "planta" && <label className="flex items-center gap-1"><input type="checkbox" checked={todos} onChange={(e) => setTodos(e.target.checked)} className="accent-teal-600" /> Dibujar en todos los niveles</label>}
+        </>) : (
+          <label className="flex items-center gap-1" title="Resalta en 3D el último eje o nivel que trabajaste en 2D">
+            <input type="checkbox" checked={resaltarPlano} onChange={(e) => setResaltarPlano(e.target.checked)} className="accent-teal-600" /> Resaltar {ultimo2d?.nombre || "el plano 2D"}
+          </label>
         )}
+        {vista.modo !== "3d" && (<>
+          <label className="flex items-center gap-1">Ajuste
+            <select className="inp !py-0.5 text-xs" value={ajuste} onChange={(e) => setAjuste(+e.target.value)} aria-label="Ajuste fuera de la grilla">
+              {[[0, "solo grilla"], [0.1, "0.10 m"], [0.25, "0.25 m"], [0.5, "0.50 m"], [1, "1.00 m"]].map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          </label>
+          <button onClick={() => agregar("x")} className="rounded border border-slate-200 px-1.5 py-0.5 dark:border-ink-line" title="Agregar un eje en X">+ Eje X</button>
+          <button onClick={() => agregar("y")} className="rounded border border-slate-200 px-1.5 py-0.5 dark:border-ink-line" title="Agregar un eje en Y">+ Eje Y</button>
+          <button onClick={() => agregar("nivel")} className="rounded border border-slate-200 px-1.5 py-0.5 dark:border-ink-line" title="Agregar un nivel">+ Nivel</button>
+        </>)}
         <span className="ml-auto text-slate-500 dark:text-slate-400">
           {vista.modo === "3d" ? "Arrastrar: girar · clic derecho: desplazar · rueda: zoom · clic: seleccionar" : "Rueda: zoom · arrastrar fondo o Espacio: desplazar · Esc: terminar"}
         </span>
@@ -68,7 +118,8 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
       <div className="relative min-h-0 flex-1">
         {vista.modo === "3d" ? (
           <Suspense fallback={<div className="p-6 text-sm text-slate-500">Cargando el visor 3D…</div>}>
-            <Visor3D escena={escena} ajusteKey={ajusteKey} onElegir={elegir3d} pendiente={pend3} />
+            <Visor3D escena={resaltarPlano && ultimo2d ? { ...escena, miembros: escena.miembros.map((m) => ({ ...m, grupos: enPlanoUlt(m, ultimo2d) ? ["plano"] : [] })) } : escena}
+              resaltar={resaltarPlano && ultimo2d ? "plano" : null} ajusteKey={ajusteKey} onElegir={elegir3d} pendiente={pend3} />
             {tool === "barra" && (
               <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-teal px-3 py-1 text-xs font-semibold text-white shadow">
                 {pend3 == null ? "Clic en el nudo inicial" : "Clic en el nudo final · Esc para terminar"}
@@ -76,7 +127,7 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
             )}
           </Suspense>
         ) : (
-          <Plano modelo={modelo} commit={commit} sel={sel} setSel={setSel} tool={tool} setTool={setTool} vista={vista} niveles={niveles} todos={todos} avisar={avisar} />
+          <Plano modelo={modelo} commit={commit} sel={sel} setSel={setSel} tool={tool} setTool={setTool} vista={vista} niveles={niveles} todos={todos} avisar={avisar} ajuste={ajuste} />
         )}
       </div>
     </div>
@@ -84,7 +135,7 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
 }
 
 /* ----------------------------- planta / elevación ----------------------------- */
-function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisar }) {
+function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisar, ajuste = 0.25 }) {
   const wrap = useRef(null), svg = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [view, setView] = useState({ s: 20, tx: 60, ty: 500 });
@@ -148,6 +199,7 @@ function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisa
     const prueba = (a, b) => { const dd = Math.hypot(a - u, b - v); if (dd < d) { d = dd; best = [a, b]; } };
     P.us.forEach((a) => P.vs.forEach((b) => prueba(a.c, b.c)));
     nudosPlano.forEach((n) => { const [a, b] = P.uv(n); prueba(a, b); });
+    if (!best && ajuste > 0) best = [Math.round(u / ajuste) * ajuste, Math.round(v / ajuste) * ajuste].map((q) => Math.round(q * 1e6) / 1e6);
     return best;
   };
 
@@ -163,7 +215,8 @@ function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisa
     commit((m) => zs.forEach((z) => {
       const pa = P.mundo(...a), pb = P.mundo(...b);
       if (z != null) { pa[2] = z; pb[2] = z; }
-      agregarBarra(m, agregarNudo3d(m, ...pa), agregarNudo3d(m, ...pb));
+      const ap = vista.modo === "planta" ? "libre" : undefined;   // en planta los nudos nuevos quedan libres (los apoyos se asignan aparte)
+      agregarBarra(m, agregarNudo3d(m, ...pa, ap), agregarNudo3d(m, ...pb, ap));
     }));
   };
 

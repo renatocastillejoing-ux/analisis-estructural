@@ -11,7 +11,7 @@ import { Arbol3D, PANELES3D, PanelEditor3D, Props3D } from "./components/Editor3
 import Lienzo3D, { HERR3D } from "./components/Lienzo3D.jsx";
 import Results3D from "./components/Results3D.jsx";
 import { DialogoCopiar, DialogoEdificio, DialogoExtraer, DialogoExtruir, DialogoInsertar, DialogoUnir } from "./components/Dialogs3D.jsx";
-import { borrarBarra, borrarNudo3d, copiarPlano, es3d, insertarPortico, limpiarNudos, modelo3dVacio, unirPlanos, validar3d } from "./model3d.js";
+import { a3d, borrarBarra, borrarNudo3d, copiarPlano, es3d, insertarPortico, limpiarNudos, modelo3dVacio, unirPlanos, validar3d } from "./model3d.js";
 import Documentos from "./components/Documentos.jsx";
 import { PasoPortico3D } from "./components/PorticoDe3D.jsx";
 import { PLANTILLAS } from "./model.js";
@@ -272,6 +272,17 @@ export default function App() {
       } else setProyecto((p) => ({ ...p, docs: p.docs.filter((x) => x.id !== id) }));
     } });
   };
+  // Convierte el documento 2D actual en un modelo 3D (Ctrl+Z vuelve al 2D) y abre la planta para dibujar.
+  const pasarA3d = () => {
+    if (tridim) return;
+    const m3 = a3d(modelo);
+    reemplazar(m3);
+    const zs = m3.niveles.map((n) => n.z);
+    setVer3d(false); setPanel(null); setVista("modelo");
+    setVista3d({ modo: "planta", z: Math.max(...zs), eje: "x", c: 0 });
+    setTool("barra");
+    avisar("Ahora es un modelo 3D: dibuja en planta con Barra (B) haciendo clic de punto a punto. Ctrl+Z vuelve al 2D.");
+  };
   const nuevoModelo = () => abrirDoc(modeloVacio(), "Pórtico 2D nuevo (documento aparte; los demás siguen abiertos).");
   const cargarModelo = (m, msg) => abrirDoc(m, msg);
   const docs2d = proyecto.docs.filter((d) => !es3d(d.modelo));
@@ -375,6 +386,7 @@ export default function App() {
       { id: "v3-planta", label: "Vista en planta", check: vista3d.modo === "planta", accion: () => { setVista3d((v) => ({ ...v, modo: "planta", z: v.z ?? Math.max(...modelo.niveles.map((n) => n.z)) })); setVista("modelo"); } },
       { id: "v3-elev", label: "Vista en elevación", check: vista3d.modo === "elevacion", accion: () => { setVista3d((v) => ({ ...v, modo: "elevacion", eje: v.eje || "x", c: v.c ?? modelo.ejes?.y?.[0]?.c ?? 0 })); setVista("modelo"); } },
     ] : [
+      { id: "a3d", label: "Dibujar en 3D (convertir a modelo 3D y seguir dibujando)", accion: pasarA3d, claves: "cuadrado conectar unir vigas planta 3d" },
       { id: "t-3d", label: ver3d ? "Volver al dibujo 2D" : "Ver el pórtico en 3D (girar)", accion: () => { setVer3d((v) => !v); setVista("modelo"); }, claves: "rotar orbitar" },
       "sep",
       ...HERRAMIENTAS.map((h) => ({ id: `t-${h.id}`, label: h.label, atajo: h.kbd, icono: h.icon, check: tool === h.id, accion: () => { setTool(h.id); setVista("modelo"); } })),
@@ -542,12 +554,14 @@ export default function App() {
               )}
               {!ver3d && <BarraHerramientas tool={tool} setTool={setTool} capas={capas} setCapas={setCapas} snap={snap} setSnap={setSnap}
                 deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} />}
+              <button onClick={pasarA3d} title="Convierte este pórtico en un modelo 3D para dibujar fuera del plano (vigas en planta, otros pórticos…). Ctrl+Z vuelve al 2D."
+                className="absolute right-32 top-3 rounded-lg bg-teal px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-teal-dark">✎ Dibujar en 3D</button>
               <div className="absolute right-3 top-3 flex rounded-lg border border-slate-200 bg-white/95 p-0.5 text-xs shadow dark:border-ink-line dark:bg-ink-2/95" role="tablist" aria-label="Dibujo 2D o vista 3D">
                 {[[false, "2D"], [true, "3D"]].map(([v, l]) => (
                   <button key={l} role="tab" aria-selected={ver3d === v} onClick={() => setVer3d(v)} className={`rounded-md px-3 py-1 ${ver3d === v ? "bg-teal font-semibold text-white" : ""}`}>{l}</button>
                 ))}
               </div>
-              {ver3d && <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/90 px-2 py-1 text-[11px] text-slate-600 shadow dark:bg-ink-2/90 dark:text-slate-300">Arrastrar: girar · clic derecho: desplazar · rueda: zoom · para editar vuelve a 2D</div>}
+              {ver3d && <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/90 px-2 py-1 text-[11px] text-slate-600 shadow dark:bg-ink-2/90 dark:text-slate-300">Arrastrar: girar · clic derecho: desplazar · rueda: zoom · para dibujar fuera del plano pulsa «Dibujar en 3D»</div>}
             </main>
 
             <div className="hidden lg:flex">

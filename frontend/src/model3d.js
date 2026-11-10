@@ -296,3 +296,23 @@ export function porticosDe(m) {
     ...(m.ejes?.x || []).map((e) => ({ eje: "y", c: e.c, nombre: `Eje ${e.nombre}`, det: `pórtico en Y · x = ${e.c} m` })),
   ];
 }
+
+// Convierte un pórtico 2D en un modelo 3D (mismo pórtico en el plano y = 0) para seguir dibujando fuera del plano.
+export function a3d(m2) {
+  const m = modelo3dVacio(m2.nombre);
+  const zmin = Math.min(0, ...m2.nudos.map((n) => +n.y));
+  m.ejes = { x: [], y: [] };
+  m.niveles = [{ nombre: "Base", z: r6(zmin) }];
+  m.secciones = []; m.materiales = [];
+  insertarPortico(m, m2, { angulo: 0, x0: 0, y0: 0, z0: 0 });
+  m.material = m.materiales[0]?.nombre;
+  m.secc_col = m2.secciones[0]?.nombre;
+  m.secc_viga = m2.secciones[m2.secciones.length - 1]?.nombre;
+  if (m.ejes.y.length < 2) m.ejes.y.push({ nombre: LETRA(m.ejes.y.length), c: 5 });
+  m.ejes.y.forEach((e, k) => { e.nombre = LETRA(k); });
+  m.peso_propio = !!m2.peso_propio;
+  m.diafragma = false;
+  m.sismo.activo = false;
+  m.cargas_area = [];
+  return m;
+}
