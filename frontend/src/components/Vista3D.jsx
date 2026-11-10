@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import Visor3D, { escenaModelo, escenaTorre } from "./Visor3D.jsx";
+import { es3d, escena3d } from "../model3d.js";
 
 // Vista 3D: el modelo actual extruido con sus secciones reales, o la Torre de Arequipa completa.
-export default function Vista3D({ modelo, onAbrirPortico }) {
+export default function Vista3D({ modelo, onAbrirPortico, onAbrirTorre3d }) {
   const [fuente, setFuente] = useState("modelo");
   const [torre, setTorre] = useState(null);
   const [error, setError] = useState("");
@@ -19,7 +20,7 @@ export default function Vista3D({ modelo, onAbrirPortico }) {
     fetch("/api/torre/3d").then((r) => r.json()).then((d) => (d.ok ? setTorre(d) : setError(d.error || "No se pudo leer la torre."))).catch((e) => setError(String(e)));
   }, [fuente, torre]);
 
-  const escena = useMemo(() => (fuente === "torre" ? (torre ? escenaTorre(torre) : null) : escenaModelo(modelo)), [fuente, torre, modelo]);
+  const escena = useMemo(() => (fuente === "torre" ? (torre ? escenaTorre(torre) : null) : es3d(modelo) ? escena3d(modelo) : escenaModelo(modelo)), [fuente, torre, modelo]);
   useEffect(() => { setEje(""); setElegido(null); setPisoMax(99); }, [fuente]);
 
   const npisos = escena?.pisos || 0;
@@ -59,6 +60,9 @@ export default function Vista3D({ modelo, onAbrirPortico }) {
           <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">Arrastrar: girar · clic derecho o Shift+arrastrar: desplazar · rueda: zoom.</p>
         </div>
 
+        {fuente === "torre" && (
+          <button onClick={onAbrirTorre3d} className="rounded-md bg-teal px-3 py-2 text-xs font-semibold text-white hover:bg-teal-dark">Abrir la torre como modelo 3D editable y calcularla en 3D</button>
+        )}
         {fuente === "torre" && torre && (<>
           <div>
             <h3 className="mb-1 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Resaltar pórtico</h3>

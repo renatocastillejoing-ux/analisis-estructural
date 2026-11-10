@@ -6,14 +6,31 @@ import Results from "./components/Results.jsx";
 import Paso from "./components/Paso.jsx";
 import Historial from "./components/Historial.jsx";
 const Vista3D = lazy(() => import("./components/Vista3D.jsx"));
+const Visor2D3D = lazy(() => import("./components/Visor2D3D.jsx"));
+import { Arbol3D, PANELES3D, PanelEditor3D, Props3D } from "./components/Editor3D.jsx";
+import Lienzo3D, { HERR3D } from "./components/Lienzo3D.jsx";
+import Results3D from "./components/Results3D.jsx";
+import { DialogoCopiar, DialogoEdificio, DialogoExtraer, DialogoExtruir, DialogoInsertar, DialogoUnir } from "./components/Dialogs3D.jsx";
+import { borrarBarra, borrarNudo3d, copiarPlano, es3d, insertarPortico, limpiarNudos, modelo3dVacio, unirPlanos, validar3d } from "./model3d.js";
+import Documentos from "./components/Documentos.jsx";
+import { PasoPortico3D } from "./components/PorticoDe3D.jsx";
+import { PLANTILLAS } from "./model.js";
 import { BuscadorComandos, MenuBar } from "./components/MenuBar.jsx";
 import { DialogoAtajos, DialogoConfirmar, DialogoGenerador, DialogoPlantillas, DialogoTorre } from "./components/Dialogs.jsx";
-import { calcular, combinaciones, torreModelo } from "./api.js";
+import { calcular, calcular3d, combinaciones, extraerPortico, torre3dModelo, torreModelo } from "./api.js";
 import { agregarElemento, agregarNudo, borrarElemento, borrarNudo, modeloEjemplo, modeloVacio, nextId } from "./model.js";
 
 const CLAVE = "ae_react_modelo";
 const VISTAS = [["modelo", "Modelo"], ["3d", "3D"], ["resultados", "Resultados"], ["paso", "Paso a paso"], ["historial", "Historial"]];
 const SNAPS = [[0, "Libre"], [0.05, "0.05 m"], [0.1, "0.10 m"], [0.25, "0.25 m"], [0.5, "0.50 m"], [1, "1.00 m"]];
+
+const CLAVE_PROY = "ae_react_proyecto";
+const uid = () => Math.random().toString(36).slice(2, 10);
+function proyectoInicial() {
+  try { const s = localStorage.getItem(CLAVE_PROY); if (s) { const p = JSON.parse(s); if (p?.docs?.length && p.docs.some((d) => d.id === p.activo)) return p; } } catch { /* sin almacenamiento */ }
+  const id = uid();
+  return { docs: [{ id, modelo: modeloInicial() }], activo: id };
+}
 
 function modeloInicial() {
   try { const s = localStorage.getItem(CLAVE); if (s) { const m = JSON.parse(s); if (m?.nudos) return m; } } catch { /* sin almacenamiento */ }
@@ -48,7 +65,8 @@ const archivo = (m) => (m.nombre || "modelo").replace(/[^\wáéíóúñ\- ]+/gi,
 
 export default function App() {
   // ---------- modelo con deshacer / rehacer ----------
-  const [hist, setHist] = useState(() => ({ past: [], present: modeloInicial(), future: [] }));
+  const [proyecto, setProyecto] = useState(proyectoInicial);
+  const [hist, setHist] = useState(() => ({ past: [], present: proyecto.docs.find((d) => d.id === proyecto.activo).modelo, future: [] }));
   const modelo = hist.present;
   const commit = useCallback((fn) => setHist((h) => {
     const m = structuredClone(h.present); fn(m);
@@ -85,6 +103,13 @@ export default function App() {
   const [modeloCalculado, setModeloCalculado] = useState(null);
   const [combos, setCombos] = useState(null);
   const [guardado, setGuardado] = useState(true);
+  const [res3d, setRes3d] = useState(null);
+  const [err3d, setErr3d] = useState(null);
+  const [vista3d, setVista3d] = useState({ modo: "3d" });
+  const [ver3d, setVer3d] = useState(false);              // pórtico 2D visto en 3D
+  const [paso3d, setPaso3d] = useState(null);             // pórtico del 3D elegido para el paso a paso
+  const resRef = useRef({});                              // resultados guardados por documento
+  const tridim = es3d(modelo);
   const buscador = useRef(null);
   const importar = useRef(null);
 
@@ -98,10 +123,13 @@ export default function App() {
 
   // autoguardado en este navegador
   useEffect(() => {
-    setGuardado(false);
-    const t = setTimeout(() => { try { localStorage.setItem(CLAVE, JSON.stringify(modelo)); setGuardado(true); } catch { /* lleno o bloqueado */ } }, 400);
-    return () => clearTimeout(t);
+    setProyecto((p) => ({ ...p, docs: p.docs.map((d) => (d.id === p.activo ? { ...d, modelo } : d)) }));
   }, [modelo]);
+  useEffect(() => {
+    setGuardado(false);
+    const t = setTimeout(() => { try { localStorage.setItem(CLAVE_PROY, JSON.stringify(proyecto)); setGuardado(true); } catch { /* lleno o bloqueado */ } }, 500);
+    return () => clearTimeout(t);
+  }, [proyecto]);
 
   // si la selección deja de existir (deshacer, borrar), se limpia
   useEffect(() => {
@@ -110,13 +138,24 @@ export default function App() {
     if (!existe) setSel(null);
   }, [modelo, sel]);
 
-  const validacion = useMemo(() => validar(modelo), [modelo]);
-  const desactualizado = resultado && modeloCalculado !== modelo;
+  const validacion = useMemo(() => (tridim ? validar3d(modelo) : validar(modelo)), [modelo, tridim]);
+  const desactualizado = (tridim ? res3d : resultado) && modeloCalculado !== modelo;
 
   // ---------- acciones ----------
   const ejecutarCalculo = useCallback(async () => {
     if (validacion.errores.length) { avisar(validacion.errores[0], "err"); return; }
     setCalculando(true); setError(null);
+    if (tridim) {
+      setErr3d(null);
+      try {
+        const { ok, data } = await calcular3d(modelo);
+        if (!ok || !data.ok) { setErr3d(data.error || "No se pudo calcular el modelo 3D"); setRes3d(null); }
+        else { setRes3d(data); setModeloCalculado(modelo); avisar(`Modelo 3D resuelto: ${data.resumen.n_resuelto} GDL en ${data.resumen.t_total} s.`); }
+        setVista("resultados");
+      } catch (e) { setErr3d("No hay conexión con el servidor de cálculo: " + e); setVista("resultados"); }
+      finally { setCalculando(false); }
+      return;
+    }
     try {
       const { ok, data } = await calcular(modelo);
       if (!ok || !data.ok) { setError(data.error || "No se pudo calcular"); setResultado(null); }
@@ -124,7 +163,7 @@ export default function App() {
       setVista("resultados");
     } catch (e) { setError("No hay conexión con el servidor de cálculo: " + e); setVista("resultados"); }
     finally { setCalculando(false); }
-  }, [modelo, validacion, avisar]);
+  }, [modelo, validacion, avisar, tridim]);
 
   const ejecutarCombos = useCallback(async () => {
     const casos = modelo.casos || [];
@@ -151,9 +190,10 @@ export default function App() {
 
   const borrarSel = useCallback(() => {
     if (!sel) return;
-    commit((m) => (sel.tipo === "nudo" ? borrarNudo(m, sel.id) : borrarElemento(m, sel.id)));
+    if (es3d(modelo)) commit((m) => (sel.tipo === "nudo" ? borrarNudo3d(m, sel.id) : borrarBarra(m, sel.id)));
+    else commit((m) => (sel.tipo === "nudo" ? borrarNudo(m, sel.id) : borrarElemento(m, sel.id)));
     setSel(null);
-  }, [sel, commit]);
+  }, [sel, commit, modelo]);
 
   const abrirPanel = useCallback((p) => { setPanel(p); setVista("modelo"); }, []);
   const confirmar = useCallback((c) => setConfirmacion(c), []);
@@ -165,8 +205,7 @@ export default function App() {
     f.text().then((t) => {
       const m = JSON.parse(t);
       if (!Array.isArray(m.nudos) || !Array.isArray(m.elementos)) throw new Error("no tiene nudos y elementos");
-      reemplazar({ ...modeloVacio(), ...m });
-      avisar(`«${m.nombre || f.name}» importado: ${m.nudos.length} nudos, ${m.elementos.length} elementos.`);
+      abrirDoc(m.tipo === "3d" ? m : { ...modeloVacio(), ...m }, `«${m.nombre || f.name}» importado como documento nuevo: ${m.nudos.length} nudos, ${m.elementos.length} elementos.`);
     }).catch((e) => avisar("El archivo no es un modelo válido: " + e.message, "err"));
   };
   const exportarMemoria = () => {
@@ -185,17 +224,107 @@ export default function App() {
     const y0 = Math.min(...m.nudos.map((n) => +n.y));
     m.nudos.forEach((n) => { if (Math.abs(n.y - y0) < 1e-9) n.apoyo = tipo; });
   });
-  const nuevoModelo = () => confirmar({ titulo: "Nuevo modelo", texto: "Se vaciará el modelo actual. Puedes recuperarlo con Deshacer (Ctrl+Z) o exportarlo antes.", accion: "Empezar vacío", onAceptar: () => { reemplazar(modeloVacio()); setPanel(null); } });
-  const cargarModelo = (m, msg) => { reemplazar(m); setDialogo(null); setVista("modelo"); setResultado(null); setCombos(null); avisar(msg || `«${m.nombre}» cargado: ${m.nudos.length} nudos, ${m.elementos.length} elementos.`); };
+  // ---------- documentos del proyecto (pórticos 2D y modelos 3D abiertos a la vez) ----------
+  const guardarRes = () => { resRef.current[proyecto.activo] = { resultado, error, combos, res3d, err3d, modeloCalculado }; };
+  const restaurarRes = (id) => {
+    const r = resRef.current[id] || {};
+    setResultado(r.resultado || null); setError(r.error || null); setCombos(r.combos || null);
+    setRes3d(r.res3d || null); setErr3d(r.err3d || null); setModeloCalculado(r.modeloCalculado || null);
+  };
+  const prepararVista = () => { setSel(null); setPanel(null); setDialogo(null); setVer3d(false); setVista3d({ modo: "3d" }); setPaso3d(null); setFitKey((k) => k + 1); setTool("select"); };
+  const cambiarDoc = (id) => {
+    if (id === proyecto.activo) return;
+    const d = proyecto.docs.find((x) => x.id === id); if (!d) return;
+    guardarRes();
+    setProyecto((p) => ({ ...p, activo: id }));
+    setHist({ past: [], present: d.modelo, future: [] });
+    restaurarRes(id); prepararVista();
+    if (vista === "historial") setVista("modelo");
+  };
+  const abrirDoc = (m, msg) => {
+    const id = uid();
+    guardarRes();
+    setProyecto((p) => ({ docs: [...p.docs, { id, modelo: m }], activo: id }));
+    setHist({ past: [], present: m, future: [] });
+    restaurarRes(id); prepararVista(); setVista("modelo");
+    avisar(msg || `«${m.nombre}» abierto como documento nuevo: ${m.nudos.length} nudos, ${m.elementos.length} elementos.`);
+    return id;
+  };
+  const modificarDoc = (id, fn, msg) => {
+    const d = proyecto.docs.find((x) => x.id === id); if (!d) return;
+    const m = structuredClone(d.modelo); fn(m);
+    guardarRes();
+    setProyecto((p) => ({ ...p, docs: p.docs.map((x) => (x.id === id ? { ...x, modelo: m } : x)), activo: id }));
+    setHist({ past: [d.modelo], present: m, future: [] });
+    restaurarRes(id); prepararVista(); setVista("modelo");
+    if (msg) avisar(msg);
+  };
+  const cerrarDoc = (id) => {
+    const d = proyecto.docs.find((x) => x.id === id);
+    confirmar({ titulo: "Cerrar documento", texto: `Se cerrará «${d?.modelo?.nombre}». Si no lo exportaste (Ctrl+S), se pierde.`, accion: "Cerrar", peligro: true, onAceptar: () => {
+      const resto = proyecto.docs.filter((x) => x.id !== id);
+      delete resRef.current[id];
+      if (id === proyecto.activo) {
+        const sig = resto[resto.length - 1];
+        setProyecto({ docs: resto, activo: sig.id });
+        setHist({ past: [], present: sig.modelo, future: [] });
+        restaurarRes(sig.id); prepararVista();
+      } else setProyecto((p) => ({ ...p, docs: p.docs.filter((x) => x.id !== id) }));
+    } });
+  };
+  const nuevoModelo = () => abrirDoc(modeloVacio(), "Pórtico 2D nuevo (documento aparte; los demás siguen abiertos).");
+  const cargarModelo = (m, msg) => abrirDoc(m, msg);
+  const docs2d = proyecto.docs.filter((d) => !es3d(d.modelo));
+  const docs3d = proyecto.docs.filter((d) => es3d(d.modelo));
+  const fuentesPortico = [
+    ...docs2d.filter((d) => d.id !== proyecto.activo || !tridim).map((d) => ({ id: d.id, nombre: `Documento: ${d.modelo.nombre}`, modelo: d.modelo })),
+    ...PLANTILLAS.map((pl) => ({ id: `pl:${pl.id}`, nombre: `Plantilla: ${pl.nombre}`, modelo: pl.crear() })),
+  ];
+  const insertarEnActual = ({ m2, opciones }) => {
+    const prueba = insertarPortico(structuredClone(modelo), m2, opciones);
+    commit((m) => { insertarPortico(m, m2, opciones); });
+    setDialogo(null);
+    avisar(`Pórtico «${m2.nombre}» insertado: ${prueba.barras} barras nuevas${prueba.omitidas ? ` (${prueba.omitidas} cargas puntuales no se trasladaron)` : ""}.`);
+  };
+  const insertarDesde2d = ({ destino, opciones }) => {
+    if (destino === "nuevo") {
+      const m3 = modelo3dVacio(`Modelo 3D de ${modelo.nombre}`);
+      m3.ejes = { x: [], y: [] }; m3.niveles = [{ nombre: "Base", z: 0 }];
+      m3.secciones = []; m3.materiales = [];
+      const r = insertarPortico(m3, modelo, opciones);
+      m3.material = m3.materiales[0]?.nombre;
+      m3.secc_col = modelo.secciones[0]?.nombre; m3.secc_viga = modelo.secciones[modelo.secciones.length - 1]?.nombre;
+      abrirDoc(m3, `Modelo 3D creado con «${modelo.nombre}» (${r.barras} barras). Inserta más pórticos desde Dibujar › Insertar pórtico 2D.`);
+    } else {
+      modificarDoc(destino, (m) => { insertarPortico(m, modelo, opciones); }, `«${modelo.nombre}» insertado en el modelo 3D. El pórtico 2D sigue abierto como documento.`);
+    }
+  };
+
+  async function abrirTorre3d() {
+    avisar("Cargando la torre (1 485 nudos, 3 810 barras)…");
+    try { cargarModelo(await torre3dModelo(), "Torre de Arequipa cargada como modelo 3D. Pulsa Calcular estructura para el análisis espacial."); }
+    catch (e) { avisar("No se pudo cargar la torre: " + e, "err"); }
+  }
+  async function extraer(eje, valor, factores) {
+    const { ok, data } = await extraerPortico(modelo, eje, valor, factores);
+    if (!ok || data.ok === false) { avisar(data.error || "No se pudo extraer el pórtico.", "err"); return; }
+    abrirDoc({ ...modeloVacio(), ...data }, `${data.nombre} abierto como documento 2D. El modelo 3D sigue abierto en el selector de documentos.`);
+  }
 
   // ---------- menús (también alimentan el buscador de comandos) ----------
   const menus = [
     { id: "archivo", label: "Archivo", items: [
-      { id: "nuevo", label: "Nuevo modelo", accion: nuevoModelo },
+      { id: "nuevo", label: "Nuevo pórtico 2D", accion: nuevoModelo, claves: "modelo documento" },
+      ...proyecto.docs.filter((d) => d.id !== proyecto.activo).map((d) => ({ id: `doc-${d.id}`, label: `Ir a: ${d.modelo.nombre} (${es3d(d.modelo) ? "3D" : "2D"})`, accion: () => cambiarDoc(d.id), claves: "documento cambiar abrir" })),
       { id: "plantillas", label: "Plantillas (EJ 1, EJ 2, …)…", accion: () => setDialogo("plantillas"), claves: "ejemplo ejercicio" },
       { id: "generar", label: "Generar pórtico regular…", accion: () => setDialogo("generador"), claves: "pisos vanos" },
       { id: "torre", label: "Torre de Arequipa (pórtico 2D)…", accion: () => setDialogo("torre"), claves: "edificio portico eje" },
-      { id: "torre3d", label: "Torre de Arequipa en 3D", accion: () => setVista("3d"), claves: "edificio tridimensional" },
+      "sep",
+      { id: "nuevo3d", label: "Nuevo modelo 3D (edificio en grilla)…", accion: () => setDialogo("edificio"), claves: "tridimensional espacial" },
+      { id: "insertar2d", label: "Insertar este pórtico en un modelo 3D…", accion: () => setDialogo("insertar2d"), disabled: tridim, claves: "rotar girar armar unir portico 3d" },
+      { id: "extruir", label: "Convertir este pórtico 2D en 3D (repetirlo en Y)…", accion: () => setDialogo("extruir"), disabled: tridim, claves: "extruir tridimensional" },
+      { id: "extraer", label: "Extraer un pórtico 3D al editor 2D…", accion: () => setDialogo("extraer"), disabled: !tridim, claves: "portico plano eje" },
+      { id: "torre3d", label: "Torre de Arequipa (modelo 3D completo)", accion: abrirTorre3d, claves: "edificio tridimensional" },
       "sep",
       { id: "importar", label: "Importar modelo (JSON)…", atajo: "Ctrl+O", accion: () => importar.current?.click(), claves: "abrir" },
       { id: "exportar", label: "Exportar modelo (JSON)", atajo: "Ctrl+S", accion: exportarJSON, claves: "guardar descargar" },
@@ -224,19 +353,42 @@ export default function App() {
       "sep",
       { id: "tema", label: tema === "dark" ? "Tema claro" : "Tema oscuro", accion: () => setTema((t) => (t === "dark" ? "light" : "dark")) },
     ] },
-    { id: "definir", label: "Definir", items: [
+    { id: "definir", label: "Definir", items: tridim ? [
+      { id: "p3-proyecto", label: "Proyecto y opciones…", accion: () => abrirPanel("proyecto") },
+      { id: "p3-ejes", label: "Ejes y niveles…", accion: () => abrirPanel("ejes"), claves: "grilla pisos" },
+      { id: "p3-material", label: "Materiales…", accion: () => abrirPanel("material") },
+      { id: "p3-secciones", label: "Secciones…", accion: () => abrirPanel("secciones"), claves: "viga columna placa" },
+    ] : [
       { id: "p-proyecto", label: "Proyecto y unidades…", accion: () => abrirPanel("proyecto") },
       { id: "p-material", label: "Materiales…", accion: () => abrirPanel("material"), claves: "concreto fc modulo elasticidad" },
       { id: "p-secciones", label: "Secciones…", accion: () => abrirPanel("secciones"), claves: "viga columna placa" },
       { id: "p-casos", label: "Casos de carga y combinaciones…", accion: () => abrirPanel("casos"), claves: "cm cv cs envolvente" },
     ] },
-    { id: "dibujar", label: "Dibujar", items: [
+    { id: "dibujar", label: "Dibujar", items: tridim ? [
+      ...HERR3D.map((h) => ({ id: `t3-${h.id}`, label: h.label, atajo: h.kbd, icono: h.icon, check: tool === h.id, accion: () => { setTool(h.id); setVista("modelo"); } })),
+      "sep",
+      { id: "insertar3d", label: "Insertar pórtico 2D (en X, en Y o con ángulo)…", accion: () => setDialogo("insertar3d"), claves: "armar portico rotar girar agregar" },
+      { id: "unir", label: "Unir pórticos con vigas…", accion: () => setDialogo("unir"), claves: "conectar vigas transversales" },
+      { id: "copiar", label: "Copiar un pórtico a otro eje…", accion: () => setDialogo("copiar"), claves: "replicar repetir" },
+      "sep",
+      { id: "v3-3d", label: "Vista 3D", check: vista3d.modo === "3d", accion: () => { setVista3d((v) => ({ ...v, modo: "3d" })); setVista("modelo"); } },
+      { id: "v3-planta", label: "Vista en planta", check: vista3d.modo === "planta", accion: () => { setVista3d((v) => ({ ...v, modo: "planta", z: v.z ?? Math.max(...modelo.niveles.map((n) => n.z)) })); setVista("modelo"); } },
+      { id: "v3-elev", label: "Vista en elevación", check: vista3d.modo === "elevacion", accion: () => { setVista3d((v) => ({ ...v, modo: "elevacion", eje: v.eje || "x", c: v.c ?? modelo.ejes?.y?.[0]?.c ?? 0 })); setVista("modelo"); } },
+    ] : [
+      { id: "t-3d", label: ver3d ? "Volver al dibujo 2D" : "Ver el pórtico en 3D (girar)", accion: () => { setVer3d((v) => !v); setVista("modelo"); }, claves: "rotar orbitar" },
+      "sep",
       ...HERRAMIENTAS.map((h) => ({ id: `t-${h.id}`, label: h.label, atajo: h.kbd, icono: h.icon, check: tool === h.id, accion: () => { setTool(h.id); setVista("modelo"); } })),
       "sep",
       { id: "p-nudos", label: "Tabla de nudos…", accion: () => abrirPanel("nudos") },
       { id: "p-elementos", label: "Tabla de elementos…", accion: () => abrirPanel("elementos"), claves: "barras" },
     ] },
-    { id: "asignar", label: "Asignar", items: [
+    { id: "asignar", label: "Asignar", items: tridim ? [
+      { id: "p3-cargas", label: "Cargas (losa, barras y nudos)…", accion: () => abrirPanel("cargas"), claves: "cm cv losa" },
+      { id: "p3-sismo", label: "Sismo E.030…", accion: () => abrirPanel("sismo"), claves: "sismico deriva" },
+      { id: "p3-combos", label: "Combinaciones…", accion: () => abrirPanel("combinaciones") },
+      "sep",
+      { id: "limpiar", label: "Limpiar nudos sueltos", accion: () => commit(limpiarNudos) },
+    ] : [
       { id: "p-cnudos", label: "Cargas en nudos…", accion: () => abrirPanel("cargas_nudos"), claves: "fuerza puntual" },
       { id: "p-celems", label: "Cargas en elementos…", accion: () => abrirPanel("cargas_elementos"), claves: "distribuida uniforme trapezoidal" },
       { id: "udl", label: "UDL a todas las vigas…", accion: () => udlTodasLasVigas(commit), disabled: !modelo.elementos.length },
@@ -246,7 +398,7 @@ export default function App() {
     ] },
     { id: "analizar", label: "Analizar", items: [
       { id: "calcular", label: "Calcular estructura", atajo: "Ctrl+Enter", accion: ejecutarCalculo, claves: "resolver correr" },
-      { id: "combos", label: "Calcular combinaciones y envolventes", accion: ejecutarCombos, claves: "casos envolvente cm cv" },
+      { id: "combos", label: "Calcular combinaciones y envolventes", accion: ejecutarCombos, disabled: tridim, claves: "casos envolvente cm cv" },
       { id: "pasoapaso", label: "Resolver paso a paso (método [A])", accion: () => setVista("paso"), claves: "sistematizado matriz" },
       { id: "opciones", label: "Opciones de análisis…", accion: () => abrirPanel("proyecto"), claves: "pdelta modal timoshenko" },
     ] },
@@ -259,7 +411,7 @@ export default function App() {
 
   // ---------- teclado ----------
   const teclas = useRef({});
-  teclas.current = { ejecutarCalculo, deshacer, rehacer, borrarSel, exportarJSON, sel, tool, vista };
+  teclas.current = { ejecutarCalculo, deshacer, rehacer, borrarSel, exportarJSON, sel, tool, vista, tridim };
   useEffect(() => {
     const h = (e) => {
       const t = teclas.current;
@@ -279,7 +431,7 @@ export default function App() {
       const v = { 1: "modelo", 2: "3d", 3: "resultados", 4: "paso", 5: "historial" }[e.key];
       if (v) { setVista(v); return; }
       if (t.vista !== "modelo") return;
-      const herr = HERRAMIENTAS.find((x) => x.kbd.toLowerCase() === e.key.toLowerCase());
+      const herr = (t.tridim ? HERR3D : HERRAMIENTAS).find((x) => x.kbd.toLowerCase() === e.key.toLowerCase());
       if (herr) { setTool(herr.id); return; }
       if (e.key.toLowerCase() === "f") setFitKey((k) => k + 1);
       else if (e.key.toLowerCase() === "g") setCapas((c) => ({ ...c, grilla: !c.grilla }));
@@ -303,28 +455,30 @@ export default function App() {
   }, [modelo.elementos, sel, commit, avisar]);
   const onEliminar = useCallback((tipo, id) => { commit((m) => (tipo === "nudo" ? borrarNudo(m, id) : borrarElemento(m, id))); }, [commit]);
 
-  const herramienta = HERRAMIENTAS.find((h) => h.id === tool);
+  const herramienta = (tridim ? HERR3D : HERRAMIENTAS).find((h) => h.id === tool);
+  useEffect(() => { if (!(tridim ? HERR3D : HERRAMIENTAS).some((h) => h.id === tool)) setTool("select"); }, [tridim, tool]);
 
   return (
     <div className="flex h-full flex-col bg-slate-50 text-slate-900 dark:bg-ink dark:text-slate-100">
       {/* ===== cabecera única ===== */}
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 dark:border-ink-line dark:bg-ink-2">
+      <header className="flex h-12 min-w-0 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-3 dark:border-ink-line dark:bg-ink-2">
         <div className="flex shrink-0 items-center gap-2 pr-1">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-teal text-xs font-bold text-white">AE</span>
           <span className="hidden text-sm font-semibold 2xl:inline">Análisis Estructural</span>
         </div>
+        <Documentos docs={proyecto.docs} activo={proyecto.activo} onCambiar={cambiarDoc} onCerrar={cerrarDoc} onNuevo2d={nuevoModelo} onNuevo3d={() => setDialogo("edificio")} />
         <div className="hidden lg:block"><MenuBar menus={menus} /></div>
         <div className="flex-1" />
         <BuscadorComandos ref={buscador} comandos={comandos} />
         <button onClick={ejecutarCalculo} disabled={calculando} title={validacion.errores[0] || "Calcular estructura (Ctrl+Enter)"}
           className="flex h-8 shrink-0 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white hover:bg-teal-dark disabled:opacity-60">
-          {calculando ? "Calculando…" : "▶ Calcular estructura"}
+          {calculando ? "Calculando…" : <>▶ <span className="hidden xl:inline">Calcular estructura</span><span className="xl:hidden">Calcular</span></>}
         </button>
         <div className="mx-1 h-6 w-px bg-slate-200 dark:bg-ink-line" />
         <div className="flex shrink-0 rounded-lg bg-slate-100 p-0.5 dark:bg-ink-3" role="tablist" aria-label="Vistas">
           {VISTAS.map(([id, l]) => (
             <button key={id} role="tab" aria-selected={vista === id} onClick={() => setVista(id)}
-              className={`whitespace-nowrap rounded-md px-2.5 py-1 text-[13px] ${vista === id ? "bg-white font-semibold text-teal-dark shadow-sm dark:bg-ink-line dark:text-teal-soft" : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"}`}>
+              className={`whitespace-nowrap rounded-md px-2 py-1 text-[13px] ${vista === id ? "bg-white font-semibold text-teal-dark shadow-sm dark:bg-ink-line dark:text-teal-soft" : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"}`}>
               {l}{id === "resultados" && desactualizado && <span className="ml-1 text-amber-500" title="El modelo cambió después del último cálculo">•</span>}
             </button>
           ))}
@@ -336,7 +490,30 @@ export default function App() {
 
       {/* ===== cuerpo ===== */}
       <div className="flex min-h-0 flex-1">
-        {vista === "modelo" && (
+        {vista === "modelo" && tridim && (
+          <>
+            <aside className="hidden w-80 shrink-0 flex-col border-r border-slate-200 bg-white md:flex dark:border-ink-line dark:bg-ink-2">
+              <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-3 dark:border-ink-line">
+                {panel ? (<>
+                  <button onClick={() => setPanel(null)} className="rounded-md px-1.5 py-0.5 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Volver al árbol del modelo">←</button>
+                  <h2 className="truncate text-sm font-semibold">{PANELES3D[panel]}</h2>
+                  <button onClick={() => setPanel(null)} className="ml-auto rounded-md px-1.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Cerrar panel">✕</button>
+                </>) : <h2 className="text-sm font-semibold">Árbol del modelo 3D</h2>}
+              </div>
+              {panel && PANELES3D[panel]
+                ? <PanelEditor3D key={panel} panel={panel} modelo={modelo} commit={commit} sel={sel} setSel={setSel} />
+                : <Arbol3D modelo={modelo} sel={sel} setSel={setSel} abrirPanel={abrirPanel} irA={(v) => setVista3d((x) => ({ ...x, ...v }))} />}
+            </aside>
+            <main className="relative min-w-0 flex-1 overflow-hidden bg-slate-50 dark:bg-ink">
+              <Lienzo3D modelo={modelo} commit={commit} sel={sel} setSel={setSel} tool={tool} setTool={setTool} vista={vista3d} setVista={setVista3d} avisar={avisar} ajusteKey={fitKey} />
+              {vista3d.modo !== "3d" && <BarraHerramientas3D tool={tool} setTool={setTool} deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} />}
+            </main>
+            <div className="hidden lg:flex">
+              <Props3D modelo={modelo} sel={sel} setSel={setSel} commit={commit} abrirPanel={abrirPanel} />
+            </div>
+          </>
+        )}
+        {vista === "modelo" && !tridim && (
           <>
             <aside className="hidden w-80 shrink-0 flex-col border-r border-slate-200 bg-white md:flex dark:border-ink-line dark:bg-ink-2">
               <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-3 dark:border-ink-line">
@@ -354,11 +531,23 @@ export default function App() {
             </aside>
 
             <main className="relative min-w-0 flex-1 overflow-hidden bg-slate-50 dark:bg-ink">
-              <Canvas modelo={modelo} sel={sel} setSel={setSel} tool={tool} commit={commit} beginDrag={beginDrag} moverNudo={moverNudo}
-                fitKey={fitKey} capas={capas} snap={snap} onCursor={setCursor} onAgregarNudo={onAgregarNudo} onConectar={onConectar}
-                onEliminar={onEliminar} onZoom={setZoom} />
-              <BarraHerramientas tool={tool} setTool={setTool} capas={capas} setCapas={setCapas} snap={snap} setSnap={setSnap}
-                deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} />
+              {ver3d ? (
+                <Suspense fallback={<div className="p-6 text-sm text-slate-500">Cargando el visor 3D…</div>}>
+                  <Visor2D3D modelo={modelo} sel={sel} setSel={setSel} />
+                </Suspense>
+              ) : (
+                <Canvas modelo={modelo} sel={sel} setSel={setSel} tool={tool} commit={commit} beginDrag={beginDrag} moverNudo={moverNudo}
+                  fitKey={fitKey} capas={capas} snap={snap} onCursor={setCursor} onAgregarNudo={onAgregarNudo} onConectar={onConectar}
+                  onEliminar={onEliminar} onZoom={setZoom} />
+              )}
+              {!ver3d && <BarraHerramientas tool={tool} setTool={setTool} capas={capas} setCapas={setCapas} snap={snap} setSnap={setSnap}
+                deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} />}
+              <div className="absolute right-3 top-3 flex rounded-lg border border-slate-200 bg-white/95 p-0.5 text-xs shadow dark:border-ink-line dark:bg-ink-2/95" role="tablist" aria-label="Dibujo 2D o vista 3D">
+                {[[false, "2D"], [true, "3D"]].map(([v, l]) => (
+                  <button key={l} role="tab" aria-selected={ver3d === v} onClick={() => setVer3d(v)} className={`rounded-md px-3 py-1 ${ver3d === v ? "bg-teal font-semibold text-white" : ""}`}>{l}</button>
+                ))}
+              </div>
+              {ver3d && <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/90 px-2 py-1 text-[11px] text-slate-600 shadow dark:bg-ink-2/90 dark:text-slate-300">Arrastrar: girar · clic derecho: desplazar · rueda: zoom · para editar vuelve a 2D</div>}
             </main>
 
             <div className="hidden lg:flex">
@@ -366,7 +555,18 @@ export default function App() {
             </div>
           </>
         )}
-        {vista === "resultados" && (
+        {vista === "resultados" && tridim && (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {desactualizado && (
+              <div className="flex items-center gap-3 border-b border-amber-300 bg-amber-50 px-6 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+                El modelo cambió después de este cálculo; los resultados pueden no corresponder.
+                <button onClick={ejecutarCalculo} className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white">Recalcular</button>
+              </div>
+            )}
+            <Results3D key={res3d?.resumen?.t_total} modelo={modeloCalculado && es3d(modeloCalculado) ? modeloCalculado : modelo} res={res3d} error={err3d} onVolver={() => setVista("modelo")} onExtraer={extraer} onPaso={(eje, c) => { setPaso3d({ eje, c }); setVista("paso"); }} />
+          </div>
+        )}
+        {vista === "resultados" && !tridim && (
           <div className="flex min-h-0 flex-1 flex-col">
             {desactualizado && (
               <div className="flex items-center gap-3 border-b border-amber-300 bg-amber-50 px-6 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
@@ -378,10 +578,11 @@ export default function App() {
               onExportar={(t) => (t === "csv" ? exportarCSV() : exportarMemoria())} />
           </div>
         )}
-        {vista === "paso" && <Paso modelo={modelo} onVolver={() => setVista("modelo")} />}
+        {vista === "paso" && !tridim && <Paso modelo={modelo} onVolver={() => setVista("modelo")} />}
+        {vista === "paso" && tridim && <PasoPortico3D key={proyecto.activo} modelo={modelo} inicial={paso3d} onVolver={() => setVista("modelo")} />}
         {vista === "3d" && (
           <Suspense fallback={<div className="m-auto text-sm text-slate-500">Cargando el visor 3D…</div>}>
-          <Vista3D modelo={modelo} onAbrirPortico={async (tipo, idx) => {
+          <Vista3D modelo={modelo} onAbrirTorre3d={abrirTorre3d} onAbrirPortico={async (tipo, idx) => {
             const d = await torreModelo(tipo, idx);
             if (!d || d.ok === false) { avisar(d?.error || "No se pudo cargar el pórtico.", "err"); return; }
             cargarModelo({ ...modeloVacio(), ...d });
@@ -399,9 +600,9 @@ export default function App() {
       {/* ===== barra de estado ===== */}
       <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-slate-200 bg-white px-3 text-[11px] tabular-nums text-slate-600 dark:border-ink-line dark:bg-ink-2 dark:text-slate-300">
         <span>{herramienta?.icon} {herramienta?.label}</span>
-        <span>{cursor ? `x = ${cursor.x.toFixed(2)}  y = ${cursor.y.toFixed(2)} ${modelo.unidad_longitud}` : "—"}</span>
-        <span>Zoom {zoom.toFixed(0)} px/{modelo.unidad_longitud}</span>
-        <span>{modelo.nudos.length} nudos · {modelo.elementos.length} elementos · {modelo.cargas_nodales.length + modelo.cargas_elementos.length} cargas</span>
+        <span className={tridim ? "hidden" : ""}>{cursor ? `x = ${cursor.x.toFixed(2)}  y = ${cursor.y.toFixed(2)} ${modelo.unidad_longitud}` : "—"}</span>
+        <span className={tridim ? "hidden" : ""}>Zoom {zoom.toFixed(0)} px/{modelo.unidad_longitud}</span>
+        <span>{tridim ? `Modelo 3D · ${modelo.nudos.length} nudos · ${modelo.elementos.length} barras · ${modelo.niveles.length} niveles` : `${modelo.nudos.length} nudos · ${modelo.elementos.length} elementos · ${modelo.cargas_nodales.length + modelo.cargas_elementos.length} cargas`}</span>
         <span className="flex-1" />
         {validacion.errores.length > 0 ? (
           <span className="text-rose-600 dark:text-rose-400" title={validacion.errores.join("\n")}>⛔ {validacion.errores[0]}{validacion.errores.length > 1 ? ` (+${validacion.errores.length - 1})` : ""}</span>
@@ -415,6 +616,23 @@ export default function App() {
       {dialogo === "generador" && <DialogoGenerador onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo(m)} />}
       {dialogo === "torre" && <DialogoTorre onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo({ ...modeloVacio(), ...m })} />}
       {dialogo === "atajos" && <DialogoAtajos onCerrar={() => setDialogo(null)} />}
+      {dialogo === "edificio" && <DialogoEdificio onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo(m, `Modelo 3D «${m.nombre}» creado: ${m.nudos.length} nudos, ${m.elementos.length} barras.`)} />}
+      {dialogo === "extruir" && !tridim && <DialogoExtruir modelo={modelo} onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo(m, `«${m.nombre}» creado: ${m.nudos.length} nudos, ${m.elementos.length} barras.`)} />}
+      {dialogo === "extraer" && tridim && <DialogoExtraer modelo={modelo} onCerrar={() => setDialogo(null)} onElegir={extraer} />}
+      {dialogo === "insertar3d" && tridim && <DialogoInsertar fuentes={fuentesPortico} destino3d={modelo} onCerrar={() => setDialogo(null)} onAplicar={insertarEnActual} />}
+      {dialogo === "insertar2d" && !tridim && <DialogoInsertar fuenteFija={modelo} destinos={docs3d.map((d) => ({ id: d.id, nombre: d.modelo.nombre, modelo: d.modelo }))} onCerrar={() => setDialogo(null)} onAplicar={insertarDesde2d} />}
+      {dialogo === "unir" && tridim && <DialogoUnir modelo={modelo} onCerrar={() => setDialogo(null)} onAplicar={({ dir, c1, c2, todos, sec }) => {
+        const pares = todos ? (() => { const l = (dir === "x" ? modelo.ejes.y : modelo.ejes.x).map((e) => e.c).sort((a, b) => a - b); return l.slice(1).map((c, i) => [l[i], c]); })() : [[c1, c2]];
+        const prueba = structuredClone(modelo); const n = pares.reduce((t, [a, b]) => t + unirPlanos(prueba, dir, a, b, sec), 0);
+        commit((m) => { pares.forEach(([a, b]) => unirPlanos(m, dir, a, b, sec)); });
+        setDialogo(null); avisar(n ? `${n} vigas nuevas entre pórticos.` : "No se encontraron nudos con su par en el otro pórtico.", n ? "ok" : "err");
+      }} />}
+      {dialogo === "copiar" && tridim && <DialogoCopiar modelo={modelo} onCerrar={() => setDialogo(null)} onAplicar={({ dir, c, destinos, unir }) => {
+        const hacer = (m) => { let prev = c, t = 0; destinos.forEach((d) => { t += copiarPlano(m, dir, c, d); if (unir) unirPlanos(m, dir, prev, d, m.secc_viga); prev = d; }); return t; };
+        const n = hacer(structuredClone(modelo));
+        commit((m) => { hacer(m); });
+        setDialogo(null); avisar(`${destinos.length} copia(s) del pórtico: ${n} barras nuevas.`);
+      }} />}
       {confirmacion && <DialogoConfirmar {...confirmacion} onCerrar={() => setConfirmacion(null)} />}
 
       {toast && (
@@ -441,6 +659,21 @@ function BarraHerramientas({ tool, setTool, capas, setCapas, snap, setSnap, desh
       <select value={snap} onChange={(e) => setSnap(+e.target.value)} title="Ajuste a la grilla" aria-label="Ajuste a la grilla" className="!h-9 !w-9 cursor-pointer appearance-none !border-0 !bg-transparent !p-0 text-center text-[10px]">
         {SNAPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
+      <div className="my-0.5 border-t border-slate-200 dark:border-ink-line" />
+      <button className={b(false) + " disabled:opacity-30"} disabled={!puedeDeshacer} title="Deshacer (Ctrl+Z)" aria-label="Deshacer" onClick={deshacer}>↶</button>
+      <button className={b(false) + " disabled:opacity-30"} disabled={!puedeRehacer} title="Rehacer (Ctrl+Y)" aria-label="Rehacer" onClick={rehacer}>↷</button>
+    </div>
+  );
+}
+
+// Barra del lienzo en planta / elevación del modelo 3D.
+function BarraHerramientas3D({ tool, setTool, deshacer, rehacer, puedeDeshacer, puedeRehacer }) {
+  const b = (activo) => `grid h-9 w-9 place-items-center rounded-md text-base ${activo ? "bg-teal text-white" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-ink-3"}`;
+  return (
+    <div className="absolute left-3 top-14 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/95 p-1 shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Herramientas de dibujo 3D">
+      {HERR3D.map((h) => (
+        <button key={h.id} className={b(tool === h.id)} title={`${h.label} (${h.kbd})`} aria-label={h.label} aria-pressed={tool === h.id} onClick={() => setTool(h.id)}>{h.icon}</button>
+      ))}
       <div className="my-0.5 border-t border-slate-200 dark:border-ink-line" />
       <button className={b(false) + " disabled:opacity-30"} disabled={!puedeDeshacer} title="Deshacer (Ctrl+Z)" aria-label="Deshacer" onClick={deshacer}>↶</button>
       <button className={b(false) + " disabled:opacity-30"} disabled={!puedeRehacer} title="Rehacer (Ctrl+Y)" aria-label="Rehacer" onClick={rehacer}>↷</button>

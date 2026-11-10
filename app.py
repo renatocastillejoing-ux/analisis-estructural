@@ -227,6 +227,46 @@ def api_torre_lista():
         {"nombre": n, "tipo": t, "idx": i} for n, t, i in todos_los_pórticos()]})
 
 
+@app.route("/api/calcular3d", methods=["POST"])
+def api_calcular3d():
+    """Análisis de un pórtico espacial (6 GDL por nudo) del editor 3D."""
+    from core.analisis_3d import analizar_modelo3d
+    datos = request.get_json(force=True)
+    try:
+        return jsonify(analizar_modelo3d(datos))
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"No se pudo resolver el modelo 3D: {e}",
+                        "detalle": traceback.format_exc()}), 400
+
+
+@app.route("/api/calcular3d/portico", methods=["POST"])
+def api_calcular3d_portico():
+    """Diagramas N/V/M en el plano de un pórtico, tomados del último cálculo 3D."""
+    from core.analisis_3d import diagramas_portico
+    d = request.get_json(force=True)
+    try:
+        return jsonify(diagramas_portico(d["id_calculo"], d["caso"], d["eje"], float(d["valor"])))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@app.route("/api/modelo3d/portico", methods=["POST"])
+def api_modelo3d_portico():
+    """Extrae un pórtico plano (modelo 2D del editor) de un modelo 3D."""
+    from core.analisis_3d import portico_desde_3d
+    d = request.get_json(force=True)
+    try:
+        return jsonify(portico_desde_3d(d["modelo"], d["eje"], float(d["valor"]), d.get("factores")))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
+@app.route("/api/torre/modelo3d", methods=["GET"])
+def api_torre_modelo3d():
+    from core.torre_arequipa import modelo3d_torre
+    return jsonify(modelo3d_torre())
+
+
 @app.route("/api/torre/3d", methods=["GET"])
 def api_torre_3d():
     """Geometría completa de la torre para el visor 3D."""

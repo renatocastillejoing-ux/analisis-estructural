@@ -20,7 +20,7 @@ export function MenuBar({ menus }) {
           <button type="button" aria-haspopup="menu" aria-expanded={abierto === m.id}
             onClick={() => setAbierto((a) => (a === m.id ? null : m.id))}
             onMouseEnter={() => abierto && setAbierto(m.id)}
-            className={`rounded-md px-2.5 py-1.5 text-[13px] ${abierto === m.id ? "bg-slate-200 dark:bg-ink-3" : "hover:bg-slate-100 dark:hover:bg-ink-3"}`}>
+            className={`rounded-md px-2 py-1.5 text-[13px] ${abierto === m.id ? "bg-slate-200 dark:bg-ink-3" : "hover:bg-slate-100 dark:hover:bg-ink-3"}`}>
             {m.label}
           </button>
           {abierto === m.id && (
@@ -74,7 +74,7 @@ export const BuscadorComandos = forwardRef(function BuscadorComandos({ comandos 
   const ejecutar = (c) => { setAbierto(false); setQ(""); input.current?.blur(); c.accion(); };
 
   return (
-    <div ref={caja} className="relative w-56 xl:w-64">
+    <div ref={caja} className="relative w-36 xl:w-52 2xl:w-64">
       <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">⌕</span>
       <input ref={input} value={q} placeholder="Buscar comando…" aria-label="Buscar comando" role="combobox" aria-expanded={abierto}
         onFocus={() => setAbierto(true)}

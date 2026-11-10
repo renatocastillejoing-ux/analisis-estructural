@@ -231,3 +231,56 @@ def geometria_3d():
         "columnas": columnas, "vigas": vigas,
         "supuestos": {"cm": CM_AREA, "cv": CV_AREA, "placa": [PLACA_B, PLACA_H]},
     }
+
+
+def modelo3d_torre():
+    """La torre completa en el formato del editor 3D (core/analisis_3d.py)."""
+    from core.torre_sismo import Z, S, TP, TL, U, R, CT
+    xs, ys = _coords_X(), _coords_Y()
+    placas = set(PLACAS)
+    secs = []
+    for p in range(1, N_PISOS + 1):
+        b = _col_b(p); bv, hv = _viga_bh(p)
+        secs += [{"nombre": f"C{p}", "b": b, "h": b}, {"nombre": f"V{p}", "b": bv, "h": hv},
+                 {"nombre": f"PL{p}", "b": PLACA_H, "h": PLACA_B}]
+    secs_u = list({s["nombre"]: s for s in secs}.values())
+    nudos, nid = [], {}
+    for lv in range(N_PISOS + 1):
+        for m in range(N_Y):
+            for k in range(N_X):
+                i = len(nudos) + 1
+                nid[(k, m, lv)] = i
+                nudos.append({"id": i, "nombre": f"{chr(65+m)}{k+1}-{lv}", "x": xs[k], "y": ys[m], "z": lv * H_PISO,
+                              "apoyo": "empotrado" if lv == 0 else "libre"})
+    els = []
+    def add(i, j, sec, mat, nombre):
+        els.append({"id": len(els) + 1, "nombre": nombre, "i": i, "j": j, "seccion": sec, "material": mat})
+    for lv in range(N_PISOS):
+        p = lv + 1
+        for m in range(N_Y):
+            for k in range(N_X):
+                pl = (m, k) in placas
+                add(nid[(k, m, lv)], nid[(k, m, lv + 1)], f"PL{p}" if pl else f"C{p}", _mat_piso(p), f"{'PL' if pl else 'C'}{chr(65+m)}{k+1}-{p}")
+    for lv in range(1, N_PISOS + 1):
+        for m in range(N_Y):
+            for k in range(N_X - 1):
+                add(nid[(k, m, lv)], nid[(k + 1, m, lv)], f"V{lv}", _mat_piso(lv), f"V{chr(65+m)}{k+1}-{k+2}-{lv}")
+        for k in range(N_X):
+            for m in range(N_Y - 1):
+                add(nid[(k, m, lv)], nid[(k, m + 1, lv)], f"V{lv}", _mat_piso(lv), f"V{k+1}{chr(65+m)}-{chr(66+m)}-{lv}")
+    return {
+        "tipo": "3d", "nombre": "Torre de Arequipa", "unidad_fuerza": "tonf", "unidad_longitud": "m",
+        "ejes": {"x": [{"nombre": str(k + 1), "c": xs[k]} for k in range(N_X)],
+                 "y": [{"nombre": chr(65 + m), "c": ys[m]} for m in range(N_Y)]},
+        "niveles": [{"nombre": "Base" if lv == 0 else f"Piso {lv}", "z": lv * H_PISO} for lv in range(N_PISOS + 1)],
+        "materiales": _materiales(), "material": "H280",
+        "secciones": secs_u, "nudos": nudos, "elementos": els,
+        "casos": [{"nombre": "CM"}, {"nombre": "CV"}],
+        "cargas_area": [c for lv in range(1, N_PISOS + 1) for c in
+                        ({"z": lv * H_PISO, "caso": "CM", "q": CM_AREA}, {"z": lv * H_PISO, "caso": "CV", "q": CV_AREA})],
+        "cargas_barras": [], "cargas_nudos": [],
+        "peso_propio": True, "caso_peso_propio": "CM", "diafragma": True,
+        "sismo": {"activo": True, "Z": Z, "U": U, "S": S, "R": R, "TP": TP, "TL": TL, "CT": CT, "periodo": "norma",
+                  "caso_masa": {"CM": 1.0, "CV": 0.25}},
+        "combinaciones": [],
+    }

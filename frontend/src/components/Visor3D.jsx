@@ -29,7 +29,7 @@ export function escenaModelo(m) {
       const sec = secs[t.seccion] || secs[e.seccion] || { h: 0.3, b: 0.3, color: "#888" };
       const P = (s) => [a.x + (dx * s) / L, 0, a.y + (dz * s) / L];
       miembros.push({
-        a: P(s0), b: P(s1), w: sec.h || 0.3, d: sec.b || 0.3, wDir: [-dz / L, 0, dx / L],
+        id: e.id, a: P(s0), b: P(s1), w: sec.h || 0.3, d: sec.b || 0.3, wDir: [-dz / L, 0, dx / L],
         tipo: vertical ? "columna" : "viga", color: sec.color, piso: null, grupos: [],
         info: `${e.nombre} · ${t.seccion || e.seccion}${partes.length > 1 ? ` (tramo ${k + 1})` : ""} · L = ${(s1 - s0).toFixed(2)} m`,
       });
@@ -69,7 +69,7 @@ export function escenaTorre(g) {
 }
 
 /* ----------------------------- componente ----------------------------- */
-export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor = "tipo", verLosas = true, verEtiquetas = true, onElegir, vistaKey }) {
+export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor = "tipo", verLosas = true, verEtiquetas = true, onElegir, vistaKey, ajusteKey, controles = true, pendiente }) {
   const host = useRef(null);
   const st = useRef({});
   const [hover, setHover] = useState(null);
@@ -134,6 +134,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
     const solidos = visibles.filter(({ m }) => enGrupo(m));
     const fantasmas = visibles.filter(({ m }) => !enGrupo(m));
     const color = (m) => {
+      if (m.sel) return "#F59E0B";
       if (resaltar) return m.tipo === "placa" ? "#E11D48" : "#508C9B";
       if (colorPor === "piso" && m.piso) return new THREE.Color().setHSL(0.55 - (m.piso / (escena.pisos || 1)) * 0.5, 0.45, 0.5);
       if (colorPor === "seccion" && m.seccion) return PALETA[(parseInt(m.seccion.replace(/\D/g, "")) || 0) % PALETA.length];
@@ -165,6 +166,28 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
     instanciar(fantasmas, new THREE.MeshStandardMaterial({ transparent: true, opacity: 0.08, depthWrite: false, roughness: 1 }));
     st.current.pickable = solido;
 
+    // nudos seleccionables (para dibujar y conectar en 3D)
+    const bb = new THREE.Box3();
+    escena.miembros.forEach((m) => { bb.expandByPoint(T(m.a)); bb.expandByPoint(T(m.b)); });
+    const diag = bb.isEmpty() ? 10 : bb.getSize(new THREE.Vector3()).length();
+    const kEt = Math.min(1, Math.max(0.3, diag / 70));
+    st.current.nudos = null;
+    if (escena.nudos?.length) {
+      const r = Math.max(0.06, diag / 260);
+      const mesh = new THREE.InstancedMesh(new THREE.SphereGeometry(r, 12, 8), new THREE.MeshStandardMaterial({ roughness: 0.5 }), escena.nudos.length);
+      const m4 = new THREE.Matrix4();
+      escena.nudos.forEach((n, i) => {
+        m4.makeTranslation(...T(n.p).toArray());
+        mesh.setMatrixAt(i, m4);
+        mesh.setColorAt(i, new THREE.Color(n.sel || n.id === pendiente ? "#F59E0B" : n.apoyo && n.apoyo !== "libre" ? "#E11D48" : "#0F172A"));
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.userData.lista = escena.nudos;
+      raiz.add(mesh);
+      st.current.nudos = mesh;
+    }
+
     // losas
     if (verLosas) escena.losas.filter((l) => l.piso <= pisoMax).forEach((l) => {
       const g = new THREE.BoxGeometry(l.x1 - l.x0 + 0.6, 0.18, l.y1 - l.y0 + 0.6);
@@ -185,7 +208,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       mesh.position.copy(T(a.p)).add(new THREE.Vector3(0, -0.08, 0));
       raiz.add(mesh);
     });
-    // etiquetas
+    // etiquetas (tamaño proporcional al modelo)
     if (verEtiquetas) escena.etiquetas.filter((e) => !e.piso || e.piso <= pisoMax).forEach((e) => {
       const cv = document.createElement("canvas"); cv.width = 128; cv.height = 128;
       const cx = cv.getContext("2d");
@@ -195,10 +218,10 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       cx.fillStyle = "#fff"; cx.font = "bold 56px Inter, sans-serif"; cx.textAlign = "center"; cx.textBaseline = "middle";
       cx.fillText(e.texto, 64, 68);
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv) }));
-      sp.position.copy(T(e.p)); sp.scale.setScalar(e.piso ? 1.9 : 2.6);
+      sp.position.copy(T(e.p)); sp.scale.setScalar((e.piso ? 1.9 : 2.6) * kEt);
       raiz.add(sp);
     });
-  }, [escena, visibles, resaltar, colorPor, verLosas, verEtiquetas, pisoMax]);
+  }, [escena, visibles, resaltar, colorPor, verLosas, verEtiquetas, pisoMax, pendiente]);
 
   // encuadre de cámara
   const encuadrar = (dir = "iso") => {
@@ -215,18 +238,26 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
     camera.near = dist / 200; camera.far = dist * 20; camera.updateProjectionMatrix();
     controls.update();
   };
-  useEffect(() => { encuadrar(vistaKey?.dir); }, [escena, vistaKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const claveAjuste = ajusteKey ?? escena;
+  const [vInt, setVInt] = useState(null);
+  useEffect(() => { encuadrar(vistaKey?.dir); }, [claveAjuste, vistaKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (vInt) encuadrar(vInt.dir); }, [vInt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // selección con el puntero
   const ray = useRef(new THREE.Raycaster());
   const elegirEn = (e) => {
-    const { camera, pickable, renderer } = st.current;
-    if (!pickable) return null;
+    const { camera, pickable, renderer, nudos } = st.current;
+    if (!pickable && !nudos) return null;
     const r = renderer.domElement.getBoundingClientRect();
     const p = new THREE.Vector2(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     ray.current.setFromCamera(p, camera);
-    const hit = ray.current.intersectObject(pickable)[0];
-    return hit ? pickable.userData.lista[hit.instanceId] : null;
+    const hn = nudos ? ray.current.intersectObject(nudos)[0] : null;
+    const hm = pickable ? ray.current.intersectObject(pickable)[0] : null;
+    if (hn && (!hm || hn.distance <= hm.distance + 0.6)) {
+      const n = nudos.userData.lista[hn.instanceId];
+      return { m: { _nudo: true, id: n.id, info: n.info || `Nudo ${n.nombre ?? n.id}` } };
+    }
+    return hm ? pickable.userData.lista[hm.instanceId] : null;
   };
   const abajo = useRef(null);
 
@@ -243,6 +274,13 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
         onPointerLeave={() => setHover(null)} />
       {hover && (
         <div className="pointer-events-none absolute z-10 rounded-md bg-slate-900/90 px-2 py-1 text-xs text-white shadow" style={{ left: hover.X + 14, top: hover.Y + 10 }}>{hover.texto}</div>
+      )}
+      {controles && (
+        <div className="absolute bottom-3 right-3 z-10 flex overflow-hidden rounded-lg border border-slate-200 bg-white/95 text-xs shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Cámara">
+          {[["iso", "Iso"], ["planta", "Planta"], ["frente", "Frente"], ["lado", "Lado"]].map(([k, l]) => (
+            <button key={k} onClick={() => setVInt({ dir: k, t: Date.now() })} className="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-ink-3" title={`Vista ${l.toLowerCase()}`}>{l}</button>
+          ))}
+        </div>
       )}
     </div>
   );
