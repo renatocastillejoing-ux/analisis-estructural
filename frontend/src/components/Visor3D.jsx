@@ -462,7 +462,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       {controles && (
         <>
           {/* gizmo de navegación: clic en un eje para mirar desde él */}
-          <svg ref={(g) => { st.current.gizmo = g; }} width="80" height="80" viewBox="0 0 80 80" className="absolute right-3 top-3 z-10 select-none" aria-label="Orientación de la cámara">
+          <svg ref={(g) => { st.current.gizmo = g; }} width="80" height="80" viewBox="0 0 80 80" className="absolute right-3 top-14 z-10 select-none" aria-label="Orientación de la cámara">
             <circle cx="40" cy="40" r="38" className="fill-white/50 dark:fill-ink-2/50" />
             {[["x", "#E5484D", "lado", "izq"], ["y", "#46A758", "atras", "frente"], ["z", "#3E8ED0", "planta", "bajo"]].map(([k, col, d, dn]) => (
               <g key={k}>
