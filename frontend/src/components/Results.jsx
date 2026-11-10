@@ -134,11 +134,12 @@ function DeformadaRes({ diag }) {
   const [esc, setEsc] = useState(1);
   const g = useMemo(() => {
     if (!els.length) return null;
-    const xs = els.flatMap((e) => [e.xi, e.xj]), ys = els.flatMap((e) => [e.yi, e.yj]);
+    const xs = els.flatMap((e) => [e.xi, e.xj]).filter(Number.isFinite), ys = els.flatMap((e) => [e.yi, e.yj]).filter(Number.isFinite);
+    if (!xs.length || !ys.length) return null;
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     const sx = maxX - minX || 1, sy = maxY - minY || 1, s = Math.min((W - 2 * M) / sx, (H - 2 * M) / sy);
     const ox = (W - sx * s) / 2 - minX * s, oy = (H - sy * s) / 2 + maxY * s;
-    const dmax = Math.max(1e-12, ...els.flatMap((e) => (e.defx || []).map((v, k) => Math.hypot(v, e.defy?.[k] || 0))));
+    const dmax = Math.max(1e-12, ...els.flatMap((e) => (e.defx || []).map((v, k) => Math.hypot(v, e.defy?.[k] || 0)).filter(Number.isFinite)));
     return { X: (x) => ox + x * s, Y: (y) => oy - y * s, f: (0.08 * Math.max(sx, sy)) / dmax };
   }, [els]);
   if (!g) return <p className="text-sm text-slate-500">Sin datos.</p>;

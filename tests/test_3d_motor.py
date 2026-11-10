@@ -137,3 +137,18 @@ def test_espectral_escalado_al_80_por_ciento():
     assert "SDX" in r["barras"] and max(r["barras"]["SDX"]["M"]) > 0
     # equilibrio de gravedad con todo lo nuevo activo
     assert math.isclose(r["equilibrio"]["CM"]["Rz"], -r["aplicado"]["CM"]["Fz"], rel_tol=1e-9)
+
+
+def test_mecanismo_3d_se_explica():
+    m2 = _base2d()
+    for n in m2["nudos"]:
+        if n.get("apoyo"): n["apoyo"] = "articulado"
+    for e in m2["elementos"][3:]:
+        e["release_i"] = e["release_j"] = True
+    m = _a3d(m2, [])
+    try:
+        analizar_modelo3d(m)
+    except ValueError as ex:
+        assert "inestable" in str(ex)
+        return
+    raise AssertionError("debía detectar el mecanismo")

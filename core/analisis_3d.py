@@ -171,6 +171,48 @@ _CERO = {"q1": np.zeros(3), "q2": np.zeros(3), "P": []}
 # ----------------------------------------------------------------------------
 #  Solver general
 # ----------------------------------------------------------------------------
+def _mecanismo(Kred, Tm, libres, X, niveles):
+    """Describe los GDL que quedan sin rigidez (mecanismo) en lenguaje del usuario."""
+    comp = ["traslación X", "traslación Y", "traslación Z", "giro X", "giro Y", "giro Z"]
+    n_m = 3 * len(niveles)
+    etq = [None] * Kred.shape[0]
+    for k in range(n_m):
+        etq[k] = f"diafragma z = {niveles[k // 3]:g} m ({['X', 'Y', 'giro'][k % 3]})"
+    Tc = Tm.tocsc()
+    for c in range(n_m, Kred.shape[0]):
+        r = Tc.indices[Tc.indptr[c]:Tc.indptr[c + 1]]
+        if len(r):
+            g = libres[r[0]]; n, k = divmod(int(g), 6)
+            etq[c] = f"nudo ({X[n][0]:g}, {X[n][1]:g}, {X[n][2]:g}) {comp[k]}"
+    try:
+        if Kred.shape[0] <= 2500:
+            w, v = np.linalg.eigh(Kred.toarray())
+            ref = max(abs(w).max(), 1e-30)
+            malos = np.flatnonzero(w < 1e-10 * ref)
+            vec = v[:, malos[0]] if len(malos) else v[:, 0]
+            orden = np.argsort(-np.abs(vec))
+            sosp = [etq[i] for i in orden[:4] if etq[i] and abs(vec[i]) > 0.15]
+        else:
+            d = np.abs(Kred.diagonal()); sosp = [etq[i] for i in np.flatnonzero(d < 1e-10 * d.max())[:4]]
+    except Exception:
+        sosp = []
+    return ", ".join(sosp)
+
+
+def _factorizar(Kred, Tm, libres, X, niveles):
+    msg = ("La estructura 3D es inestable (matriz de rigidez singular): revisa apoyos, rótulas en ambos extremos "
+           "de barras alineadas, nudos sueltos o barras que no se conectan.")
+    try:
+        lu = spla.splu(Kred)
+        d = np.abs(lu.U.diagonal())
+        if d.size and d.min() < 1e-11 * d.max():
+            raise RuntimeError("singular")
+        return lu
+    except RuntimeError:
+        det = _mecanismo(Kred, Tm, libres, X, niveles)
+        raise ValueError(msg + (f" Mecanismo detectado en: {det}." if det else ""))
+
+
 def resolver(modelo, casos, diafragmas=None):
     """
     modelo = {
@@ -278,7 +320,7 @@ def resolver(modelo, casos, diafragmas=None):
     Fred = Tm.T @ F[libres] + Fred_extra
 
     t1 = time.time()
-    lu = spla.splu(Kred)
+    lu = _factorizar(Kred, Tm, libres, X, niveles)
     Ured = lu.solve(Fred) if len(nombres) else np.zeros((n_red, 0))
     t2 = time.time()
     U = np.zeros((nd, len(nombres)))

@@ -115,7 +115,7 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
           <button onClick={() => agregar("nivel")} className="rounded border border-slate-200 px-1.5 py-0.5 dark:border-ink-line" title="Agregar un nivel">+ Nivel</button>
         </>)}
         <span className="ml-auto text-slate-500 dark:text-slate-400">
-          {vista.modo === "3d" ? "Arrastrar: girar · clic derecho: desplazar · rueda: zoom · clic: seleccionar" : "Rueda: zoom · arrastrar fondo o Espacio: desplazar · Esc: terminar"}
+          {vista.modo === "3d" ? "Arrastrar o botón central: girar · clic derecho: desplazar · rueda: zoom · 1 3 7 vistas · 5 orto · F encuadrar · ? atajos" : "Rueda: zoom · arrastrar fondo o Espacio: desplazar · Esc: terminar"}
         </span>
       </div>
       <div className="relative min-h-0 flex-1">

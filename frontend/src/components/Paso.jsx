@@ -162,7 +162,8 @@ function PasoCuerpo({ paso, data }) {
 /* ---------- geometría común del pórtico ---------- */
 function useGeom(barras, W, H, pad) {
   return useMemo(() => {
-    const xs = barras.flatMap((b) => [b.xi, b.xj]), ys = barras.flatMap((b) => [b.yi, b.yj]);
+    const xs0 = barras.flatMap((b) => [b.xi, b.xj]).filter(Number.isFinite), ys0 = barras.flatMap((b) => [b.yi, b.yj]).filter(Number.isFinite);
+    const xs = xs0.length ? xs0 : [0], ys = ys0.length ? ys0 : [0];
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     const sx = maxX - minX || 1, sy = maxY - minY || 1;
     const s = Math.min((W - 2 * pad) / sx, (H - 2 * pad) / sy);

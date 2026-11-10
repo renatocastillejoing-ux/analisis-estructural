@@ -40,7 +40,9 @@ export default function Canvas({
   const ajustar = useCallback(() => {
     const ns = modeloRef.current.nudos;
     if (!ns.length) { setView({ s: 60, tx: size.w * 0.2, ty: size.h * 0.8 }); return; }
-    const xs = ns.map((n) => +n.x), ys = ns.map((n) => +n.y);
+    const fin = ns.filter((n) => Number.isFinite(+n.x) && Number.isFinite(+n.y));
+    if (!fin.length) { setView({ s: 60, tx: size.w * 0.2, ty: size.h * 0.8 }); return; }
+    const xs = fin.map((n) => +n.x), ys = fin.map((n) => +n.y);
     const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
     const M = 70;
     const rx = Math.max(maxX - minX, 1), ry = Math.max(maxY - minY, 1);
