@@ -314,7 +314,7 @@ function Diseno2D({ resultado, modelo }) {
                 <td className="px-2 py-1 font-medium">{x.nombre}</td>
                 <td className="px-2 py-1 tabular-nums">{fmt(x.b, 2)} × {fmt(x.h, 2)}</td>
                 <td className={`px-2 py-1 font-semibold ${x.estado === "cumple" ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>{x.estado}</td>
-                <td className="px-2 py-1 tabular-nums">{x.tipo === "viga" ? `M− ${x.Mu_sup ?? 0} t·m → ${x.As_sup ?? "—"} cm² (${x.barras_sup}) · M+ ${x.Mu_inf ?? 0} → ${x.As_inf ?? "—"} cm² (${x.barras_inf})` : `Pu ${x.Pu} t · Mu ${x.Mux} t·m → ρ ${x.rho ?? "—"} % (${x.barras})`}</td>
+                <td className="px-2 py-1 tabular-nums">{x.tipo === "viga" ? `M− ${x.Mu_sup ?? 0} t·m → ${x.As_sup ?? "—"} cm² (${x.barras_sup}) · M+ ${x.Mu_inf ?? 0} → ${x.As_inf ?? "—"} cm² (${x.barras_inf})${x.doble_refuerzo ? " · doble refuerzo" : ""}` : `Pu ${x.Pu} t · Mu ${x.Mux} t·m → ρ ${x.rho ?? "—"} % (${x.barras})`}</td>
                 <td className="px-2 py-1">{x.estribos}{x.tipo === "viga" ? ` · φVc ${x.phiVc} t` : ""}</td>
                 <td className="px-2 py-1 text-slate-500">{(x.avisos || []).join(" · ")}</td>
               </tr>

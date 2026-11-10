@@ -83,7 +83,8 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
               {x.tipo.startsWith("viga") ? (<>
                 <div>Acero superior: {x.As_sup ?? "—"} cm² → {x.barras_sup}</div>
                 <div>Acero inferior: {x.As_inf ?? "—"} cm² → {x.barras_inf}</div>
-                <div>As mín. {x.As_min} · As máx. {x.As_max} cm² · d = {x.d_cm} cm</div>
+                <div>As mín. {x.As_min} · As máx. (simple) {x.As_max} cm² · d = {x.d_cm} cm</div>
+                {x.doble_refuerzo && <div className="font-semibold">Doble refuerzo: el momento supera la capacidad con refuerzo simple; se agrega acero en compresión (E.060).</div>}
               </>) : (<>
                 <div>Pu = {x.Pu} t · Mux = {x.Mux} · Muy = {x.Muy} t·m</div>
                 <div>ρ = {x.rho ?? "—"} % → {x.barras}{x.ratio != null ? ` · uso ${x.ratio}` : ""}</div>
@@ -229,7 +230,7 @@ function Diseno({ res, setElegido }) {
                 <td className="px-2 py-1">{x.sec}</td>
                 <td className={`px-2 py-1 font-semibold ${x.estado === "cumple" ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>{x.estado}</td>
                 <td className="px-2 py-1 tabular-nums">{x.tipo.startsWith("viga")
-                  ? `sup ${x.As_sup ?? "—"} cm² (${x.barras_sup}) · inf ${x.As_inf ?? "—"} cm² (${x.barras_inf})`
+                  ? `sup ${x.As_sup ?? "—"} cm² (${x.barras_sup}) · inf ${x.As_inf ?? "—"} cm² (${x.barras_inf})${x.doble_refuerzo ? " · doble refuerzo" : ""}`
                   : `Pu ${x.Pu} t · ρ ${x.rho ?? "—"} % (${x.barras})${x.ratio != null ? ` · uso ${x.ratio}` : ""}`}</td>
                 <td className="px-2 py-1">{x.estribos}</td>
                 <td className="px-2 py-1 text-slate-500">{(x.avisos || []).join(" · ")}</td>

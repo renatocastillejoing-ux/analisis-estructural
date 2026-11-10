@@ -10,7 +10,7 @@
     - Columna en cada intersección de la grilla; viga en cada tramo entre ellas.
     - f'c: pisos 1-3 = 280 kgf/cm²; pisos 4-10 = 210 kgf/cm² (E = 15000·√f'c).
     - Columnas: pisos 1-3 = 0.60×0.60 m ; 4-7 = 0.50×0.50 ; 8-10 = 0.40×0.40.
-    - Vigas: pisos 1-3 = 0.35×0.60 m ; 4-10 = 0.30×0.50 m.
+    - Vigas: pisos 1-8 = 0.35×0.60 m ; 9-10 = 0.30×0.50 m (diseño E.060 de las vigas de acople).
     - Placas (muros) de 0.30 m de espesor y 3.50 m de longitud, en todos los pisos
       (estudio de deriva 2026-11-10, configuración «D»):
         · 12 a lo largo de X: ejes con letra A, E, I × ejes numerados 3, 6, 10, 13.
@@ -56,7 +56,8 @@ def _col_b(piso):
     return 0.40
 
 def _viga_bh(piso):
-    return (0.35, 0.60) if piso <= 3 else (0.30, 0.50)
+    # pisos 1-8: 0.35×0.60 (las vigas que acoplan placas no alcanzaban con 0.30×0.50); 9-10: 0.30×0.50
+    return (0.35, 0.60) if piso <= 8 else (0.30, 0.50)
 
 PLACA_B, PLACA_H = 0.30, 3.50          # espesor y longitud de las placas en X
 PLACA_HY = 3.50                         # longitud de las placas en Y

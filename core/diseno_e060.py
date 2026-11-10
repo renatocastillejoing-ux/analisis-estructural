@@ -73,16 +73,42 @@ def diseno_viga(b, h, fc, Mneg, Mpos, Vu, fy=FY, recub=6.0):
     asmax = 0.75 * rhob * bc * d
     out = {"d_cm": round(d, 1), "As_min": round(asmin, 2), "As_max": round(asmax, 2)}
     avisos = []
+    comp = {}
     for clave, Mu in (("sup", Mneg), ("inf", Mpos)):
         As, ok = as_flexion(Mu, bc, d, fc, fy)
+        out[f"Mu_{clave}"] = round(abs(Mu), 3)
         if not ok or As > asmax:
-            avisos.append(f"Acero {'superior' if clave == 'sup' else 'inferior'}: la sección no alcanza (aumenta el peralte o el ancho)")
-            out[f"As_{clave}"] = None; out[f"barras_{clave}"] = "—"
-            continue
+            # doble refuerzo: As1 = As,máx toma φMn1; el resto lo toma un par As' – As2
+            a1 = asmax * fy / (0.85 * fc * bc)
+            phiMn1 = 0.9 * asmax * fy * (d - a1 / 2)
+            Mu2 = abs(Mu) * 1e5 - phiMn1
+            dp = recub
+            c = a1 / beta1(fc)
+            fsp = min(fy, ES * 0.003 * (c - dp) / c) if c > dp else 0.0     # esfuerzo del acero en compresión
+            if fsp <= 0:
+                avisos.append(f"Acero {'superior' if clave == 'sup' else 'inferior'}: la sección no alcanza (aumenta el peralte)")
+                out[f"As_{clave}"] = None; out[f"barras_{clave}"] = "—"
+                continue
+            As2 = Mu2 / (0.9 * fy * (d - dp))
+            Asp = Mu2 / (0.9 * fsp * (d - dp))
+            As = asmax + As2
+            if As > 0.025 * bc * d:
+                avisos.append(f"Acero {'superior' if clave == 'sup' else 'inferior'}: supera ρ = 2.5 % aun con doble refuerzo (aumenta la sección)")
+                out[f"As_{clave}"] = None; out[f"barras_{clave}"] = "—"
+                continue
+            comp[clave] = Asp
+            out[f"doble_{clave}"] = True
         As = max(As, asmin)
         out[f"As_{clave}"] = round(As, 2)
         out[f"barras_{clave}"] = _barras(As)
-        out[f"Mu_{clave}"] = round(abs(Mu), 3)
+    # el acero en compresión de una cara se suma al mínimo de la otra (se reporta aparte)
+    for clave, Asp in comp.items():
+        otra = "inf" if clave == "sup" else "sup"
+        out[f"As_comp_{otra}"] = round(Asp, 2)
+        if out.get(f"As_{otra}") is not None and out[f"As_{otra}"] < Asp:
+            out[f"As_{otra}"] = round(Asp, 2); out[f"barras_{otra}"] = _barras(Asp)
+    if comp:
+        out["doble_refuerzo"] = True
     # cortante
     Vu_k = abs(Vu) * 1000
     Vc = 0.53 * math.sqrt(fc) * bc * d
