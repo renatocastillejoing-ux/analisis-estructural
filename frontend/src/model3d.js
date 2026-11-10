@@ -181,7 +181,7 @@ export function escena3d(m, { resultado, caso, modo = "geometria", escala = 1, s
       wDir: vertical ? (((+e.giro || 0) % 180 === 90) ? [0, 1, 0] : [1, 0, 0]) : [0, 0, 1],
       tipo: vertical && Math.max(+s.b / +s.h, +s.h / +s.b) >= 4 ? "placa" : t, color, piso: null, grupos: [],
       info: `${e.nombre} · ${e.seccion}${val ? ` · ${modo} = ${(val[idxRes[e.id]] ?? 0).toFixed(2)}` : ""}${modo === "diseno" && resultado?.diseno?.[idxRes[e.id]] ? ` · ${resultado.diseno[idxRes[e.id]].estado}` : ""}`,
-      sel: sel?.tipo === "elemento" && sel.id === e.id,
+      sel: estaSel(sel, "elemento", e.id),
     });
   });
   const apoyos = m.nudos.filter((n) => n.apoyo !== "libre").map((n) => ({ p: [n.x, n.y, n.z], tipo: n.apoyo }));
@@ -193,7 +193,7 @@ export function escena3d(m, { resultado, caso, modo = "geometria", escala = 1, s
     ...(m.ejes?.x || []).map((e) => ({ a: [e.c, Math.min(...m.ejes.y.map((q) => q.c)) - 1, 0], b: [e.c, Math.max(...m.ejes.y.map((q) => q.c)) + 1, 0] })),
     ...(m.ejes?.y || []).map((e) => ({ a: [Math.min(...m.ejes.x.map((q) => q.c)) - 1, e.c, 0], b: [Math.max(...m.ejes.x.map((q) => q.c)) + 1, e.c, 0] })),
   ];
-  const nudos = conNudos ? m.nudos.map((n) => ({ id: n.id, nombre: n.nombre, p: pos(n.id), apoyo: n.apoyo, sel: sel?.tipo === "nudo" && sel.id === n.id, info: `Nudo ${n.nombre} (${n.x}, ${n.y}, ${n.z})` })) : [];
+  const nudos = conNudos ? m.nudos.map((n) => ({ id: n.id, nombre: n.nombre, p: pos(n.id), apoyo: n.apoyo, sel: estaSel(sel, "nudo", n.id), info: `Nudo ${n.nombre} (${n.x}, ${n.y}, ${n.z})` })) : [];
   return { miembros, losas: [], apoyos, etiquetas, ejes, pisos: 0, nudos };
 }
 
@@ -339,4 +339,85 @@ export function a3d(m2) {
   m.sismo.activo = false;
   m.cargas_area = [];
   return m;
+}
+
+/* ----------------------------- selección múltiple, mover y copiar ----------------------------- */
+// sel = { tipo: "varios", elems: [ids], nudos: [ids] }; también acepta la selección simple.
+export function idsSel(sel) {
+  if (!sel) return { elems: [], nudos: [] };
+  if (sel.tipo === "varios") return { elems: sel.elems || [], nudos: sel.nudos || [] };
+  return sel.tipo === "nudo" ? { elems: [], nudos: [sel.id] } : { elems: [sel.id], nudos: [] };
+}
+export const estaSel = (sel, tipo, id) => {
+  if (!sel) return false;
+  if (sel.tipo === "varios") return (tipo === "nudo" ? sel.nudos : sel.elems)?.includes(id);
+  return sel.tipo === tipo && sel.id === id;
+};
+// combina dos selecciones (Shift = sumar; si ya estaba, la quita)
+export function sumarSel(sel, nueva, alternar = true) {
+  const a = idsSel(sel), b = idsSel(nueva);
+  const mezcla = (x, y) => { const s = new Set(x); y.forEach((id) => (alternar && s.has(id) && y.length === 1 ? s.delete(id) : s.add(id))); return [...s]; };
+  const elems = mezcla(a.elems, b.elems), nudos = mezcla(a.nudos, b.nudos);
+  if (elems.length + nudos.length === 0) return null;
+  if (elems.length + nudos.length === 1) return elems.length ? { tipo: "elemento", id: elems[0] } : { tipo: "nudo", id: nudos[0] };
+  return { tipo: "varios", elems, nudos };
+}
+
+// Mueve o copia lo seleccionado d = [dx, dy, dz]. Los nudos que caen sobre uno existente se unen a él (imán).
+// copias > 1 repite el desplazamiento en serie (p. ej. copiar un piso a los niveles de arriba).
+export function moverCopiar(m, sel, d, { copiar = false, copias = 1 } = {}) {
+  const { elems, nudos } = idsSel(sel);
+  const porId = Object.fromEntries(m.nudos.map((n) => [n.id, n]));
+  const setN = new Set(nudos);
+  elems.forEach((id) => { const e = m.elementos.find((q) => q.id === id); if (e) { setN.add(e.i); setN.add(e.j); } });
+  const [dx, dy, dz] = d.map((v) => +v || 0);
+  let barras = 0, nuevos = 0;
+  if (!copiar) {
+    const antes = new Set(m.nudos.map((n) => n.id));
+    const mapa = {};
+    [...setN].forEach((id) => { const n = porId[id]; if (n) { n.x = r6(n.x + dx); n.y = r6(n.y + dy); n.z = r6(n.z + dz); } });
+    // imán: si un nudo movido cae sobre otro que no se movió, se fusionan
+    [...setN].forEach((id) => {
+      const n = porId[id]; if (!n) return;
+      const otro = m.nudos.find((q) => q.id !== id && !setN.has(q.id) && antes.has(q.id) && Math.abs(q.x - n.x) < TOL && Math.abs(q.y - n.y) < TOL && Math.abs(q.z - n.z) < TOL);
+      if (otro) mapa[id] = otro.id;
+    });
+    if (Object.keys(mapa).length) {
+      m.elementos.forEach((e) => { if (mapa[e.i]) e.i = mapa[e.i]; if (mapa[e.j]) e.j = mapa[e.j]; });
+      (m.cargas_nudos || []).forEach((c) => { if (mapa[c.nudo]) c.nudo = mapa[c.nudo]; });
+      m.nudos = m.nudos.filter((n) => !mapa[n.id]);
+      const vistos = new Set();
+      m.elementos = m.elementos.filter((e) => { const k = [Math.min(e.i, e.j), Math.max(e.i, e.j)].join("-"); if (e.i === e.j || vistos.has(k)) return false; vistos.add(k); return true; });
+    }
+    return { barras: elems.length, nudos: setN.size, fusionados: Object.keys(mapa).length };
+  }
+  const nuevaSel = { elems: [], nudos: [] };
+  for (let k = 1; k <= Math.max(1, Math.floor(copias)); k++) {
+    const mapa = {};
+    [...setN].forEach((id) => {
+      const n = porId[id]; if (!n) return;
+      const antes = m.nudos.length;
+      mapa[id] = agregarNudo3d(m, n.x + dx * k, n.y + dy * k, n.z + dz * k, dz ? undefined : n.apoyo);       // al subir, el apoyo se decide por la altura
+      if (m.nudos.length > antes) nuevos++;
+      if (nudos.includes(id)) nuevaSel.nudos.push(mapa[id]);
+    });
+    elems.forEach((id) => {
+      const e = m.elementos.find((q) => q.id === id); if (!e) return;
+      const nid = agregarBarra(m, mapa[e.i], mapa[e.j], e.seccion);
+      if (!nid) return;
+      barras++; nuevaSel.elems.push(nid);
+      const ne = m.elementos.find((q) => q.id === nid);
+      ["material", "giro", "release_i", "release_j", "segmentos"].forEach((c) => { if (e[c] !== undefined) ne[c] = structuredClone(e[c]); });
+      (m.cargas_barras || []).filter((c) => c.elem === id).forEach((c) => m.cargas_barras.push({ ...structuredClone(c), elem: nid }));
+    });
+    // niveles nuevos si la copia sube por encima de los existentes
+    if (dz) [...setN].forEach((id) => { const z = r6(porId[id].z + dz * k); if (!m.niveles.some((q) => Math.abs(q.z - z) < TOL) && z > 0) { m.niveles.push({ nombre: `Nivel ${m.niveles.length}`, z }); m.niveles.sort((a, b) => a.z - b.z); } });
+  }
+  return { barras, nudos: nuevos, sel: nuevaSel };
+}
+
+export function borrarSeleccion(m, sel) {
+  const { elems, nudos } = idsSel(sel);
+  elems.forEach((id) => borrarBarra(m, id));
+  nudos.forEach((id) => borrarNudo3d(m, id));
 }

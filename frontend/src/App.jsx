@@ -12,7 +12,7 @@ import { Arbol3D, PANELES3D, PanelEditor3D, Props3D } from "./components/Editor3
 import Lienzo3D, { HERR3D } from "./components/Lienzo3D.jsx";
 import Results3D from "./components/Results3D.jsx";
 import { DialogoCopiar, DialogoEdificio, DialogoExtraer, DialogoExtruir, DialogoInsertar, DialogoUnir } from "./components/Dialogs3D.jsx";
-import { a3d, borrarBarra, borrarNudo3d, copiarPlano, es3d, insertarPortico, limpiarNudos, modelo3dVacio, unirPlanos, validar3d } from "./model3d.js";
+import { a3d, borrarBarra, borrarNudo3d, borrarSeleccion, sumarSel, copiarPlano, es3d, insertarPortico, limpiarNudos, modelo3dVacio, unirPlanos, validar3d } from "./model3d.js";
 import Documentos from "./components/Documentos.jsx";
 import { registrarPedir } from "./pedir.js";
 import MenuMovil from "./components/MenuMovil.jsx";
@@ -76,20 +76,35 @@ const archivo = (m) => (m.nombre || "modelo").replace(/[^\wáéíóúñ\- ]+/gi,
 export default function App() {
   // ---------- modelo con deshacer / rehacer ----------
   const [proyecto, setProyecto] = useState(proyectoInicial);
-  const [hist, setHist] = useState(() => ({ past: [], present: proyecto.docs.find((d) => d.id === proyecto.activo).modelo, future: [] }));
+  const [hist, setHist] = useState(() => ({ past: [], present: proyecto.docs.find((d) => d.id === proyecto.activo).modelo, future: [], pl: [], fl: [] }));
   const modelo = hist.present;
-  const commit = useCallback((fn) => setHist((h) => {
+  // pl / fl: nombre de cada paso del historial (para la lista «Historial de cambios»)
+  const commit = useCallback((fn, etiqueta) => setHist((h) => {
     const m = structuredClone(h.present); fn(m);
-    return { past: [...h.past.slice(-99), h.present], present: m, future: [] };
+    return { past: [...h.past.slice(-99), h.present], present: m, future: [], pl: [...(h.pl || []).slice(-99), etiqueta || describirCambio(h.present, m)], fl: [] };
   }), []);
   const [fitKey, setFitKey] = useState(0);
   const reemplazar = useCallback((m) => {
-    setHist((h) => ({ past: [...h.past.slice(-99), h.present], present: m, future: [] }));
+    setHist((h) => ({ past: [...h.past.slice(-99), h.present], present: m, future: [], pl: [...(h.pl || []).slice(-99), "Reemplazar modelo"], fl: [] }));
     setSel(null); setFitKey((k) => k + 1);
   }, []);
-  const deshacer = useCallback(() => setHist((h) => (h.past.length ? { past: h.past.slice(0, -1), present: h.past[h.past.length - 1], future: [h.present, ...h.future] } : h)), []);
-  const rehacer = useCallback(() => setHist((h) => (h.future.length ? { past: [...h.past, h.present], present: h.future[0], future: h.future.slice(1) } : h)), []);
-  const beginDrag = useCallback(() => setHist((h) => ({ past: [...h.past.slice(-99), h.present], present: h.present, future: [] })), []);
+  const deshacer = useCallback((n = 1) => setHist((h) => {
+    let x = h;
+    for (let k = 0; k < (+n || 1) && x.past.length; k++) {
+      const pl = x.pl || [], et = pl[pl.length - 1] || "Cambio";
+      x = { past: x.past.slice(0, -1), present: x.past[x.past.length - 1], future: [x.present, ...x.future], pl: pl.slice(0, -1), fl: [et, ...(x.fl || [])] };
+    }
+    return x;
+  }), []);
+  const rehacer = useCallback((n = 1) => setHist((h) => {
+    let x = h;
+    for (let k = 0; k < (+n || 1) && x.future.length; k++) {
+      const fl = x.fl || [];
+      x = { past: [...x.past, x.present], present: x.future[0], future: x.future.slice(1), pl: [...(x.pl || []), fl[0] || "Cambio"], fl: fl.slice(1) };
+    }
+    return x;
+  }), []);
+  const beginDrag = useCallback(() => setHist((h) => ({ past: [...h.past.slice(-99), h.present], present: h.present, future: [], pl: [...(h.pl || []).slice(-99), "Mover nudo"], fl: [] })), []);
   const moverNudo = useCallback((id, x, y) => setHist((h) => ({
     ...h, present: { ...h.present, nudos: h.present.nudos.map((n) => (n.id === id ? { ...n, x: +x.toFixed(4), y: +y.toFixed(4) } : n)) },
   })), []);
@@ -149,6 +164,11 @@ export default function App() {
   // si la selección deja de existir (deshacer, borrar), se limpia
   useEffect(() => {
     if (!sel) return;
+    if (sel.tipo === "varios") {
+      const elems = sel.elems.filter((id) => modelo.elementos.some((e) => e.id === id)), nudos = sel.nudos.filter((id) => modelo.nudos.some((n) => n.id === id));
+      if (elems.length !== sel.elems.length || nudos.length !== sel.nudos.length) setSel(sumarSel(null, { tipo: "varios", elems, nudos }, false));
+      return;
+    }
     const existe = sel.tipo === "nudo" ? modelo.nudos.some((n) => n.id === sel.id) : modelo.elementos.some((e) => e.id === sel.id);
     if (!existe) setSel(null);
   }, [modelo, sel]);
@@ -205,7 +225,7 @@ export default function App() {
 
   const borrarSel = useCallback(() => {
     if (!sel) return;
-    if (es3d(modelo)) commit((m) => (sel.tipo === "nudo" ? borrarNudo3d(m, sel.id) : borrarBarra(m, sel.id)));
+    if (es3d(modelo)) commit((m) => borrarSeleccion(m, sel), sel.tipo === "varios" ? `Eliminar ${sel.elems.length + sel.nudos.length} objetos` : undefined);
     else commit((m) => (sel.tipo === "nudo" ? borrarNudo(m, sel.id) : borrarElemento(m, sel.id)));
     setSel(null);
   }, [sel, commit, modelo]);
@@ -540,7 +560,7 @@ export default function App() {
             </aside>
             <main className="relative min-w-0 flex-1 overflow-hidden bg-slate-50 dark:bg-ink">
               <Lienzo3D modelo={modelo} commit={commit} sel={sel} setSel={setSel} tool={tool} setTool={setTool} vista={vista3d} setVista={setVista3d} avisar={avisar} ajusteKey={fitKey} />
-              {vista3d.modo !== "3d" && <BarraHerramientas3D tool={tool} setTool={setTool} deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} />}
+              <BarraHerramientas3D tool={tool} setTool={setTool} deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} modo3d={vista3d.modo === "3d"} pasado={hist.pl || []} futuro={hist.fl || []} />
             </main>
             <div className={`${sel ? "fixed inset-x-0 bottom-0 z-30 flex max-h-[55vh] shadow-2xl" : "hidden"} lg:static lg:z-auto lg:flex lg:max-h-none lg:shadow-none`}>
               <Props3D modelo={modelo} sel={sel} setSel={setSel} commit={commit} abrirPanel={abrirPanel} />
@@ -713,16 +733,48 @@ function BarraHerramientas({ tool, setTool, capas, setCapas, snap, setSnap, desh
 }
 
 // Barra del lienzo en planta / elevación del modelo 3D.
-function BarraHerramientas3D({ tool, setTool, deshacer, rehacer, puedeDeshacer, puedeRehacer }) {
+function BarraHerramientas3D({ tool, setTool, deshacer, rehacer, puedeDeshacer, puedeRehacer, modo3d, pasado = [], futuro = [] }) {
   const b = (activo) => `grid h-9 w-9 place-items-center rounded-md text-base ${activo ? "bg-teal text-white" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-ink-3"}`;
+  const [verHist, setVerHist] = useState(false);
+  const herr = modo3d ? HERR3D.filter((h) => ["select", "recuadro", "barra", "eliminar"].includes(h.id)) : HERR3D.filter((h) => h.id !== "recuadro");
   return (
     <div className="absolute left-3 top-14 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/95 p-1 shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Herramientas de dibujo 3D">
-      {HERR3D.map((h) => (
+      {verHist && (
+        <div className="absolute left-12 top-0 z-20 max-h-80 w-60 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-ink-line dark:bg-ink-2" role="list" aria-label="Historial de cambios">
+          <div className="px-2 py-1 font-semibold">Historial de cambios</div>
+          {futuro.slice().reverse().map((t, k) => (
+            <button key={`f${k}`} onClick={() => rehacer(futuro.length - k)} className="block w-full truncate rounded px-2 py-1 text-left text-slate-400 hover:bg-slate-100 dark:hover:bg-ink-3" title="Rehacer hasta aquí">↷ {t}</button>
+          ))}
+          <div className="rounded bg-teal/15 px-2 py-1 font-semibold text-teal">● Estado actual</div>
+          {pasado.slice().reverse().slice(0, 40).map((t, k) => (
+            <button key={`p${k}`} onClick={() => deshacer(k + 1)} className="block w-full truncate rounded px-2 py-1 text-left hover:bg-slate-100 dark:hover:bg-ink-3" title="Volver a antes de este cambio">{t}</button>
+          ))}
+          {!pasado.length && !futuro.length && <div className="px-2 py-1 text-slate-500">Aún no hay cambios.</div>}
+        </div>
+      )}
+      {herr.map((h) => (
         <button key={h.id} className={b(tool === h.id)} title={`${h.label} (${h.kbd})`} aria-label={h.label} aria-pressed={tool === h.id} onClick={() => setTool(h.id)}>{h.icon}</button>
       ))}
       <div className="my-0.5 border-t border-slate-200 dark:border-ink-line" />
       <button className={b(false) + " disabled:opacity-30"} disabled={!puedeDeshacer} title="Deshacer (Ctrl+Z)" aria-label="Deshacer" onClick={deshacer}>↶</button>
-      <button className={b(false) + " disabled:opacity-30"} disabled={!puedeRehacer} title="Rehacer (Ctrl+Y)" aria-label="Rehacer" onClick={rehacer}>↷</button>
+      <button className={b(false) + " disabled:opacity-30"} disabled={!puedeRehacer} title="Rehacer (Ctrl+Y)" aria-label="Rehacer" onClick={() => rehacer()}>↷</button>
+      <button className={b(verHist)} title="Historial de cambios" aria-label="Historial de cambios" aria-pressed={verHist} onClick={() => setVerHist((v) => !v)}>☰</button>
     </div>
   );
+}
+
+// Nombre automático de un cambio, para el historial.
+function describirCambio(a, b) {
+  const d = (k) => (b[k]?.length || 0) - (a[k]?.length || 0);
+  const pl = (n, s, p) => `${Math.abs(n)} ${Math.abs(n) === 1 ? s : p}`;
+  if (d("elementos") > 0) return `Agregar ${pl(d("elementos"), "barra", "barras")}`;
+  if (d("elementos") < 0) return `Eliminar ${pl(d("elementos"), "barra", "barras")}`;
+  if (d("nudos") > 0) return `Agregar ${pl(d("nudos"), "nudo", "nudos")}`;
+  if (d("nudos") < 0) return `Eliminar ${pl(d("nudos"), "nudo", "nudos")}`;
+  for (const k of ["cargas_barras", "cargas_nudos", "cargas_elementos", "cargas_nodales", "cargas_area"]) if (d(k)) return d(k) > 0 ? "Agregar carga" : "Quitar carga";
+  if (JSON.stringify(a.nudos) !== JSON.stringify(b.nudos)) return "Mover o editar nudos";
+  if (JSON.stringify(a.elementos) !== JSON.stringify(b.elementos)) return "Editar barras";
+  if (JSON.stringify(a.secciones) !== JSON.stringify(b.secciones)) return "Editar secciones";
+  if (JSON.stringify(a.niveles) !== JSON.stringify(b.niveles) || JSON.stringify(a.ejes) !== JSON.stringify(b.ejes)) return "Editar ejes o niveles";
+  return "Editar modelo";
 }

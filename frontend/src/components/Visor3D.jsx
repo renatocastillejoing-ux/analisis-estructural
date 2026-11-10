@@ -69,7 +69,7 @@ export function escenaTorre(g) {
 }
 
 /* ----------------------------- componente ----------------------------- */
-export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor = "tipo", verLosas = true, verEtiquetas = true, onElegir, vistaKey, ajusteKey, controles = true, pendiente }) {
+export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor = "tipo", verLosas = true, verEtiquetas = true, onElegir, vistaKey, ajusteKey, controles = true, pendiente, recuadro = false, onRecuadro, nombreImagen = "vista-3d" }) {
   const host = useRef(null);
   const st = useRef({});
   const [hover, setHover] = useState(null);
@@ -79,7 +79,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
   // montaje: renderer, cámara, controles, luces
   useEffect(() => {
     const el = host.current;
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });   // permite exportar la imagen
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     el.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
@@ -261,6 +261,21 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       st.current.nudos = mesh;
     }
 
+    // diagramas sobre las barras (resultados): segmentos con color por signo
+    if (escena.diagramas?.length) {
+      const pos = [], col = [], c = new THREE.Color();
+      escena.diagramas.forEach((d) => {
+        const add = (a, b, hex) => { pos.push(...T(a).toArray(), ...T(b).toArray()); c.set(hex); col.push(c.r, c.g, c.b, c.r, c.g, c.b); };
+        for (let k = 0; k < d.pts.length - 1; k++) add(d.pts[k], d.pts[k + 1], d.colores[k]);
+        d.pts.forEach((q, k) => add(d.base[k], q, d.colores[k]));
+        add(d.base[0], d.base[d.base.length - 1], "#94a3b8");
+      });
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      g.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+      const ls = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true, depthTest: false, transparent: true, opacity: 0.95 }));
+      ls.renderOrder = 10; raiz.add(ls);           // siempre por encima de las barras
+    }
     // losas
     if (verLosas) escena.losas.filter((l) => l.piso <= pisoMax).forEach((l) => {
       const g = new THREE.BoxGeometry(l.x1 - l.x0 + 0.6, 0.18, l.y1 - l.y0 + 0.6);
@@ -295,6 +310,31 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       raiz.add(sp);
     });
   }, [escena, visibles, resaltar, colorPor, verLosas, verEtiquetas, pisoMax, pendiente, verSuelo]);
+
+  // exportar la vista como imagen PNG (para el informe)
+  const exportarImagen = () => {
+    const { renderer, scene, camera } = st.current;
+    if (!renderer) return;
+    renderer.render(scene, camera);
+    const a = document.createElement("a");
+    a.href = renderer.domElement.toDataURL("image/png");
+    a.download = `${nombreImagen}.png`;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  // selección con recuadro: barras con ambos extremos dentro y nudos dentro (como la ventana de Blender)
+  const [caja, setCaja] = useState(null);
+  const elegirRecuadro = (x0, y0, x1, y1) => {
+    const { camera, renderer } = st.current;
+    const r = renderer.domElement.getBoundingClientRect();
+    const [ax, bx] = [Math.min(x0, x1), Math.max(x0, x1)], [ay, by] = [Math.min(y0, y1), Math.max(y0, y1)];
+    const v = new THREE.Vector3();
+    const enCaja = (p) => { v.copy(T(p)).project(camera); if (v.z > 1) return false; const sx = (v.x + 1) / 2 * r.width, sy = (1 - v.y) / 2 * r.height; return sx >= ax && sx <= bx && sy >= ay && sy <= by; };
+    const out = [], vistos = new Set();
+    visibles.forEach(({ m }) => { if (m.id != null && !vistos.has(m.id) && enCaja(m.a) && enCaja(m.b)) { vistos.add(m.id); out.push({ id: m.id }); } });
+    (escena.nudos || []).forEach((n) => { if (enCaja(n.p)) out.push({ _nudo: true, id: n.id }); });
+    return out;
+  };
 
   // encuadre de cámara: dir = vista con nombre o vector; soloSel = encuadra lo seleccionado (tecla F / . del numpad)
   const DIRS = { iso: [1, 0.7, 1.1], planta: [0, 1, 0.0001], bajo: [0, -1, 0.0001], frente: [0, 0.05, 1], atras: [0, 0.05, -1], lado: [1, 0.05, 0], izq: [-1, 0.05, 0] };
@@ -389,14 +429,34 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       <div ref={host} className="absolute inset-0"
         onPointerEnter={() => { dentro.current = true; }}
         onPointerDown={(e) => { dentro.current = true; abajo.current = [e.clientX, e.clientY]; }}
+        onPointerDownCapture={(e) => {      // en captura: se desactiva la órbita antes de que la cámara reciba el clic
+          if (onRecuadro && e.button === 0 && (recuadro || e.ctrlKey)) {
+            const r = host.current.getBoundingClientRect();
+            st.current.controls.enabled = false;
+            e.currentTarget.setPointerCapture?.(e.pointerId);
+            setCaja({ x0: e.clientX - r.left, y0: e.clientY - r.top, x1: e.clientX - r.left, y1: e.clientY - r.top, shift: e.shiftKey });
+          }
+        }}
         onPointerUp={(e) => {
           const a = abajo.current; abajo.current = null;
+          if (caja) {
+            st.current.controls.enabled = true;
+            const c = caja; setCaja(null);
+            if (Math.hypot(c.x1 - c.x0, c.y1 - c.y0) > 4) { onRecuadro(elegirRecuadro(c.x0, c.y0, c.x1, c.y1), c.shift || e.shiftKey); return; }
+          }
           if (!a || Math.hypot(e.clientX - a[0], e.clientY - a[1]) > 4) return;   // fue un arrastre
-          const x = elegirEn(e); onElegir?.(x ? x.m : null);
+          const x = elegirEn(e); onElegir?.(x ? x.m : null, e);
         }}
-        onPointerMove={(e) => { if (e.buttons) return; const x = elegirEn(e); setHover(x ? { texto: x.m.info, X: e.nativeEvent.offsetX, Y: e.nativeEvent.offsetY } : null); }}
+        onPointerMove={(e) => {
+          if (caja) { const r = host.current.getBoundingClientRect(); setCaja((c) => c && { ...c, x1: e.clientX - r.left, y1: e.clientY - r.top }); return; }
+          if (e.buttons) return; const x = elegirEn(e); setHover(x ? { texto: x.m.info, X: e.nativeEvent.offsetX, Y: e.nativeEvent.offsetY } : null);
+        }}
         onPointerLeave={() => { setHover(null); dentro.current = false; }} />
-      {hover && (
+      {caja && (
+        <div className="pointer-events-none absolute z-10 border border-dashed border-teal bg-teal/10"
+          style={{ left: Math.min(caja.x0, caja.x1), top: Math.min(caja.y0, caja.y1), width: Math.abs(caja.x1 - caja.x0), height: Math.abs(caja.y1 - caja.y0) }} />
+      )}
+      {hover && !caja && (
         <div className="pointer-events-none absolute z-10 rounded-md bg-slate-900/90 px-2 py-1 text-xs text-white shadow" style={{ left: hover.X + 14, top: hover.Y + 10 }}>{hover.texto}</div>
       )}
       {controles && (
@@ -424,13 +484,15 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
             <button onClick={() => encuadrar("iso", true, true)} title="Encuadrar la selección (F); sin selección, todo (Inicio)" className="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-ink-3">Encuadrar</button>
             <button onClick={() => setVerSuelo((s) => !s)} aria-pressed={verSuelo} title="Mostrar u ocultar la cuadrícula del suelo"
               className={`px-2.5 py-1.5 ${verSuelo ? "text-teal" : "text-slate-400"} hover:bg-slate-100 dark:hover:bg-ink-3`}>▦</button>
+            <button onClick={exportarImagen} title="Guardar esta vista como imagen PNG (para el informe)" className="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Exportar imagen">📷</button>
             <button onClick={() => setAyuda((a) => !a)} aria-pressed={ayuda} title="Atajos del visor" className="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-ink-3">?</button>
           </div>
           {ayuda && (
             <div className="absolute bottom-12 right-3 z-10 w-64 rounded-lg border border-slate-200 bg-white/95 p-3 text-xs leading-relaxed shadow dark:border-ink-line dark:bg-ink-2/95">
               <b>Ratón</b> · izquierdo o central: orbitar · derecho o Shift+central: desplazar · rueda: zoom hacia el cursor<br />
               <b>Teclado</b> (puntero sobre el visor) · 1 frente · 3 lado · 7 planta (Ctrl: lado opuesto) · 0 iso · 5 orto/persp · 2 4 6 8 girar 15° · F o . encuadrar selección · Inicio encuadrar todo<br />
-              <b>Gizmo</b> · clic en X, Y o Z para mirar desde ese eje
+              <b>Gizmo</b> · clic en X, Y o Z para mirar desde ese eje<br />
+              <b>Selección</b> (en el modelo) · Shift+clic suma o quita · Ctrl+arrastre o herramienta ⬚: recuadro · H ocultar · Shift+H aislar · Alt+H mostrar todo · G mover · Shift+D copiar · Supr eliminar · 📷 guarda la vista
             </div>
           )}
         </>

@@ -1134,3 +1134,26 @@ def diagramas_portico(id_calculo, caso, eje, valor, n=21):
                     "brazos": [bi, bj], "fuera_plano": float(abs((R.T @ f[0:3]) @ W3))})
     return {"ok": True, "caso": caso, "eje": eje, "valor": float(valor), "elementos": out,
             "nudos": [{"nombre": str(k), "x": u, "y": v} for k, (u, v) in nudos.items()]}
+
+
+def diagramas_3d(id_calculo, caso, n=11):
+    """Diagramas de momento a lo largo de cada barra, en coordenadas globales, para
+    dibujarlos sobre el visor 3D. Por barra: puntos de la parte flexible, Mz (eje fuerte,
+    dibujado según el eje local y) y My (eje débil, según el eje local z)."""
+    with _CANDADO:
+        d = _CALCULOS.get(id_calculo)
+    if d is None:
+        raise LookupError("El cálculo ya no está en memoria: vuelve a calcular el modelo 3D.")
+    if caso not in d["FE"]:
+        raise LookupError(f"El caso «{caso}» es una envolvente espectral: no tiene diagramas por barra.")
+    fe_arr, cl = d["FE"][caso]
+    X = d["X"]; out = []
+    for k, (i, j) in enumerate(d["ij"]):
+        R = d["R"][k]; Lf = float(d["Lf"][k]); bi, _ = d["brazos"][k]
+        s, N, Vy, Vz, Mz, My = internas(fe_arr[k], cl[k], Lf, n)
+        p0 = np.asarray(X[i], float) + bi * R[0]
+        out.append({"id": d["ids"][k], "p0": np.round(p0, 4).tolist(), "e1": np.round(R[0], 6).tolist(),
+                    "ey": np.round(R[1], 6).tolist(), "ez": np.round(R[2], 6).tolist(),
+                    "s": np.round(s, 4).tolist(), "Mz": np.round(Mz, 4).tolist(), "My": np.round(My, 4).tolist(),
+                    "V": np.round(np.hypot(Vy, Vz), 4).tolist(), "N": np.round(N, 4).tolist()})
+    return {"ok": True, "caso": caso, "barras": out}

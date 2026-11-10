@@ -152,3 +152,12 @@ def test_mecanismo_3d_se_explica():
         assert "inestable" in str(ex)
         return
     raise AssertionError("debía detectar el mecanismo")
+
+
+def test_diagramas_3d_lado_traccionado():
+    from core.analisis_3d import diagramas_3d
+    m2 = _base2d(); m2["cargas_nodales"] = []
+    r = analizar_modelo3d(_a3d(m2, [{"elem": 4, "caso": "G", "tipo": "trapezoidal", "wz1": -2, "wz2": -2}]))
+    d = diagramas_3d(r["id_calculo"], "G")
+    v = next(b for b in d["barras"] if b["id"] == 4)
+    assert len(d["barras"]) == 5 and v["Mz"][5] > 0 and v["Mz"][0] < 0

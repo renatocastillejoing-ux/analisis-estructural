@@ -1,4 +1,4 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { escena3d } from "../model3d.js";
 import PorticoDe3D from "./PorticoDe3D.jsx";
 
@@ -13,7 +13,45 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
   const [escala, setEscala] = useState(1);
   const [pestaña, setPestaña] = useState("resumen");
   const [elegido, setElegido] = useState(null);
-  const escena = useMemo(() => (res ? escena3d(modelo, { resultado: res, caso, modo, escala, sel: elegido ? { tipo: "elemento", id: elegido } : null }) : null), [modelo, res, caso, modo, escala, elegido]);
+  // deformada animada: la amplificación oscila entre −1 y +1
+  const [animar, setAnimar] = useState(false);
+  const [fase, setFase] = useState(1);
+  useEffect(() => {
+    if (!animar || modo !== "deformada") { setFase(1); return; }
+    let t = 0; const id = setInterval(() => { t += 0.18; setFase(Math.sin(t)); }, 60);
+    return () => clearInterval(id);
+  }, [animar, modo]);
+  // diagramas de momento dibujados sobre cada barra
+  const [diag, setDiag] = useState(null);
+  const [verMy, setVerMy] = useState(false);
+  useEffect(() => {
+    if (modo !== "dM" || !res?.id_calculo || !caso) return;
+    let vivo = true; setDiag({ cargando: true });
+    fetch("/api/calcular3d/diagramas", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id_calculo: res.id_calculo, caso }) })
+      .then((r) => r.json()).then((d) => { if (vivo) setDiag(d.ok ? d : { error: d.error }); })
+      .catch(() => { if (vivo) setDiag({ error: "No hay conexión con el servidor de cálculo." }); });
+    return () => { vivo = false; };
+  }, [modo, res, caso]);
+  const escena = useMemo(() => {
+    if (!res) return null;
+    const esc = escena3d(modelo, { resultado: res, caso, modo: modo === "dM" ? "geometria" : modo, escala: escala * fase, sel: elegido ? { tipo: "elemento", id: elegido } : null });
+    if (modo === "dM" && diag?.barras) {
+      const xs = modelo.nudos.flatMap((n) => [n.x, n.y, n.z]);
+      const span = Math.max(1, Math.max(...xs) - Math.min(...xs));
+      const clave = verMy ? "My" : "Mz", eje = verMy ? "ez" : "ey";
+      const mmax = Math.max(1e-9, ...diag.barras.flatMap((b) => b[clave].map(Math.abs)));
+      const k = (0.15 * span / mmax) * escala;
+      esc.diagramas = diag.barras.map((b) => {
+        const base = b.s.map((x) => b.p0.map((v, i) => v + b.e1[i] * x));
+        // dibujado del lado traccionado (M positivo hacia −y local)
+        const pts = base.map((q, j) => q.map((v, i) => v - b[clave][j] * k * b[eje][i]));
+        return { base, pts, colores: b[clave].map((v) => (v >= 0 ? "#3b82f6" : "#f43f5e")) };
+      });
+      esc.miembros = esc.miembros.map((m) => ({ ...m, color: "#cbd5e1" }));
+      esc.mmax = mmax;
+    }
+    return esc;
+  }, [modelo, res, caso, modo, escala, fase, elegido, diag, verMy]);
 
   if (error) return (
     <div className="m-auto max-w-lg space-y-3 rounded-xl border border-rose-300 bg-rose-50 p-6 text-sm dark:border-rose-800 dark:bg-rose-950/40">
@@ -49,15 +87,34 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
         <div>
           <div className="mb-1 text-xs">Ver</div>
           <div className="grid grid-cols-2 gap-1">
-            {[["geometria", "Geometría"], ["deformada", "Deformada"], ["M", "Mapa de |M|"], ["N", "Mapa de N"], ["V", "Mapa de |V|"], ["diseno", "Diseño E.060"]].map(([k, l]) => (
+            {[["geometria", "Geometría"], ["deformada", "Deformada"], ["dM", "Diagrama de M"], ["M", "Mapa de |M|"], ["N", "Mapa de N"], ["V", "Mapa de |V|"], ["diseno", "Diseño E.060"]].map(([k, l]) => (
               <button key={k} onClick={() => setModo(k)} className={`rounded-md border px-2 py-1 text-xs ${modo === k ? "border-teal bg-teal text-white" : "border-slate-200 dark:border-ink-line"}`}>{l}</button>
             ))}
           </div>
         </div>
-        {modo === "deformada" && (
-          <label className="text-xs">Amplificación
+        {(modo === "deformada" || modo === "dM") && (
+          <label className="text-xs">{modo === "dM" ? "Tamaño del diagrama" : "Amplificación"}
             <input type="range" min={0.2} max={4} step={0.1} value={escala} onChange={(e) => setEscala(+e.target.value)} className="w-full accent-teal-600" />
           </label>
+        )}
+        {modo === "deformada" && (
+          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={animar} onChange={(e) => setAnimar(e.target.checked)} className="accent-teal-600" /> Animar la deformada</label>
+        )}
+        {modo === "dM" && (
+          <div className="space-y-1 text-xs">
+            <div className="flex rounded-md bg-slate-100 p-0.5 dark:bg-ink-3">
+              {[[false, "Mz (eje fuerte)"], [true, "My (eje débil)"]].map(([v, l]) => <button key={l} onClick={() => setVerMy(v)} className={`flex-1 rounded px-2 py-0.5 ${verMy === v ? "bg-white font-semibold shadow dark:bg-ink-line" : ""}`}>{l}</button>)}
+            </div>
+            {diag?.cargando && <p className="text-slate-500">Calculando diagramas…</p>}
+            {diag?.error && <p className="text-rose-600 dark:text-rose-400">{diag.error}</p>}
+            {diag?.barras && <div className="flex items-center gap-2"><span className="inline-block h-2 w-4 rounded bg-blue-600" /> positivo <span className="inline-block h-2 w-4 rounded bg-red-600" /> negativo <span className="ml-auto text-slate-500">máx. {f(escena?.mmax, 2)} t·m</span></div>}
+            <p className="text-slate-500">Se dibuja del lado traccionado de cada barra.</p>
+          </div>
+        )}
+        {modo === "diseno" && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="inline-block h-2 w-4 rounded bg-green-600" /> cumple <span className="inline-block h-2 w-4 rounded bg-rose-600" /> no cumple <span className="inline-block h-2 w-4 rounded bg-slate-400" /> sin diseño
+          </div>
         )}
         {["M", "N", "V"].includes(modo) && (
           <div className="text-xs">
@@ -100,7 +157,7 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
       <div className="flex min-h-[70vh] min-w-0 flex-1 flex-col md:min-h-0">
         <div className="relative min-h-[320px] flex-[3]">
           <Suspense fallback={<div className="p-6 text-sm text-slate-500">Cargando el visor 3D…</div>}>
-            <Visor3D escena={escena} ajusteKey={res} onElegir={(m) => setElegido(m ? m.id : null)} />
+            <Visor3D escena={escena} ajusteKey={res} onElegir={(m) => setElegido(m && !m._nudo ? m.id : null)} nombreImagen={`resultados-${modo}-${caso}`.replace(/[^\w.-]+/g, "_")} />
           </Suspense>
         </div>
         <div className="flex-[2] overflow-y-auto border-t border-slate-200 bg-slate-50 p-4 dark:border-ink-line dark:bg-ink">

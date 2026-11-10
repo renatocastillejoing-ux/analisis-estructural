@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { APOYOS3D, borrarBarra, borrarNudo3d, tipoBarra } from "../model3d.js";
+import { APOYOS3D, borrarBarra, borrarNudo3d, borrarSeleccion, tipoBarra } from "../model3d.js";
 import { pedir } from "../pedir.js";
 import { BtnAgregar, BtnIcon, Campo, NombreUnico, NumIn } from "./ui.jsx";
 import { Interruptor } from "./Editor.jsx";
@@ -366,6 +366,7 @@ function Combinaciones({ modelo, commit }) {
 
 /* ----------------------------- propiedades ----------------------------- */
 export function Props3D({ modelo, sel, setSel, commit, abrirPanel }) {
+  if (sel?.tipo === "varios") return <PropsVarios3D modelo={modelo} sel={sel} setSel={setSel} commit={commit} />;
   const nudo = sel?.tipo === "nudo" ? modelo.nudos.find((n) => n.id === sel.id) : null;
   const el = sel?.tipo === "elemento" ? modelo.elementos.find((e) => e.id === sel.id) : null;
   const casos = modelo.casos || [];
@@ -476,5 +477,82 @@ function Tramos3D({ modelo, el, L, commit }) {
       ))}
       <BtnAgregar onClick={() => set((ts) => { if (!ts.length) ts.push({ L: +(L / 2).toFixed(3), seccion: el.seccion }, { L: +(L / 2).toFixed(3), seccion: el.seccion }); else ts.push({ L: 1, seccion: el.seccion }); })}>{tramos.length ? "+ Agregar tramo" : "+ Dividir en 2 tramos"}</BtnAgregar>
     </div>
+  );
+}
+
+// Edición en bloque de una selección múltiple (recuadro o Shift+clic).
+function PropsVarios3D({ modelo, sel, setSel, commit }) {
+  const elems = modelo.elementos.filter((e) => sel.elems.includes(e.id));
+  const nudos = modelo.nudos.filter((n) => sel.nudos.includes(n.id));
+  const casos = modelo.casos || [];
+  const tipos = elems.reduce((a, e) => { const t = tipoBarra(modelo, e); a[t] = (a[t] || 0) + 1; return a; }, {});
+  const nombreT = { columna: "columnas", viga_x: "vigas en X", viga_y: "vigas en Y", viga: "vigas oblicuas", diagonal: "diagonales", barra: "barras" };
+  const comun = (k) => { const v = new Set(elems.map((e) => e[k] ?? "")); return v.size === 1 ? [...v][0] : "__varios"; };
+  const cadaE = (fn, et) => commit((m) => m.elementos.forEach((e) => { if (sel.elems.includes(e.id)) fn(e, m); }), et);
+  const cadaN = (fn, et) => commit((m) => m.nudos.forEach((n) => { if (sel.nudos.includes(n.id)) fn(n); }), et);
+  const [caso, setCaso] = useState(casos[0]?.nombre || "CM");
+  const [wz, setWz] = useState(-1);
+  const vigas = elems.filter((e) => tipoBarra(modelo, e) !== "columna");
+  const nCargas = (modelo.cargas_barras || []).filter((c) => sel.elems.includes(c.elem)).length;
+  return (
+    <aside className="flex w-full shrink-0 flex-col border-l lg:w-80 border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" aria-label="Propiedades de la selección">
+      <div className="flex h-10 shrink-0 items-center border-b border-slate-200 px-4 dark:border-ink-line">
+        <h2 className="text-sm font-semibold">{elems.length + nudos.length} seleccionados</h2>
+        <button className="ml-auto text-xs text-slate-500" onClick={() => setSel(null)}>Deseleccionar (Esc)</button>
+      </div>
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 text-sm">
+        <div className="rounded-md bg-slate-100 px-3 py-2 text-xs dark:bg-ink-3">
+          {Object.entries(tipos).map(([t, n]) => `${n} ${nombreT[t] || t}`).join(" · ") || "Sin barras"}{nudos.length ? ` · ${nudos.length} ${nudos.length === 1 ? "nudo" : "nudos"}` : ""}
+        </div>
+        {elems.length > 0 && (<>
+          <h3 className="text-xs font-semibold uppercase text-slate-500">Barras ({elems.length})</h3>
+          <div className="grid grid-cols-2 gap-1">
+            <Campo label="Sección">
+              <select className="inp" value={comun("seccion")} onChange={(e) => cadaE((x) => { x.seccion = e.target.value; }, `Sección ${e.target.value} en ${elems.length} barras`)}>
+                {comun("seccion") === "__varios" && <option value="__varios">(varias)</option>}
+                {modelo.secciones.map((q) => <option key={q.nombre}>{q.nombre}</option>)}
+              </select>
+            </Campo>
+            <Campo label="Material">
+              <select className="inp" value={comun("material")} onChange={(e) => cadaE((x) => { x.material = e.target.value || undefined; }, `Material en ${elems.length} barras`)}>
+                {comun("material") === "__varios" && <option value="__varios">(varios)</option>}
+                <option value="">Por defecto</option>{(modelo.materiales || []).map((x) => <option key={x.nombre}>{x.nombre}</option>)}
+              </select>
+            </Campo>
+          </div>
+          {tipos.columna > 0 && (
+            <div className="flex gap-1 text-xs">
+              <button className="flex-1 rounded-md border border-slate-200 py-1 dark:border-ink-line" onClick={() => cadaE((x, m) => { if (tipoBarra(m, x) === "columna") x.giro = 0; }, "Columnas sin giro")}>Columnas a 0°</button>
+              <button className="flex-1 rounded-md border border-slate-200 py-1 dark:border-ink-line" onClick={() => cadaE((x, m) => { if (tipoBarra(m, x) === "columna") x.giro = 90; }, "Columnas giradas 90°")}>Columnas a 90°</button>
+            </div>
+          )}
+          <div className="flex gap-1 text-xs">
+            <button className="flex-1 rounded-md border border-slate-200 py-1 dark:border-ink-line" onClick={() => cadaE((x) => { x.release_i = true; x.release_j = true; }, "Rótulas en ambos extremos")}>Rótulas en i y j</button>
+            <button className="flex-1 rounded-md border border-slate-200 py-1 dark:border-ink-line" onClick={() => cadaE((x) => { x.release_i = false; x.release_j = false; }, "Quitar rótulas")}>Sin rótulas</button>
+          </div>
+          {vigas.length > 0 && (
+            <div className="space-y-1 rounded-lg border border-slate-200 p-2 dark:border-ink-line">
+              <div className="text-xs font-semibold">Carga uniforme en las {vigas.length} vigas</div>
+              <div className="grid grid-cols-2 gap-1">
+                <Campo label="Caso"><select className="inp" value={caso} onChange={(e) => setCaso(e.target.value)}>{casos.map((x) => <option key={x.nombre}>{x.nombre}</option>)}</select></Campo>
+                <Campo label="wz (t/m)" hint="negativo = hacia abajo"><NumIn value={wz} onChange={setWz} /></Campo>
+              </div>
+              <BtnAgregar onClick={() => commit((m) => { m.cargas_barras = m.cargas_barras || []; vigas.forEach((e) => m.cargas_barras.push({ elem: e.id, caso, tipo: "uniforme", wz })); }, `Carga ${wz} t/m (${caso}) en ${vigas.length} vigas`)}>+ Aplicar a las vigas</BtnAgregar>
+            </div>
+          )}
+          {nCargas > 0 && <button className="w-full rounded-md border border-slate-200 py-1 text-xs dark:border-ink-line" onClick={() => commit((m) => { m.cargas_barras = (m.cargas_barras || []).filter((c) => !sel.elems.includes(c.elem)); }, `Quitar ${nCargas} cargas`)}>Quitar las {nCargas} cargas de estas barras</button>}
+        </>)}
+        {nudos.length > 0 && (<>
+          <h3 className="text-xs font-semibold uppercase text-slate-500">Nudos ({nudos.length})</h3>
+          <Campo label="Apoyo">
+            <div className="grid grid-cols-3 gap-1">
+              {APOYOS3D.map(([v, l]) => <button key={v} onClick={() => cadaN((n) => { n.apoyo = v; }, `Apoyo ${l.toLowerCase()} en ${nudos.length} nudos`)} className={`rounded-md border px-2 py-1 text-xs ${nudos.every((n) => n.apoyo === v) ? "border-teal bg-teal text-white" : "border-slate-200 dark:border-ink-line"}`}>{l}</button>)}
+            </div>
+          </Campo>
+        </>)}
+        <p className="text-[11px] text-slate-500">Mover (G) y Copiar (Shift+D) están en la barra superior del 3D; los nudos que caen sobre otros se unen solos.</p>
+        <button className="w-full rounded-md border border-rose-200 py-1.5 text-sm text-rose-600 dark:border-rose-900 dark:text-rose-400" onClick={() => { commit((m) => borrarSeleccion(m, sel), `Eliminar ${elems.length + nudos.length} objetos`); setSel(null); }}>🗑 Eliminar la selección (Supr)</button>
+      </div>
+    </aside>
   );
 }

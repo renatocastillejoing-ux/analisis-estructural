@@ -262,6 +262,17 @@ def api_calcular3d_portico():
         return jsonify({"ok": False, "error": str(e)}), 400
 
 
+@app.route("/api/calcular3d/diagramas", methods=["POST"])
+def api_calcular3d_diagramas():
+    """Diagramas de momento de todas las barras del último cálculo 3D (para el visor)."""
+    from core.analisis_3d import diagramas_3d
+    d = request.get_json(force=True)
+    try:
+        return jsonify(diagramas_3d(d["id_calculo"], d["caso"]))
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
 @app.route("/api/modelo3d/portico", methods=["POST"])
 def api_modelo3d_portico():
     """Extrae un pórtico plano (modelo 2D del editor) de un modelo 3D."""

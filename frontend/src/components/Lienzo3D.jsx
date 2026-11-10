@@ -1,12 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pedir } from "../pedir.js";
-import { agregarBarra, agregarNudo3d, borrarBarra, borrarNudo3d, buscarNudo, escena3d, tipoBarra } from "../model3d.js";
+import { agregarBarra, agregarNudo3d, borrarBarra, borrarNudo3d, buscarNudo, escena3d, idsSel, moverCopiar, sumarSel, tipoBarra } from "../model3d.js";
 
 const Visor3D = lazy(() => import("./Visor3D.jsx"));
 const TOL = 1e-6;
 
 export const HERR3D = [
-  { id: "select", label: "Seleccionar", icon: "↖", kbd: "V" },
+  { id: "select", label: "Seleccionar (Shift+clic suma; Ctrl+arrastre: recuadro)", icon: "↖", kbd: "V" },
+  { id: "recuadro", label: "Seleccionar con recuadro (Shift suma)", icon: "⬚", kbd: "R" },
   { id: "pan", label: "Mano: desplazar", icon: "✋", kbd: "H" },
   { id: "columna", label: "Columna (en planta)", icon: "▮", kbd: "C" },
   { id: "barra", label: "Barra: viga, columna o diagonal", icon: "⟋", kbd: "B" },
@@ -16,7 +17,62 @@ export const HERR3D = [
 // Centro del modelo 3D: vista 3D, planta de un nivel o elevación de un eje.
 export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, vista, setVista, avisar, ajusteKey }) {
   const niveles = useMemo(() => [...modelo.niveles].sort((a, b) => a.z - b.z), [modelo.niveles]);
-  const escena = useMemo(() => (vista.modo === "3d" ? escena3d(modelo, { sel, nudos: true }) : null), [modelo, sel, vista.modo]);
+  // ---- ocultar / aislar y corte de la vista (solo afecta a lo que se ve, no al modelo) ----
+  const [ocultos, setOcultos] = useState({ elems: [], nudos: [] });
+  const [corte, setCorte] = useState("todo");          // "todo" | "z:<z>" (hasta ese nivel) | "x:<c>" / "y:<c>" (solo ese eje)
+  const escena = useMemo(() => {
+    if (vista.modo !== "3d") return null;
+    const esc = escena3d(modelo, { sel, nudos: true });
+    const oe = new Set(ocultos.elems), on = new Set(ocultos.nudos);
+    const [tc, vc] = corte.split(":"), v = +vc;
+    const dentro = (p) => tc === "z" ? p[2] <= v + 1e-6 : tc === "x" ? Math.abs(p[1] - v) < 1e-6 : tc === "y" ? Math.abs(p[0] - v) < 1e-6 : true;
+    const miembros = esc.miembros.filter((m) => !oe.has(m.id) && dentro(m.a) && dentro(m.b));
+    const usados = new Set(modelo.elementos.filter((e) => !oe.has(e.id)).flatMap((e) => [e.i, e.j]));
+    const nudos = esc.nudos.filter((n) => !on.has(n.id) && dentro(n.p) && (usados.has(n.id) || !modelo.elementos.some((e) => e.i === n.id || e.j === n.id)));
+    return { ...esc, miembros, nudos, apoyos: esc.apoyos.filter((a) => dentro(a.p)) };
+  }, [modelo, sel, vista.modo, ocultos, corte]);
+  const nOcultos = ocultos.elems.length + ocultos.nudos.length;
+  const ocultar = (aislar) => {
+    const { elems, nudos } = idsSel(sel);
+    if (!elems.length && !nudos.length) { avisar("Selecciona primero (clic, Shift+clic o recuadro).", "err"); return; }
+    if (aislar) {
+      const ne = new Set(elems), nn = new Set([...nudos, ...modelo.elementos.filter((e) => ne.has(e.id)).flatMap((e) => [e.i, e.j])]);
+      setOcultos({ elems: modelo.elementos.filter((e) => !ne.has(e.id)).map((e) => e.id), nudos: modelo.nudos.filter((n) => !nn.has(n.id)).map((n) => n.id) });
+    } else { setOcultos((o) => ({ elems: [...new Set([...o.elems, ...elems])], nudos: [...new Set([...o.nudos, ...nudos])] })); setSel(null); }
+  };
+  const mostrarTodo = () => { setOcultos({ elems: [], nudos: [] }); setCorte("todo"); };
+  // ---- mover y copiar lo seleccionado (los nudos que caen sobre otros se unen: imán) ----
+  const moverOCopiar = async (copiar) => {
+    const { elems, nudos } = idsSel(sel);
+    if (!elems.length && !nudos.length) { avisar("Selecciona primero lo que quieres " + (copiar ? "copiar." : "mover."), "err"); return; }
+    const alto = niveles.length > 1 ? +(niveles[niveles.length - 1].z - niveles[niveles.length - 2].z).toFixed(3) : 3;
+    const campos = [{ clave: "dx", label: "Δx (m)", valor: 0 }, { clave: "dy", label: "Δy (m)", valor: 0 }, { clave: "dz", label: "Δz (m)", valor: copiar ? alto : 0 }];
+    if (copiar) campos.push({ clave: "n", label: "Número de copias (en serie)", valor: 1 });
+    const r = await pedir(copiar ? `Copiar ${elems.length + nudos.length} objetos` : `Mover ${elems.length + nudos.length} objetos`, campos);
+    if (!r) return;
+    if (!r.dx && !r.dy && !r.dz) { avisar("El desplazamiento es cero.", "err"); return; }
+    const info = moverCopiar(structuredClone(modelo), sel, [r.dx, r.dy, r.dz], { copiar, copias: r.n || 1 });   // mismo resultado, para el aviso
+    commit((m) => { moverCopiar(m, sel, [r.dx, r.dy, r.dz], { copiar, copias: r.n || 1 }); }, copiar ? `Copiar ${elems.length + nudos.length} objetos ×${Math.max(1, Math.floor(r.n || 1))}` : `Mover ${elems.length + nudos.length} objetos`);
+    {
+      if (copiar) { avisar(`${info.barras} ${info.barras === 1 ? "barra nueva" : "barras nuevas"} y ${info.nudos} ${info.nudos === 1 ? "nudo nuevo" : "nudos nuevos"} (los que coincidían se unieron a los existentes).`); if (info.sel) setSel(sumarSel(null, { tipo: "varios", ...info.sel }, false)); }
+      else avisar(`Movido.${info.fusionados ? ` ${info.fusionados} ${info.fusionados === 1 ? "nudo se unió" : "nudos se unieron"} a otros existentes.` : ""}`);
+    }
+  };
+  const accRef = useRef({});
+  accRef.current = { ocultar, mostrarTodo, moverOCopiar, modo3d: vista.modo === "3d" };
+  useEffect(() => {
+    const h = (e) => {
+      const a = accRef.current;
+      if (!a.modo3d || /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName) || e.ctrlKey || e.metaKey) return;
+      const k = e.key.toLowerCase();
+      if (k === "h" && e.altKey) { e.preventDefault(); e.stopPropagation(); a.mostrarTodo(); }
+      else if (k === "h") { e.preventDefault(); e.stopPropagation(); a.ocultar(e.shiftKey); }
+      else if (k === "g" && !e.shiftKey) { e.preventDefault(); e.stopPropagation(); a.moverOCopiar(false); }
+      else if (k === "d" && e.shiftKey) { e.preventDefault(); e.stopPropagation(); a.moverOCopiar(true); }
+    };
+    window.addEventListener("keydown", h, true);
+    return () => window.removeEventListener("keydown", h, true);
+  }, []);
   const enPlanoUlt = (m, q) => {
     if (!q) return false;
     if (q.modo === "planta") return Math.abs(m.a[2] - q.z) < 1e-6 && Math.abs(m.b[2] - q.z) < 1e-6 || (m.tipo === "columna" || m.tipo === "placa") && (Math.abs(Math.max(m.a[2], m.b[2]) - q.z) < 1e-6);
@@ -65,7 +121,7 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
-  const elegir3d = (m) => {
+  const elegir3d = (m, ev) => {
     if (tool === "eliminar") {
       if (m?._nudo) commit((x) => borrarNudo3d(x, m.id)); else if (m) commit((x) => borrarBarra(x, m.id));
       return;
@@ -78,8 +134,16 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
       return;
     }
     if (tool === "columna") { avisar("La herramienta Columna se usa en planta. En 3D usa Barra (B) de nudo a nudo.", "err"); return; }
-    setSel(m ? (m._nudo ? { tipo: "nudo", id: m.id } : { tipo: "elemento", id: m.id }) : null);
+    const uno = m ? (m._nudo ? { tipo: "nudo", id: m.id } : { tipo: "elemento", id: m.id }) : null;
+    if (ev?.shiftKey) { if (uno) setSel(sumarSel(sel, uno)); return; }
+    setSel(uno);
   };
+  const recuadro3d = (lista, aditivo) => {
+    const nueva = { tipo: "varios", elems: lista.filter((x) => !x._nudo).map((x) => x.id), nudos: lista.filter((x) => x._nudo).map((x) => x.id) };
+    setSel(sumarSel(aditivo ? sel : null, nueva, false));
+    if (!aditivo && !lista.length) setSel(null);
+  };
+  const nSel = (() => { const { elems, nudos } = idsSel(sel); return elems.length + nudos.length; })();
 
   return (
     <div className="absolute inset-0 flex flex-col">
@@ -100,9 +164,27 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
           <button onClick={() => mover(1)} disabled={!vecino(1)} className="rounded border border-slate-200 px-1.5 py-0.5 disabled:opacity-30 dark:border-ink-line" title="Eje o nivel siguiente (AvPág)" aria-label="Siguiente">▶</button>
           {vista.modo === "planta" && <label className="flex items-center gap-1"><input type="checkbox" checked={todos} onChange={(e) => setTodos(e.target.checked)} className="accent-teal-600" /> Dibujar en todos los niveles</label>}
         </>) : (
-          <label className="flex items-center gap-1" title="Resalta en 3D el último eje o nivel que trabajaste en 2D">
-            <input type="checkbox" checked={resaltarPlano} onChange={(e) => setResaltarPlano(e.target.checked)} className="accent-teal-600" /> Resaltar {ultimo2d?.nombre || "el plano 2D"}
-          </label>
+          <>
+            <label className="flex items-center gap-1" title="Resalta en 3D el último eje o nivel que trabajaste en 2D">
+              <input type="checkbox" checked={resaltarPlano} onChange={(e) => setResaltarPlano(e.target.checked)} className="accent-teal-600" /> Resaltar {ultimo2d?.nombre || "el plano 2D"}
+            </label>
+            <select className="inp !py-0.5 text-xs" value={corte} onChange={(e) => setCorte(e.target.value)} aria-label="Cortar la vista" title="Muestra solo una parte del edificio (no cambia el modelo)">
+              <option value="todo">Ver todo el edificio</option>
+              <optgroup label="Hasta el nivel">{niveles.map((n) => <option key={`z${n.z}`} value={`z:${n.z}`}>Hasta {n.nombre} (z = {n.z} m)</option>)}</optgroup>
+              <optgroup label="Solo un pórtico en X">{(modelo.ejes?.y || []).map((e) => <option key={`x${e.c}`} value={`x:${e.c}`}>Eje {e.nombre} (y = {e.c} m)</option>)}</optgroup>
+              <optgroup label="Solo un pórtico en Y">{(modelo.ejes?.x || []).map((e) => <option key={`y${e.c}`} value={`y:${e.c}`}>Eje {e.nombre} (x = {e.c} m)</option>)}</optgroup>
+            </select>
+            <div className="flex overflow-hidden rounded-md border border-slate-200 dark:border-ink-line">
+              <button onClick={() => ocultar(false)} disabled={!nSel} className="px-2 py-0.5 hover:bg-slate-100 disabled:opacity-35 dark:hover:bg-ink-3" title="Ocultar lo seleccionado (H)">Ocultar</button>
+              <button onClick={() => ocultar(true)} disabled={!nSel} className="border-l border-slate-200 px-2 py-0.5 hover:bg-slate-100 disabled:opacity-35 dark:border-ink-line dark:hover:bg-ink-3" title="Ver solo lo seleccionado (Shift+H)">Aislar</button>
+              <button onClick={mostrarTodo} disabled={!nOcultos && corte === "todo"} className="border-l border-slate-200 px-2 py-0.5 hover:bg-slate-100 disabled:opacity-35 dark:border-ink-line dark:hover:bg-ink-3" title="Mostrar todo (Alt+H)">Mostrar todo{nOcultos ? ` (${nOcultos})` : ""}</button>
+            </div>
+            <div className="flex overflow-hidden rounded-md border border-slate-200 dark:border-ink-line">
+              <button onClick={() => moverOCopiar(false)} disabled={!nSel} className="px-2 py-0.5 hover:bg-slate-100 disabled:opacity-35 dark:hover:bg-ink-3" title="Mover lo seleccionado (G)">Mover</button>
+              <button onClick={() => moverOCopiar(true)} disabled={!nSel} className="border-l border-slate-200 px-2 py-0.5 hover:bg-slate-100 disabled:opacity-35 dark:border-ink-line dark:hover:bg-ink-3" title="Copiar lo seleccionado, también en serie por niveles (Shift+D)">Copiar</button>
+            </div>
+            {nSel > 1 && <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">{nSel} seleccionados</span>}
+          </>
         )}
         {vista.modo !== "3d" && (<>
           <label className="flex items-center gap-1">Ajuste
@@ -115,14 +197,15 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
           <button onClick={() => agregar("nivel")} className="rounded border border-slate-200 px-1.5 py-0.5 dark:border-ink-line" title="Agregar un nivel">+ Nivel</button>
         </>)}
         <span className="ml-auto text-slate-500 dark:text-slate-400">
-          {vista.modo === "3d" ? "Arrastrar o botón central: girar · clic derecho: desplazar · rueda: zoom · 1 3 7 vistas · 5 orto · F encuadrar · ? atajos" : "Rueda: zoom · arrastrar fondo o Espacio: desplazar · Esc: terminar"}
+          {vista.modo === "3d" ? "Shift+clic suma · Ctrl+arrastre: recuadro · H ocultar · G mover · Shift+D copiar · ? atajos" : "Rueda: zoom · arrastrar fondo o Espacio: desplazar · Esc: terminar"}
         </span>
       </div>
       <div className="relative min-h-0 flex-1">
         {vista.modo === "3d" ? (
           <Suspense fallback={<div className="p-6 text-sm text-slate-500">Cargando el visor 3D…</div>}>
             <Visor3D escena={resaltarPlano && ultimo2d ? { ...escena, miembros: escena.miembros.map((m) => ({ ...m, grupos: enPlanoUlt(m, ultimo2d) ? ["plano"] : [] })) } : escena}
-              resaltar={resaltarPlano && ultimo2d ? "plano" : null} ajusteKey={ajusteKey} onElegir={elegir3d} pendiente={pend3} />
+              resaltar={resaltarPlano && ultimo2d ? "plano" : null} ajusteKey={ajusteKey} onElegir={elegir3d} pendiente={pend3}
+              recuadro={tool === "recuadro"} onRecuadro={recuadro3d} />
             {tool === "barra" && (
               <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-teal px-3 py-1 text-xs font-semibold text-white shadow">
                 {pend3 == null ? "Clic en el nudo inicial" : "Clic en el nudo final · Esc para terminar"}
