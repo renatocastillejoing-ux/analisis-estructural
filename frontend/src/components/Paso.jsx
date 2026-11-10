@@ -68,8 +68,8 @@ export default function Paso({ modelo, onVolver }) {
   const ir = (k) => { setPlay(false); setI(Math.max(0, Math.min(n - 1, k))); };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-6 py-2.5 dark:border-ink-line dark:bg-ink-2">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6 dark:border-ink-line dark:bg-ink-2">
         <button onClick={() => ir(0)} className={btn} title="Primer paso" aria-label="Primer paso">⏮</button>
         <button onClick={() => ir(i - 1)} className={btn} title="Paso anterior (←)" aria-label="Paso anterior">◀</button>
         <button onClick={() => { if (i >= n - 1) setI(0); setPlay((p) => !p); }} className="min-w-28 rounded-md bg-teal px-4 py-1.5 text-sm font-semibold text-white hover:bg-teal-dark" title="Reproducir / pausar (P)">
@@ -86,7 +86,7 @@ export default function Paso({ modelo, onVolver }) {
         <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">{data.n_gdl} GDL · {data.barras.length} barras · K = Σ AᵀkA</span>
         <span className="text-sm font-semibold tabular-nums">Paso {i + 1} / {n}</span>
       </div>
-      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-6 py-2 dark:border-ink-line dark:bg-ink-2" role="tablist" aria-label="Pasos">
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 sm:px-6 dark:border-ink-line dark:bg-ink-2" role="tablist" aria-label="Pasos">
         {data.pasos.map((p, k) => (
           <button key={k} role="tab" aria-selected={k === i} onClick={() => ir(k)} title={p.titulo}
             className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs tabular-nums transition ${k === i ? "border-teal bg-teal font-semibold text-white" : k < i ? "border-teal/40 bg-teal/10 text-teal-dark dark:text-teal-soft" : "border-slate-200 text-slate-500 dark:border-ink-line dark:text-slate-400"}`}>
@@ -96,7 +96,7 @@ export default function Paso({ modelo, onVolver }) {
       </div>
       <div className="h-1 bg-slate-200 dark:bg-ink-3"><div className="h-1 bg-teal transition-all duration-500" style={{ width: `${((i + 1) / n) * 100}%` }} /></div>
 
-      <div key={i} className="paso-in min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
+      <div key={i} className="paso-in min-h-0 flex-1 space-y-4 overflow-y-auto p-3 sm:p-6">
         <div>
           <div className="text-xs font-semibold uppercase tracking-wide text-teal-dark dark:text-teal-soft">Paso {etiquetaPaso(paso)}</div>
           <h2 className="text-lg font-semibold">{paso.titulo}</h2>

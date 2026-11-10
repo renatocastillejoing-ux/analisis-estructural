@@ -37,8 +37,8 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
   const dmax = Math.max(...res.desp[caso].map((d) => Math.hypot(...d)));
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <aside className="flex w-72 shrink-0 flex-col gap-3 overflow-y-auto border-r border-slate-200 bg-white p-4 text-sm dark:border-ink-line dark:bg-ink-2">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+      <aside className="flex max-h-[45vh] w-full shrink-0 flex-col gap-3 overflow-y-auto border-b md:max-h-none md:w-72 md:border-b-0 md:border-r border-slate-200 bg-white p-4 text-sm dark:border-ink-line dark:bg-ink-2">
         <div>
           <h2 className="font-semibold">Resultados 3D</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">{r.n_nudos} nudos · {r.n_elementos} barras · {r.n_resuelto} GDL resueltos{r.diafragma ? " (diafragma rígido)" : ""} · {r.t_total} s</p>
@@ -97,7 +97,7 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
         <button onClick={onVolver} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm dark:border-ink-line">← Editar modelo</button>
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-[70vh] min-w-0 flex-1 flex-col md:min-h-0">
         <div className="relative min-h-[320px] flex-[3]">
           <Suspense fallback={<div className="p-6 text-sm text-slate-500">Cargando el visor 3D…</div>}>
             <Visor3D escena={escena} ajusteKey={res} onElegir={(m) => setElegido(m ? m.id : null)} />

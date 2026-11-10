@@ -20,7 +20,7 @@ export function MenuBar({ menus }) {
           <button type="button" aria-haspopup="menu" aria-expanded={abierto === m.id}
             onClick={() => setAbierto((a) => (a === m.id ? null : m.id))}
             onMouseEnter={() => abierto && setAbierto(m.id)}
-            className={`rounded-md px-2 py-1.5 text-[13px] ${abierto === m.id ? "bg-slate-200 dark:bg-ink-3" : "hover:bg-slate-100 dark:hover:bg-ink-3"}`}>
+            className={`rounded-md px-1.5 py-1.5 text-[13px] 2xl:px-2 ${abierto === m.id ? "bg-slate-200 dark:bg-ink-3" : "hover:bg-slate-100 dark:hover:bg-ink-3"}`}>
             {m.label}
           </button>
           {abierto === m.id && (
@@ -47,7 +47,7 @@ export function MenuBar({ menus }) {
 const normal = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 // Buscador de comandos de la cabecera (Ctrl+K): filtra todos los comandos de los menús.
-export const BuscadorComandos = forwardRef(function BuscadorComandos({ comandos }, ref) {
+export const BuscadorComandos = forwardRef(function BuscadorComandos({ comandos, ancho }, ref) {
   const [q, setQ] = useState("");
   const [abierto, setAbierto] = useState(false);
   const [k, setK] = useState(0);
@@ -74,7 +74,7 @@ export const BuscadorComandos = forwardRef(function BuscadorComandos({ comandos 
   const ejecutar = (c) => { setAbierto(false); setQ(""); input.current?.blur(); c.accion(); };
 
   return (
-    <div ref={caja} className="relative w-36 xl:w-52 2xl:w-64">
+    <div ref={caja} className={`relative ${ancho || "w-40 2xl:w-60"}`}>
       <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-slate-400">⌕</span>
       <input ref={input} value={q} placeholder="Buscar comando…" aria-label="Buscar comando" role="combobox" aria-expanded={abierto}
         onFocus={() => setAbierto(true)}
@@ -88,7 +88,7 @@ export const BuscadorComandos = forwardRef(function BuscadorComandos({ comandos 
         className="inp h-8 w-full !pl-7 !pr-14" />
       <kbd className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 rounded border border-slate-300 px-1 text-[10px] text-slate-500 dark:border-ink-line dark:text-slate-400">Ctrl K</kbd>
       {abierto && (
-        <div role="listbox" className="absolute right-0 top-full z-40 mt-1 max-h-[70vh] w-[360px] overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-ink-line dark:bg-ink-2">
+        <div role="listbox" className="absolute right-0 top-full z-40 mt-1 max-h-[70vh] w-[360px] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-ink-line dark:bg-ink-2">
           {lista.length === 0 && <p className="px-3 py-2 text-sm text-slate-500">Ningún comando coincide.</p>}
           {lista.map((c, i) => (
             <button key={c.id} type="button" role="option" aria-selected={i === k}

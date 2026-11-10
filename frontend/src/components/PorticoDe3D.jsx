@@ -94,7 +94,7 @@ export function PasoPortico3D({ modelo, inicial, onVolver }) {
   }, [k, fac, modelo]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!lista.length) return <p className="m-auto text-sm text-slate-500">El modelo no tiene ejes definidos.</p>;
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-6 py-2 text-sm dark:border-ink-line dark:bg-ink-2">
         <span className="font-semibold">Pórtico del modelo 3D:</span>
         <select className="inp" value={k} onChange={(e) => setK(+e.target.value)}>{lista.map((x, i) => <option key={i} value={i}>{x.nombre} · {x.det}</option>)}</select>

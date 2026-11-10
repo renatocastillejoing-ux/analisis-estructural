@@ -15,14 +15,14 @@ export default function Documentos({ docs, activo, onCambiar, onCerrar, onNuevo2
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setAbierto((a) => !a)} aria-haspopup="menu" aria-expanded={abierto} title="Documentos abiertos del proyecto"
-        className="flex h-8 max-w-[10rem] items-center xl:max-w-[14rem] gap-1.5 rounded-md border border-slate-200 px-2 text-[13px] hover:bg-slate-100 dark:border-ink-line dark:hover:bg-ink-3">
+        className="flex h-8 max-w-[9rem] items-center sm:max-w-[10rem] 2xl:max-w-[14rem] gap-1.5 rounded-md border border-slate-200 px-2 text-[13px] hover:bg-slate-100 dark:border-ink-line dark:hover:bg-ink-3">
         <span className={`rounded px-1 text-[10px] font-bold ${act && es3(act) ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300" : "bg-teal/15 text-teal-dark dark:text-teal-soft"}`}>{act && es3(act) ? "3D" : "2D"}</span>
         <span className="truncate font-medium">{act?.modelo?.nombre || "Sin título"}</span>
         <span className="text-slate-400">▾</span>
         {docs.length > 1 && <span className="rounded-full bg-slate-200 px-1.5 text-[10px] tabular-nums dark:bg-ink-3">{docs.length}</span>}
       </button>
       {abierto && (
-        <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-80 rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-ink-line dark:bg-ink-2">
+        <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-80 max-w-[calc(100vw-1.5rem)] rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-ink-line dark:bg-ink-2">
           <div className="px-3 py-1 text-[11px] font-semibold uppercase text-slate-500">Documentos abiertos</div>
           {docs.map((d) => (
             <div key={d.id} className={`group flex items-center gap-2 px-3 py-1.5 text-[13px] ${d.id === activo ? "bg-teal/10" : "hover:bg-slate-100 dark:hover:bg-ink-3"}`}>

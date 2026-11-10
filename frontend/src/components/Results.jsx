@@ -34,7 +34,7 @@ export default function Results({ resultado, error, onVolver, combos, onExportar
   const verCombos = !!combos && (seccion === "combos" || !resultado);
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto p-6">
+    <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 sm:p-6">
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-wrap items-center gap-3">
           <div className="mr-auto">
@@ -93,7 +93,7 @@ function Simple({ resultado, tipo, setTipo }) {
       </div>
 
       <section className={caja}>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="font-semibold">Diagramas</h2>
           <div className="flex gap-1 rounded-full bg-slate-100 p-1 dark:bg-ink-3" role="tablist">
             {TIPOS.map((t) => (

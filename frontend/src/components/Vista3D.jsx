@@ -36,8 +36,8 @@ export default function Vista3D({ modelo, onAbrirPortico, onAbrirTorre3d }) {
   };
 
   return (
-    <div className="flex min-h-0 flex-1">
-      <aside className="flex w-72 shrink-0 flex-col gap-4 overflow-y-auto border-r border-slate-200 bg-white p-4 text-sm dark:border-ink-line dark:bg-ink-2">
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <aside className="flex max-h-[40vh] w-full shrink-0 flex-col gap-4 overflow-y-auto border-b md:max-h-none md:w-72 md:border-b-0 md:border-r border-slate-200 bg-white p-4 text-sm dark:border-ink-line dark:bg-ink-2">
         <div>
           <h2 className="mb-2 font-semibold">Vista 3D</h2>
           <div className="flex rounded-lg bg-slate-100 p-0.5 dark:bg-ink-3">
@@ -129,7 +129,7 @@ export default function Vista3D({ modelo, onAbrirPortico, onAbrirTorre3d }) {
         )}
       </aside>
 
-      <main className="relative min-w-0 flex-1">
+      <main className="relative min-h-[50vh] min-w-0 flex-1">
         {error && <p className="m-6 text-sm text-rose-600">{error}</p>}
         {!escena && !error && <p className="m-6 text-sm text-slate-500">Cargando la torre…</p>}
         {escena && escena.miembros.length === 0 && <p className="m-6 text-sm text-slate-500">El modelo no tiene elementos.</p>}

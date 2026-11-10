@@ -8,7 +8,7 @@ export default function Props({ modelo, sel, setSel, commit, abrirPanel }) {
   const elem = sel?.tipo === "elemento" ? modelo.elementos.find((e) => e.id === sel.id) : null;
 
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" aria-label="Propiedades">
+    <aside className="flex w-full shrink-0 flex-col border-l lg:w-80 border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" aria-label="Propiedades">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-ink-line">
         <h2 className="text-sm font-semibold">{nudo ? `Nudo ${nudo.nombre}` : elem ? `Elemento ${elem.nombre}` : "Propiedades"}</h2>
         {(nudo || elem) && <button className="ml-auto text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" onClick={() => setSel(null)}>Deseleccionar (Esc)</button>}

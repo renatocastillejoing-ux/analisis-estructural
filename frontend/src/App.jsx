@@ -13,6 +13,7 @@ import Results3D from "./components/Results3D.jsx";
 import { DialogoCopiar, DialogoEdificio, DialogoExtraer, DialogoExtruir, DialogoInsertar, DialogoUnir } from "./components/Dialogs3D.jsx";
 import { a3d, borrarBarra, borrarNudo3d, copiarPlano, es3d, insertarPortico, limpiarNudos, modelo3dVacio, unirPlanos, validar3d } from "./model3d.js";
 import Documentos from "./components/Documentos.jsx";
+import MenuMovil from "./components/MenuMovil.jsx";
 import { PasoPortico3D } from "./components/PorticoDe3D.jsx";
 import { PLANTILLAS } from "./model.js";
 import { BuscadorComandos, MenuBar } from "./components/MenuBar.jsx";
@@ -109,6 +110,9 @@ export default function App() {
   const [ver3d, setVer3d] = useState(false);              // pórtico 2D visto en 3D
   const [paso3d, setPaso3d] = useState(null);             // pórtico del 3D elegido para el paso a paso
   const resRef = useRef({});                              // resultados guardados por documento
+  const [menuMovil, setMenuMovil] = useState(false);
+  const [arbolMovil, setArbolMovil] = useState(false);     // panel izquierdo en pantallas chicas
+  useEffect(() => { if (sel && window.innerWidth < 768) setArbolMovil(false); }, [sel]);
   const tridim = es3d(modelo);
   const buscador = useRef(null);
   const importar = useRef(null);
@@ -481,30 +485,33 @@ export default function App() {
         <Documentos docs={proyecto.docs} activo={proyecto.activo} onCambiar={cambiarDoc} onCerrar={cerrarDoc} onNuevo2d={nuevoModelo} onNuevo3d={() => setDialogo("edificio")} />
         <div className="hidden lg:block"><MenuBar menus={menus} /></div>
         <div className="flex-1" />
-        <BuscadorComandos ref={buscador} comandos={comandos} />
+        <div className="hidden xl:block"><BuscadorComandos ref={buscador} comandos={comandos} /></div>
         <button onClick={ejecutarCalculo} disabled={calculando} title={validacion.errores[0] || "Calcular estructura (Ctrl+Enter)"}
           className="flex h-8 shrink-0 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white hover:bg-teal-dark disabled:opacity-60">
-          {calculando ? "Calculando…" : <>▶ <span className="hidden xl:inline">Calcular estructura</span><span className="xl:hidden">Calcular</span></>}
+          {calculando ? "…" : <>▶ <span className="hidden 2xl:inline">Calcular estructura</span><span className="hidden sm:inline 2xl:hidden">Calcular</span></>}
         </button>
-        <div className="mx-1 h-6 w-px bg-slate-200 dark:bg-ink-line" />
-        <div className="flex shrink-0 rounded-lg bg-slate-100 p-0.5 dark:bg-ink-3" role="tablist" aria-label="Vistas">
+        <div className="mx-0.5 hidden h-6 w-px bg-slate-200 xl:block dark:bg-ink-line" />
+        <div className="hidden shrink-0 rounded-lg bg-slate-100 p-0.5 xl:flex dark:bg-ink-3" role="tablist" aria-label="Vistas">
           {VISTAS.map(([id, l]) => (
             <button key={id} role="tab" aria-selected={vista === id} onClick={() => setVista(id)}
-              className={`whitespace-nowrap rounded-md px-2 py-1 text-[13px] ${vista === id ? "bg-white font-semibold text-teal-dark shadow-sm dark:bg-ink-line dark:text-teal-soft" : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"}`}>
+              className={`whitespace-nowrap rounded-md px-1.5 py-1 text-[12px] 2xl:px-2 2xl:text-[13px] ${vista === id ? "bg-white font-semibold text-teal-dark shadow-sm dark:bg-ink-line dark:text-teal-soft" : "text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"}`}>
               {l}{id === "resultados" && desactualizado && <span className="ml-1 text-amber-500" title="El modelo cambió después del último cálculo">•</span>}
             </button>
           ))}
         </div>
         <button onClick={() => setTema((t) => (t === "dark" ? "light" : "dark"))} title={tema === "dark" ? "Tema claro" : "Tema oscuro"} aria-label="Cambiar tema"
-          className="grid h-8 w-8 shrink-0 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-ink-3">{tema === "dark" ? "☀" : "☾"}</button>
+          className="hidden h-8 w-8 shrink-0 place-items-center rounded-md hover:bg-slate-100 xl:grid dark:hover:bg-ink-3">{tema === "dark" ? "☀" : "☾"}</button>
+        <button onClick={() => setMenuMovil(true)} aria-label="Abrir menú" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 xl:hidden dark:border-ink-line">☰</button>
       </header>
+      <MenuMovil abierto={menuMovil} onCerrar={() => setMenuMovil(false)} menus={menus} comandos={comandos} vistas={VISTAS} vista={vista} setVista={setVista} tema={tema} setTema={setTema} />
       <input ref={importar} type="file" accept=".json,application/json" className="hidden" onChange={onImportar} />
 
       {/* ===== cuerpo ===== */}
       <div className="flex min-h-0 flex-1">
         {vista === "modelo" && tridim && (
           <>
-            <aside className="hidden w-80 shrink-0 flex-col border-r border-slate-200 bg-white md:flex dark:border-ink-line dark:bg-ink-2">
+            <aside className={`${arbolMovil ? "fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-sm shadow-2xl" : "hidden"} shrink-0 flex-col border-r border-slate-200 bg-white md:static md:z-auto md:flex md:w-80 md:max-w-none md:shadow-none dark:border-ink-line dark:bg-ink-2`}>
+              <button onClick={() => setArbolMovil(false)} className="absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-slate-200 bg-white md:hidden dark:border-ink-line dark:bg-ink-2" aria-label="Cerrar panel">✕</button>
               <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-3 dark:border-ink-line">
                 {panel ? (<>
                   <button onClick={() => setPanel(null)} className="rounded-md px-1.5 py-0.5 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Volver al árbol del modelo">←</button>
@@ -520,14 +527,15 @@ export default function App() {
               <Lienzo3D modelo={modelo} commit={commit} sel={sel} setSel={setSel} tool={tool} setTool={setTool} vista={vista3d} setVista={setVista3d} avisar={avisar} ajusteKey={fitKey} />
               {vista3d.modo !== "3d" && <BarraHerramientas3D tool={tool} setTool={setTool} deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} />}
             </main>
-            <div className="hidden lg:flex">
+            <div className={`${sel ? "fixed inset-x-0 bottom-0 z-30 flex max-h-[55vh] shadow-2xl" : "hidden"} lg:static lg:z-auto lg:flex lg:max-h-none lg:shadow-none`}>
               <Props3D modelo={modelo} sel={sel} setSel={setSel} commit={commit} abrirPanel={abrirPanel} />
             </div>
           </>
         )}
         {vista === "modelo" && !tridim && (
           <>
-            <aside className="hidden w-80 shrink-0 flex-col border-r border-slate-200 bg-white md:flex dark:border-ink-line dark:bg-ink-2">
+            <aside className={`${arbolMovil ? "fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-sm shadow-2xl" : "hidden"} shrink-0 flex-col border-r border-slate-200 bg-white md:static md:z-auto md:flex md:w-80 md:max-w-none md:shadow-none dark:border-ink-line dark:bg-ink-2`}>
+              <button onClick={() => setArbolMovil(false)} className="absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-slate-200 bg-white md:hidden dark:border-ink-line dark:bg-ink-2" aria-label="Cerrar panel">✕</button>
               <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-3 dark:border-ink-line">
                 {panel ? (
                   <>
@@ -564,13 +572,13 @@ export default function App() {
               {ver3d && <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/90 px-2 py-1 text-[11px] text-slate-600 shadow dark:bg-ink-2/90 dark:text-slate-300">Arrastrar: girar · clic derecho: desplazar · rueda: zoom · para dibujar fuera del plano pulsa «Dibujar en 3D»</div>}
             </main>
 
-            <div className="hidden lg:flex">
+            <div className={`${sel ? "fixed inset-x-0 bottom-0 z-30 flex max-h-[55vh] shadow-2xl" : "hidden"} lg:static lg:z-auto lg:flex lg:max-h-none lg:shadow-none`}>
               <Props modelo={modelo} sel={sel} setSel={setSel} commit={commit} abrirPanel={abrirPanel} />
             </div>
           </>
         )}
         {vista === "resultados" && tridim && (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {desactualizado && (
               <div className="flex items-center gap-3 border-b border-amber-300 bg-amber-50 px-6 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                 El modelo cambió después de este cálculo; los resultados pueden no corresponder.
@@ -581,7 +589,7 @@ export default function App() {
           </div>
         )}
         {vista === "resultados" && !tridim && (
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             {desactualizado && (
               <div className="flex items-center gap-3 border-b border-amber-300 bg-amber-50 px-6 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
                 El modelo cambió después de este cálculo; los resultados pueden no corresponder.
@@ -611,19 +619,22 @@ export default function App() {
         )}
       </div>
 
+      {vista === "modelo" && !arbolMovil && (
+        <button onClick={() => setArbolMovil(true)} className="fixed bottom-10 left-3 z-20 rounded-full bg-teal px-4 py-2 text-sm font-semibold text-white shadow-lg md:hidden">☰ Árbol y paneles</button>
+      )}
       {/* ===== barra de estado ===== */}
-      <footer className="flex h-7 shrink-0 items-center gap-4 border-t border-slate-200 bg-white px-3 text-[11px] tabular-nums text-slate-600 dark:border-ink-line dark:bg-ink-2 dark:text-slate-300">
-        <span>{herramienta?.icon} {herramienta?.label}</span>
-        <span className={tridim ? "hidden" : ""}>{cursor ? `x = ${cursor.x.toFixed(2)}  y = ${cursor.y.toFixed(2)} ${modelo.unidad_longitud}` : "—"}</span>
-        <span className={tridim ? "hidden" : ""}>Zoom {zoom.toFixed(0)} px/{modelo.unidad_longitud}</span>
-        <span>{tridim ? `Modelo 3D · ${modelo.nudos.length} nudos · ${modelo.elementos.length} barras · ${modelo.niveles.length} niveles` : `${modelo.nudos.length} nudos · ${modelo.elementos.length} elementos · ${modelo.cargas_nodales.length + modelo.cargas_elementos.length} cargas`}</span>
+      <footer className="flex h-7 shrink-0 items-center gap-4 overflow-hidden whitespace-nowrap border-t border-slate-200 bg-white px-3 text-[11px] tabular-nums text-slate-600 dark:border-ink-line dark:bg-ink-2 dark:text-slate-300">
+        <span className="hidden sm:inline">{herramienta?.icon} {herramienta?.label}</span>
+        <span className={tridim ? "hidden" : "hidden md:inline"}>{cursor ? `x = ${cursor.x.toFixed(2)}  y = ${cursor.y.toFixed(2)} ${modelo.unidad_longitud}` : "—"}</span>
+        <span className={tridim ? "hidden" : "hidden md:inline"}>Zoom {zoom.toFixed(0)} px/{modelo.unidad_longitud}</span>
+        <span className="hidden lg:inline">{tridim ? `Modelo 3D · ${modelo.nudos.length} nudos · ${modelo.elementos.length} barras · ${modelo.niveles.length} niveles` : `${modelo.nudos.length} nudos · ${modelo.elementos.length} elementos · ${modelo.cargas_nodales.length + modelo.cargas_elementos.length} cargas`}</span>
         <span className="flex-1" />
         {validacion.errores.length > 0 ? (
           <span className="text-rose-600 dark:text-rose-400" title={validacion.errores.join("\n")}>⛔ {validacion.errores[0]}{validacion.errores.length > 1 ? ` (+${validacion.errores.length - 1})` : ""}</span>
         ) : validacion.avisos.length > 0 ? (
           <span className="text-amber-700 dark:text-amber-400" title={validacion.avisos.join("\n")}>⚠ {validacion.avisos.length} aviso{validacion.avisos.length > 1 ? "s" : ""}: {validacion.avisos[0]}</span>
         ) : <span className="text-emerald-700 dark:text-emerald-400">✓ Modelo listo para calcular</span>}
-        <span>{guardado ? "Guardado en este navegador" : "Guardando…"}</span>
+        <span className="hidden sm:inline">{guardado ? "Guardado en este navegador" : "Guardando…"}</span>
       </footer>
 
       {dialogo === "plantillas" && <DialogoPlantillas onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo(m)} />}

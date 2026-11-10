@@ -368,7 +368,7 @@ export function Props3D({ modelo, sel, setSel, commit, abrirPanel }) {
   const el = sel?.tipo === "elemento" ? modelo.elementos.find((e) => e.id === sel.id) : null;
   const casos = modelo.casos || [];
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" aria-label="Propiedades">
+    <aside className="flex w-full shrink-0 flex-col border-l lg:w-80 border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" aria-label="Propiedades">
       <div className="flex h-10 shrink-0 items-center border-b border-slate-200 px-4 dark:border-ink-line">
         <h2 className="text-sm font-semibold">{nudo ? `Nudo ${nudo.nombre}` : el ? `Barra ${el.nombre}` : "Propiedades"}</h2>
         {(nudo || el) && <button className="ml-auto text-xs text-slate-500" onClick={() => setSel(null)}>Deseleccionar (Esc)</button>}
