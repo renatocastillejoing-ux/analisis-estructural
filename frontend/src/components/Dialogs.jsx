@@ -8,7 +8,7 @@ const btnS = "rounded-md border border-slate-300 px-4 py-1.5 text-sm hover:bg-sl
 
 export function DialogoPlantillas({ onCerrar, onElegir }) {
   return (
-    <Modal titulo="Plantillas" sub="Reemplaza el modelo actual (puedes deshacer con Ctrl+Z)." onCerrar={onCerrar} ancho="max-w-2xl">
+    <Modal titulo="Plantillas" sub="Se abre como documento nuevo; el modelo actual sigue abierto en el selector de documentos." onCerrar={onCerrar} ancho="max-w-2xl">
       <div className="grid gap-3 sm:grid-cols-2">
         {PLANTILLAS.map((p) => (
           <button key={p.id} type="button" onClick={() => onElegir(p.crear())}
@@ -117,6 +117,22 @@ export function DialogoAtajos({ onCerrar }) {
           <div key={k} className="flex justify-between gap-4 py-2"><dt><kbd className="rounded border border-slate-300 px-1.5 py-0.5 text-xs dark:border-ink-line">{k}</kbd></dt><dd className="text-right text-slate-700 dark:text-slate-200">{v}</dd></div>
         ))}
       </dl>
+    </Modal>
+  );
+}
+
+// Diálogo para pedir uno o más números (lo usa pedir() de ../pedir.js).
+export function DialogoPedir({ titulo, campos, onCerrar, onAceptar }) {
+  const [v, setV] = useState(() => Object.fromEntries(campos.map((c) => [c.clave, c.valor])));
+  const ok = campos.every((c) => Number.isFinite(+v[c.clave]));
+  return (
+    <Modal titulo={titulo} onCerrar={onCerrar} ancho="max-w-md"
+      pie={<><button className={btnS} onClick={onCerrar}>Cancelar</button><button className={btnP} disabled={!ok} onClick={() => onAceptar(Object.fromEntries(campos.map((c) => [c.clave, +v[c.clave]])))}>Aceptar</button></>}>
+      <div className="space-y-3">
+        {campos.map((c) => (
+          <Campo key={c.clave} label={c.label}><NumIn value={v[c.clave]} onChange={(x) => setV((o) => ({ ...o, [c.clave]: x }))} /></Campo>
+        ))}
+      </div>
     </Modal>
   );
 }

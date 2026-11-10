@@ -35,7 +35,8 @@ export default function Manual({ onVolver }) {
   const secciones = useMemo(() => {
     const t = norm(q.trim());
     if (!t) return MANUAL;
-    return MANUAL.filter((s) => norm(s.titulo + " " + s.bloques.map(plano).join(" ")).includes(t));
+    const palabras = t.replace(/[\[\]{}()]/g, " ").split(/\s+/).filter(Boolean);
+    return MANUAL.filter((s) => { const h = norm(s.titulo + " " + s.bloques.map(plano).join(" ")).replace(/[\[\]{}()]/g, " "); return palabras.every((p) => h.includes(p)); });
   }, [q]);
   const ir = (id) => document.getElementById(`man-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
 

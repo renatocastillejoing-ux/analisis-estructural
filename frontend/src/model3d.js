@@ -18,7 +18,7 @@ export function modelo3dVacio(nombre = "Nuevo modelo 3D") {
     casos: [{ nombre: "CM" }, { nombre: "CV" }],
     cargas_area: [], cargas_barras: [], cargas_nudos: [],
     peso_propio: true, caso_peso_propio: "CM", diafragma: true,
-    sismo: { activo: false, Z: 0.35, U: 1, S: 1.15, R: 8, TP: 0.6, TL: 2, CT: 60, periodo: "norma", caso_masa: { CM: 1, CV: 0.25 } },
+    sismo: { activo: false, Z: 0.35, U: 1, S: 1.15, R: 8, TP: 0.6, TL: 2, CT: 35, periodo: "norma", caso_masa: { CM: 1, CV: 0.25 } },
     combinaciones: [],
     secc_col: "C40", secc_viga: "V30x50",
   };
@@ -127,6 +127,13 @@ export function validar3d(m) {
   if (m.nudos.length && !m.nudos.some((n) => n.apoyo !== "libre")) errores.push("No hay apoyos: la estructura es inestable.");
   const secs = new Set(m.secciones.map((s) => s.nombre));
   m.elementos.forEach((e) => { if (!secs.has(e.seccion)) errores.push(`${e.nombre} usa la sección «${e.seccion}», que no existe.`); });
+  (m.cargas_barras || []).forEach((c) => {
+    if (c.tipo !== "puntual" || c.a == null || c.a === "") return;
+    const e = m.elementos.find((x) => x.id === c.elem); if (!e) return;
+    const a = m.nudos.find((n) => n.id === e.i), b = m.nudos.find((n) => n.id === e.j); if (!a || !b) return;
+    const L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+    if (+c.a < 0 || +c.a > L + 1e-9) errores.push(`La carga puntual de ${e.nombre} está en a = ${c.a} m, fuera de la barra (0 a ${L.toFixed(2)} m).`);
+  });
   const usados = new Set(m.elementos.flatMap((e) => [e.i, e.j]));
   const sueltos = m.nudos.filter((n) => !usados.has(n.id)).length;
   if (sueltos) avisos.push(`${sueltos} nudos sin barras (Herramientas › Limpiar nudos sueltos).`);
@@ -318,7 +325,13 @@ export function a3d(m2) {
   insertarPortico(m, m2, { angulo: 0, x0: 0, y0: 0, z0: 0 });
   m.material = m.materiales[0]?.nombre;
   m.secc_col = m2.secciones[0]?.nombre;
-  m.secc_viga = m2.secciones[m2.secciones.length - 1]?.nombre;
+  const usoSec = (vert) => {
+    const por = Object.fromEntries(m2.nudos.map((n) => [n.id, n]));
+    const e = m2.elementos.find((q) => por[q.i] && por[q.j] && (Math.abs(por[q.i].x - por[q.j].x) < 1e-9) === vert);
+    return e?.seccion;
+  };
+  m.secc_col = usoSec(true) || m.secc_col;
+  m.secc_viga = usoSec(false) || m2.secciones[m2.secciones.length - 1]?.nombre;
   if (m.ejes.y.length < 2) m.ejes.y.push({ nombre: LETRA(m.ejes.y.length), c: 5 });
   m.ejes.y.forEach((e, k) => { e.nombre = LETRA(k); });
   m.peso_propio = !!m2.peso_propio;

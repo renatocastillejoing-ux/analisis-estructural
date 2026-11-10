@@ -31,3 +31,20 @@ def test_dos_aguas_igual_que_directo():
     for b in r["barras"]:
         mi, mj = d[b["elem"]]
         assert abs(abs(b["qT"][0]) - abs(mi)) < 1e-3 and abs(abs(b["qT"][1]) - abs(mj)) < 1e-3
+
+def _compara(m):
+    est = construir(copy.deepcopy(m)); est.resolver()
+    d = {f["elem"]: (f["Mi"], f["Mj"]) for f in extraer_resultados(est)["fuerzas"]}
+    r = resolver_sistematizado(construir(copy.deepcopy(m)))
+    for b in r["barras"]:
+        mi, mj = d[b["elem"]]
+        assert abs(abs(b["qT"][0]) - abs(mi)) < 2e-3 and abs(abs(b["qT"][1]) - abs(mj)) < 2e-3
+
+
+def test_tramos_y_rotulas_en_A():
+    m = copy.deepcopy(DOS_AGUAS)
+    m["secciones"].append({"nombre": "W", "modo": "rect", "b": 0.3, "h": 1.0})
+    m["elementos"][0]["segmentos"] = [{"L": 1.5, "seccion": "W"}, {"L": 2.5, "seccion": "S"}]
+    _compara(m)
+    m = copy.deepcopy(DOS_AGUAS); m["elementos"][1]["release_j"] = True
+    _compara(m)

@@ -161,7 +161,7 @@ export function DialogoUnir({ modelo, onCerrar, onAplicar }) {
   const [c1, setC1] = useState(ejes[0]?.c ?? 0);
   const [c2, setC2] = useState(ejes[1]?.c ?? 0);
   const [todos, setTodos] = useState(true);
-  const [sec, setSec] = useState(modelo.secc_viga || modelo.secciones[0]?.nombre);
+  const [sec, setSec] = useState(() => { const v = modelo.secciones.find((s) => s.nombre === modelo.secc_viga); return v ? v.nombre : (modelo.secciones.find((s) => s.h > s.b) || modelo.secciones[0])?.nombre; });
   const cambiar = (d) => { setDir(d); const l = d === "x" ? modelo.ejes?.y || [] : modelo.ejes?.x || []; setC1(l[0]?.c ?? 0); setC2(l[1]?.c ?? 0); };
   return (
     <Modal titulo="Unir pórticos con vigas" sub="Crea vigas entre pórticos paralelos en cada nudo libre que tenga su par (misma posición y altura)." onCerrar={onCerrar}

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { APOYOS, TIPOS_CARGA, borrarElemento, borrarNudo, nextId, propsSeccion } from "../model.js";
-import { BtnAgregar, BtnIcon, Campo, NumIn } from "./ui.jsx";
+import { pedir } from "../pedir.js";
+import { BtnAgregar, BtnIcon, Campo, NombreUnico, NumIn } from "./ui.jsx";
 
 const MAX_FILAS = 200;
 
@@ -190,9 +191,9 @@ function Material({ modelo, commit }) {
       {mats.map((x, i) => (
         <div key={i} className="space-y-2 rounded-lg border border-slate-200 p-2 dark:border-ink-line">
           <div className="flex items-center gap-2">
-            <input className="inp flex-1 font-medium" value={x.nombre} aria-label="Nombre del material"
-              onChange={(e) => commit((m) => {
-                const viejo = m.materiales[i].nombre, nuevo = e.target.value;
+            <NombreUnico className="flex-1 font-medium" value={x.nombre} otros={(modelo.materiales || []).filter((_, k) => k !== i).map((q) => q.nombre)} aria-label="Nombre del material"
+              onChange={(nuevoNombre) => commit((m) => {
+                const viejo = m.materiales[i].nombre, nuevo = nuevoNombre;
                 m.materiales[i].nombre = nuevo;
                 m.elementos.forEach((el) => {
                   if (el.material === viejo) el.material = nuevo;
@@ -237,9 +238,9 @@ function Secciones({ modelo, commit }) {
         return (
           <div key={i} className="rounded-lg border border-slate-200 p-2 dark:border-ink-line">
             <div className="mb-2 flex items-center gap-2">
-              <input className="inp min-w-0 flex-1 font-medium" value={s.nombre} aria-label="Nombre de la sección"
-                onChange={(e) => commit((m) => {
-                  const viejo = m.secciones[i].nombre, nuevo = e.target.value;
+              <NombreUnico className="font-medium" value={s.nombre} otros={modelo.secciones.filter((_, k) => k !== i).map((q) => q.nombre)} aria-label="Nombre de la sección"
+                onChange={(nuevoNombre) => commit((m) => {
+                  const viejo = m.secciones[i].nombre, nuevo = nuevoNombre;
                   m.secciones[i].nombre = nuevo;
                   m.elementos.forEach((el) => {
                     if (el.seccion === viejo) el.seccion = nuevo;
@@ -478,9 +479,10 @@ function CargasElementos({ modelo, commit, sel, filtro }) {
 }
 
 // Asigna una UDL vertical a todas las barras horizontales (reemplaza las UDL previas de esas vigas).
-export function udlTodasLasVigas(commit) {
-  const w = parseFloat(prompt("Carga uniforme wy para TODAS las vigas horizontales (t/m, negativo = abajo):", "-2"));
-  if (!Number.isFinite(w)) return;
+export async function udlTodasLasVigas(commit) {
+  const r = await pedir("Carga uniforme en todas las vigas", [{ clave: "w", label: "wy (t/m, negativo = hacia abajo)", valor: -2 }]);
+  if (!r) return;
+  const w = r.w;
   commit((m) => {
     const por = Object.fromEntries(m.nudos.map((n) => [n.id, n]));
     const vigas = new Set(m.elementos.filter((e) => por[e.i] && por[e.j] && Math.abs(por[e.i].y - por[e.j].y) < 1e-9).map((e) => e.id));
@@ -576,7 +578,9 @@ function Casos({ modelo, commit }) {
         <BtnAgregar onClick={() => commit((m) => { m.combinaciones = m.combinaciones || []; m.combinaciones.push({ nombre: `Comb${m.combinaciones.length + 1}`, factores: Object.fromEntries(m.casos.map((c) => [c.nombre, 1])) }); })}>+ Agregar combinación</BtnAgregar>
         <div className="flex flex-wrap gap-1">
           {NORMA.map(([nom, f]) => (
-            <button key={nom} type="button" className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] hover:border-teal dark:border-ink-line"
+            <button key={nom} type="button" disabled={!Object.keys(f).every((k) => modelo.casos.some((c) => c.nombre === k))}
+              title={Object.keys(f).every((k) => modelo.casos.some((c) => c.nombre === k)) ? "" : `Necesita los casos ${Object.keys(f).join(", ")}`}
+              className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] hover:border-teal disabled:opacity-40 dark:border-ink-line"
               onClick={() => commit((m) => { m.combinaciones = m.combinaciones || []; m.combinaciones.push({ nombre: nom, factores: Object.fromEntries(Object.entries(f).filter(([k]) => m.casos.some((c) => c.nombre === k))) }); })}>
               + {nom}
             </button>

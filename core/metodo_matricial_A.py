@@ -177,6 +177,17 @@ def _construir_pasos(labels, def_labels, barras, A, k, K, Pext, FEM, P, D, d, M,
 #      Kc=[[12EI/L³,-6EI/L²],[-6EI/L²,4EI/L]]
 #  GDL (Q-D): primero desplazamientos laterales por piso, luego giros de nudo.
 # ==============================================================================
+def _kphi(e):
+    """Rigidez rotacional 2×2 (φi, φj) y fuerzas de empotramiento locales de la barra,
+    con tramos no prismáticos y rótulas ya condensados (misma barra que el motor directo)."""
+    k6, ff = e._condensar(e.k_local_base(), e.ff_local_base())
+    return k6[np.ix_([2, 5], [2, 5])].copy(), ff
+
+
+def _es_prismatica_libre(e):
+    return not (e.es_segmentada() or e.release_i or e.release_j)
+
+
 def resolver_sistematizado(est, tol=1e-6):
     if any(abs(e.sin) > 1e-6 and abs(e.cos) > 1e-6 for e in est.elementos):
         return resolver_sistematizado_general(est, tol)
@@ -201,9 +212,9 @@ def resolver_sistematizado(est, tol=1e-6):
     for e in elementos:
         L = e.L; EI = e.mat.E * e.sec.I
         Ai = np.zeros((2, nD))
-        ff = e.ff_local_base()
+        k2, ff = _kphi(e)                           # tramos y rótulas incluidos
         if abs(e.sin) < 1e-6:                       # VIGA (horizontal)
-            Ki = (EI / L) * np.array([[4., 2.], [2., 4.]])
+            Ki = k2
             if e.ni.id in rot: Ai[0, rot[e.ni.id]] = 1.0
             if e.nj.id in rot: Ai[1, rot[e.nj.id]] = 1.0
             # FEM en la convención del profesor (UDL: [-wL²/12, +wL²/12]);
@@ -218,7 +229,7 @@ def resolver_sistematizado(est, tol=1e-6):
             yt = round(top.y, 6); yb = round(bot.y, 6)
             # columna con cargas propias → forma general ψ (lleva sus FEM)
             col_cargada = len(e.cargas) > 0
-            if all(bot.restriccion) and not col_cargada:
+            if all(bot.restriccion) and not col_cargada and _es_prismatica_libre(e):
                 # Base empotrada (1 piso / EJ1-EJ2): forma reducida de la pizarra
                 Ki = np.array([[12*EI/L**3, -6*EI/L**2], [-6*EI/L**2, 4*EI/L]])
                 if yt in sway: Ai[0, sway[yt]] = 1.0
@@ -230,7 +241,7 @@ def resolver_sistematizado(est, tol=1e-6):
                 # ψ = (Δ_j − Δ_i)/L en AMBAS filas. Signo validado contra el motor
                 # directo en pórtico de 2 pisos (magnitudes exactas; signo global =
                 # convención del profesor, igual que en las vigas).
-                Ki = (EI / L) * np.array([[4.0, 2.0], [2.0, 4.0]])
+                Ki = k2
                 if e.ni.id in rot: Ai[0, rot[e.ni.id]] = 1.0
                 if e.nj.id in rot: Ai[1, rot[e.nj.id]] = 1.0
                 yi_, yj_ = round(e.ni.y, 6), round(e.nj.y, 6)
@@ -407,9 +418,6 @@ def _rref_nulo(C, tol=1e-9):
 def resolver_sistematizado_general(est, tol=1e-6):
     nudos = sorted(est.nudos, key=lambda n: n.id)
     elementos = est.elementos
-    for e in elementos:
-        if hasattr(e, "es_segmentada") and e.es_segmentada():
-            raise NotImplementedError("barras con tramos de sección variable en una estructura con barras inclinadas")
     # incógnitas de traslación (componentes libres) ordenadas de arriba hacia abajo,
     # para que los GDL libres queden en los nudos altos (como los Δ de piso)
     comp = []
@@ -453,8 +461,7 @@ def resolver_sistematizado_general(est, tol=1e-6):
         if e.ni.id in rot: Ad[0, rot[e.ni.id]] = 1.0
         if e.nj.id in rot: Ad[1, rot[e.nj.id]] = 1.0
         Ad -= psi                                               # φ = θ − ψ
-        Ki = (EI / L) * np.array([[4.0, 2.0], [2.0, 4.0]])
-        ff = e.ff_local_base()                                  # fuerzas de empotramiento sobre la barra
+        Ki, ff = _kphi(e)                                       # tramos y rótulas condensados
         g = lambda N_, V_: np.array([c * N_ - s * V_, s * N_ + c * V_])
         Rb = tras(e.ni).T @ g(ff[0], ff[1]) + tras(e.nj).T @ g(ff[3], ff[4])
         if e.ni.id in rot: Rb[rot[e.ni.id]] += ff[2]

@@ -101,6 +101,7 @@ export default function Paso({ modelo, onVolver }) {
           <div className="text-xs font-semibold uppercase tracking-wide text-teal-dark dark:text-teal-soft">Paso {etiquetaPaso(paso)}</div>
           <h2 className="text-lg font-semibold">{paso.titulo}</h2>
           <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-300">{paso.desc}</p>
+          {i === 0 && <p className="mt-2 max-w-3xl rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-ink-3 dark:text-slate-300">Convención del profesor: giros y momentos <b>horarios positivos</b> y deformación axial despreciada. En Resultados (motor directo) los giros y momentos son antihorarios positivos: verás el mismo valor con el signo contrario.</p>}
         </div>
         <PasoCuerpo paso={paso} data={data} />
       </div>
@@ -225,7 +226,7 @@ function despNudos(data, coef) {
     const t = lab.replace(/^D\d+\(/, "").replace(/\)$/, "");
     const mY = t.match(/^Δ\s*y=(.+)$/), mT = t.match(/^θ\s*(.+)$/);
     if (mY) data.nudos.forEach((nd) => { if (Math.abs(nd.y - +mY[1]) < 1e-6 && !nd.restr?.[0]) out[nd.nombre].ux += c; });
-    else if (mT && out[mT[1]]) out[mT[1]].th += c;
+    else if (mT && out[mT[1]]) out[mT[1]].th -= c;          // giro horario positivo (convención del profesor)
   });
   return out;
 }
@@ -308,7 +309,7 @@ function Activar({ paso, data }) {
           {(G) => (<>
             <text x={360} y={26} textAnchor="middle" className="fill-slate-800 text-[15px] font-semibold dark:fill-slate-100">D{g + 1} = 1 · {corto}</text>
             {nodoGiro && (
-              <path d={`M${G.X(nodoGiro.x) + 18},${G.Y(nodoGiro.y)} A18,18 0 1,0 ${G.X(nodoGiro.x)},${G.Y(nodoGiro.y) - 18}`} fill="none" stroke="#F59E0B" strokeWidth={2.5} markerEnd="url(#fl-gdl)" style={{ opacity: p }} />
+              <path d={`M${G.X(nodoGiro.x) + 18},${G.Y(nodoGiro.y)} A18,18 0 1,1 ${G.X(nodoGiro.x)},${G.Y(nodoGiro.y) - 18}`} fill="none" stroke="#F59E0B" strokeWidth={2.5} markerEnd="url(#fl-gdl)" style={{ opacity: p }} />
             )}
             {nodoTras && (mNudo[1] === "x"
               ? <line x1={G.X(nodoTras.x) - 55} y1={G.Y(nodoTras.y) - 18} x2={G.X(nodoTras.x) - 55 + 42 * p} y2={G.Y(nodoTras.y) - 18} stroke="#F59E0B" strokeWidth={3} markerEnd="url(#fl-gdl)" />
@@ -347,7 +348,7 @@ function Coordenadas({ data }) {
           const mN = t.match(/^Δ([xy])\s+(.+)$/);
           if (mN) { const q = data.nudos.find((x) => x.nombre === mN[2]); return q ? <text key={k} x={G.X(q.x) - 60} y={G.Y(q.y) + 4} className="celda-in fill-amber-600 text-[12px] font-bold dark:fill-amber-400" style={{ animationDelay: `${k * 120}ms` }}>D{k + 1}{mN[1] === "x" ? "→" : "↑"}</text> : null; }
           const nd = t.startsWith("θ") ? data.nudos.find((x) => x.nombre === t.replace(/^θ\s*/, "")) : null;
-          if (nd) return <text key={k} x={G.X(nd.x) + 8} y={G.Y(nd.y) - 10} className="celda-in fill-amber-600 text-[12px] font-bold dark:fill-amber-400" style={{ animationDelay: `${k * 120}ms` }}>D{k + 1}↺</text>;
+          if (nd) return <text key={k} x={G.X(nd.x) + 8} y={G.Y(nd.y) - 10} className="celda-in fill-amber-600 text-[12px] font-bold dark:fill-amber-400" style={{ animationDelay: `${k * 120}ms` }}>D{k + 1}↻</text>;
           const y = +t.replace(/^Δ\s*y=/, ""); const xs = data.nudos.filter((x) => Math.abs(x.y - y) < 1e-6).map((x) => x.x);
           return xs.length ? <text key={k} x={G.X(Math.min(...xs)) - 52} y={G.Y(y) + 4} className="celda-in fill-amber-600 text-[12px] font-bold dark:fill-amber-400" style={{ animationDelay: `${k * 120}ms` }}>D{k + 1}→</text> : null;
         })}

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { pedir } from "../pedir.js";
 import { agregarBarra, agregarNudo3d, borrarBarra, borrarNudo3d, buscarNudo, escena3d, tipoBarra } from "../model3d.js";
 
 const Visor3D = lazy(() => import("./Visor3D.jsx"));
@@ -24,9 +25,11 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
   };
   const [todos, setTodos] = useState(false);
   const [ajuste, setAjuste] = useState(0.25);
-  const agregar = (tipo) => {
-    const t = tipo === "nivel" ? "Altura z del nuevo nivel (m):" : `Posición ${tipo === "x" ? "x" : "y"} del nuevo eje (m):`;
-    const v = parseFloat(prompt(t, "5")); if (!Number.isFinite(v)) return;
+  const agregar = async (tipo) => {
+    const t = tipo === "nivel" ? "Altura z del nuevo nivel (m)" : `Posición ${tipo === "x" ? "x" : "y"} del nuevo eje (m)`;
+    const r = await pedir(tipo === "nivel" ? "Agregar nivel" : `Agregar eje en ${tipo.toUpperCase()}`, [{ clave: "v", label: t, valor: 5 }]);
+    if (!r) return;
+    const v = r.v;
     commit((m) => {
       if (tipo === "nivel") { if (!m.niveles.some((n) => Math.abs(n.z - v) < 1e-6)) { m.niveles.push({ nombre: `Nivel ${m.niveles.length}`, z: v }); m.niveles.sort((a, b) => a.z - b.z); } }
       else { const l = m.ejes[tipo]; if (!l.some((e) => Math.abs(e.c - v) < 1e-6)) { l.push({ nombre: tipo === "x" ? String(l.length + 1) : String.fromCharCode(65 + l.length), c: v }); l.sort((a, b) => a.c - b.c); } }

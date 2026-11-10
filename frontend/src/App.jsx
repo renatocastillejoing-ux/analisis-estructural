@@ -14,11 +14,12 @@ import Results3D from "./components/Results3D.jsx";
 import { DialogoCopiar, DialogoEdificio, DialogoExtraer, DialogoExtruir, DialogoInsertar, DialogoUnir } from "./components/Dialogs3D.jsx";
 import { a3d, borrarBarra, borrarNudo3d, copiarPlano, es3d, insertarPortico, limpiarNudos, modelo3dVacio, unirPlanos, validar3d } from "./model3d.js";
 import Documentos from "./components/Documentos.jsx";
+import { registrarPedir } from "./pedir.js";
 import MenuMovil from "./components/MenuMovil.jsx";
 import { PasoPortico3D } from "./components/PorticoDe3D.jsx";
 import { PLANTILLAS } from "./model.js";
 import { BuscadorComandos, MenuBar } from "./components/MenuBar.jsx";
-import { DialogoAtajos, DialogoConfirmar, DialogoGenerador, DialogoPlantillas, DialogoTorre } from "./components/Dialogs.jsx";
+import { DialogoAtajos, DialogoPedir, DialogoConfirmar, DialogoGenerador, DialogoPlantillas, DialogoTorre } from "./components/Dialogs.jsx";
 import { calcular, calcular3d, combinaciones, extraerPortico, torre3dModelo, torreModelo } from "./api.js";
 import { agregarElemento, agregarNudo, borrarElemento, borrarNudo, modeloEjemplo, modeloVacio, nextId } from "./model.js";
 
@@ -54,6 +55,13 @@ function validar(m) {
   const usados = new Set(m.elementos.flatMap((e) => [e.i, e.j]));
   m.nudos.forEach((n) => { if (!usados.has(n.id)) avisos.push(`${n.nombre} está suelto (sin barras).`); });
   if (!m.cargas_nodales.length && !m.cargas_elementos.length && !m.peso_propio) avisos.push("No hay cargas aplicadas.");
+  const porN = Object.fromEntries(m.nudos.map((n) => [n.id, n]));
+  m.cargas_elementos.forEach((c) => {
+    if (!["puntual", "momento"].includes(c.tipo) || c.a == null || c.a === "") return;
+    const e = m.elementos.find((x) => x.id === c.elem); if (!e || !porN[e.i] || !porN[e.j]) return;
+    const L = Math.hypot(porN[e.j].x - porN[e.i].x, porN[e.j].y - porN[e.i].y);
+    if (+c.a < 0 || +c.a > L + 1e-9) errores.push(`La carga ${c.tipo} de ${e.nombre} está en a = ${c.a} m, fuera de la barra (0 a ${L.toFixed(2)} m).`);
+  });
   return { errores, avisos };
 }
 
@@ -97,6 +105,8 @@ export default function App() {
   const [zoom, setZoom] = useState(60);
   const [dialogo, setDialogo] = useState(null);
   const [confirmacion, setConfirmacion] = useState(null);
+  const [pregunta, setPregunta] = useState(null);
+  useEffect(() => { registrarPedir(setPregunta); }, []);
   const [toast, setToast] = useState(null);
   const [tema, setTema] = useState(() => { try { return localStorage.getItem("ae_tema") || "dark"; } catch { return "dark"; } });
   const [resultado, setResultado] = useState(null);
@@ -246,8 +256,11 @@ export default function App() {
     restaurarRes(id); prepararVista();
     if (vista === "historial") setVista("modelo");
   };
-  const abrirDoc = (m, msg) => {
+  const abrirDoc = (m0, msg) => {
     const id = uid();
+    const usados = new Set(proyecto.docs.map((d) => d.modelo?.nombre));
+    let m = m0;
+    if (usados.has(m0.nombre)) { let k = 2; while (usados.has(`${m0.nombre} (${k})`)) k++; m = { ...m0, nombre: `${m0.nombre} (${k})` }; }
     guardarRes();
     setProyecto((p) => ({ docs: [...p.docs, { id, modelo: m }], activo: id }));
     setHist({ past: [], present: m, future: [] });
@@ -300,7 +313,7 @@ export default function App() {
     const prueba = insertarPortico(structuredClone(modelo), m2, opciones);
     commit((m) => { insertarPortico(m, m2, opciones); });
     setDialogo(null);
-    avisar(`Pórtico «${m2.nombre}» insertado: ${prueba.barras} barras nuevas${prueba.omitidas ? ` (${prueba.omitidas} cargas puntuales no se trasladaron)` : ""}.`);
+    avisar(`Pórtico «${m2.nombre}» insertado: ${prueba.barras} ${prueba.barras === 1 ? "barra nueva" : "barras nuevas"}${prueba.omitidas ? ` (${prueba.omitidas} ${prueba.omitidas === 1 ? "carga no se trasladó" : "cargas no se trasladaron"})` : ""}.`);
   };
   const insertarDesde2d = ({ destino, opciones }) => {
     if (destino === "nuevo") {
@@ -657,14 +670,15 @@ export default function App() {
         const pares = todos ? (() => { const l = (dir === "x" ? modelo.ejes.y : modelo.ejes.x).map((e) => e.c).sort((a, b) => a - b); return l.slice(1).map((c, i) => [l[i], c]); })() : [[c1, c2]];
         const prueba = structuredClone(modelo); const n = pares.reduce((t, [a, b]) => t + unirPlanos(prueba, dir, a, b, sec), 0);
         commit((m) => { pares.forEach(([a, b]) => unirPlanos(m, dir, a, b, sec)); });
-        setDialogo(null); avisar(n ? `${n} vigas nuevas entre pórticos.` : "No se encontraron nudos con su par en el otro pórtico.", n ? "ok" : "err");
+        setDialogo(null); avisar(n ? `${n} ${n === 1 ? "viga nueva" : "vigas nuevas"} entre pórticos.` : "No se agregaron vigas: los pórticos ya estaban unidos o sus nudos no coinciden en posición y altura.", n ? "ok" : "err");
       }} />}
       {dialogo === "copiar" && tridim && <DialogoCopiar modelo={modelo} onCerrar={() => setDialogo(null)} onAplicar={({ dir, c, destinos, unir }) => {
         const hacer = (m) => { let prev = c, t = 0; destinos.forEach((d) => { t += copiarPlano(m, dir, c, d); if (unir) unirPlanos(m, dir, prev, d, m.secc_viga); prev = d; }); return t; };
         const n = hacer(structuredClone(modelo));
         commit((m) => { hacer(m); });
-        setDialogo(null); avisar(`${destinos.length} copia(s) del pórtico: ${n} barras nuevas.`);
+        setDialogo(null); avisar(`${destinos.length} ${destinos.length === 1 ? "copia" : "copias"} del pórtico: ${n} ${n === 1 ? "barra nueva" : "barras nuevas"}.`);
       }} />}
+      {pregunta && <DialogoPedir titulo={pregunta.titulo} campos={pregunta.campos} onCerrar={() => { pregunta.resolve(null); setPregunta(null); }} onAceptar={(v) => { pregunta.resolve(v); setPregunta(null); }} />}
       {confirmacion && <DialogoConfirmar {...confirmacion} onCerrar={() => setConfirmacion(null)} />}
 
       {toast && (

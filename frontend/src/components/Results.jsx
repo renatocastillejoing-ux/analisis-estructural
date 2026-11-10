@@ -82,7 +82,7 @@ function Simple({ resultado, tipo, setTipo }) {
   const diag = resultado.diagramas || {};
   return (
     <>
-      {(r.cond_warning || r.cond_msg) && <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{r.cond_warning || r.cond_msg}</div>}
+      {r.cond_msg && <div className={`rounded-lg border px-4 py-2 text-sm ${r.cond_warning === "red" ? "border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200" : "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"}`}>{r.cond_msg}</div>}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {kpis.map(([label, valor, unidad]) => (
           <div key={label} className={caja}>

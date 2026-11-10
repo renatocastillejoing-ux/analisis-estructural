@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { APOYOS3D, borrarBarra, borrarNudo3d, tipoBarra } from "../model3d.js";
-import { BtnAgregar, BtnIcon, Campo, NumIn } from "./ui.jsx";
+import { pedir } from "../pedir.js";
+import { BtnAgregar, BtnIcon, Campo, NombreUnico, NumIn } from "./ui.jsx";
 import { Interruptor } from "./Editor.jsx";
 
 const MAX = 200;
@@ -166,8 +167,8 @@ function Materiales({ modelo, commit }) {
       {mats.map((x, i) => (
         <div key={i} className="space-y-2 rounded-lg border border-slate-200 p-2 dark:border-ink-line">
           <div className="flex items-center gap-2">
-            <input className="inp flex-1 font-medium" value={x.nombre} aria-label="Nombre" onChange={(e) => commit((m) => {
-              const viejo = m.materiales[i].nombre, nuevo = e.target.value; m.materiales[i].nombre = nuevo;
+            <NombreUnico className="font-medium" value={x.nombre} otros={(modelo.materiales || []).filter((_, k) => k !== i).map((q) => q.nombre)} aria-label="Nombre" onChange={(nuevoNombre) => commit((m) => {
+              const viejo = m.materiales[i].nombre, nuevo = nuevoNombre; m.materiales[i].nombre = nuevo;
               if (m.material === viejo) m.material = nuevo;
               m.elementos.forEach((el) => { if (el.material === viejo) el.material = nuevo; });
             })} />
@@ -198,8 +199,8 @@ function Secciones({ modelo, commit }) {
       <p className="text-xs text-slate-500 dark:text-slate-400">Columnas: b en X y h en Y (el giro de 90° las intercambia). Vigas: b = ancho, h = peralte. Una sección muy alargada (2.40×0.25) funciona como placa.</p>
       {modelo.secciones.map((s, i) => (
         <div key={i} className="grid grid-cols-[1fr_4.5rem_4.5rem_1.75rem] items-end gap-1">
-          <Campo label="Nombre"><input className="inp" value={s.nombre} onChange={(e) => commit((m) => {
-            const viejo = m.secciones[i].nombre, nuevo = e.target.value; m.secciones[i].nombre = nuevo;
+          <Campo label="Nombre"><NombreUnico value={s.nombre} otros={modelo.secciones.filter((_, k) => k !== i).map((q) => q.nombre)} onChange={(nuevoNombre) => commit((m) => {
+            const viejo = m.secciones[i].nombre, nuevo = nuevoNombre; m.secciones[i].nombre = nuevo;
             m.elementos.forEach((el) => { if (el.seccion === viejo) el.seccion = nuevo; });
             if (m.secc_col === viejo) m.secc_col = nuevo; if (m.secc_viga === viejo) m.secc_viga = nuevo;
           })} /></Campo>
@@ -286,9 +287,10 @@ function Cargas({ modelo, commit, sel }) {
         </div>
       ))}
       <BtnAgregar onClick={() => commit((m) => { m.cargas_area = m.cargas_area || []; m.cargas_area.push({ z: nivs[nivs.length - 1]?.z ?? 3, caso: casos[0]?.nombre || "CM", q: 0.4 }); })}>+ Carga de losa</BtnAgregar>
-      <BtnAgregar onClick={() => {
-        const qcm = parseFloat(prompt("CM en todos los niveles (tonf/m²):", "0.40")); if (!Number.isFinite(qcm)) return;
-        const qcv = parseFloat(prompt("CV en todos los niveles (tonf/m²):", "0.25")); if (!Number.isFinite(qcv)) return;
+      <BtnAgregar onClick={async () => {
+        const r = await pedir("Carga de losa en todos los niveles", [{ clave: "cm", label: "CM (tonf/m²)", valor: 0.4 }, { clave: "cv", label: "CV (tonf/m²)", valor: 0.25 }]);
+        if (!r) return;
+        const qcm = r.cm, qcv = r.cv;
         commit((m) => { m.cargas_area = nivs.flatMap((n) => [{ z: n.z, caso: "CM", q: qcm }, { z: n.z, caso: "CV", q: qcv }]); if (!m.casos.some((c) => c.nombre === "CV")) m.casos.push({ nombre: "CV" }); });
       }}>⚡ CM y CV en todos los niveles</BtnAgregar>
 

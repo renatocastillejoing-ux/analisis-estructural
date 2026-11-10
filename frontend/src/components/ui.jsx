@@ -100,3 +100,26 @@ export function Modal({ titulo, sub, onCerrar, children, pie, ancho = "max-w-xl"
     </div>
   );
 }
+
+// Nombre que debe ser único (secciones, materiales…): se confirma al salir del campo;
+// si está vacío o repetido, vuelve al anterior y avisa.
+export function NombreUnico({ value, otros, onChange, className = "", ...p }) {
+  const [txt, setTxt] = useState(value);
+  const [error, setError] = useState("");
+  useEffect(() => { setTxt(value); }, [value]);
+  const confirmar = () => {
+    const t = String(txt).trim();
+    if (t === value) { setError(""); return; }
+    if (!t) { setError("El nombre no puede quedar vacío."); setTxt(value); return; }
+    if (otros.includes(t)) { setError(`Ya existe «${t}»: usa otro nombre.`); setTxt(value); return; }
+    setError(""); onChange(t);
+  };
+  return (
+    <span className="flex min-w-0 flex-1 flex-col">
+      <input {...p} value={txt} onChange={(e) => setTxt(e.target.value)} onBlur={confirmar}
+        onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+        className={`inp ${error ? "border-rose-500" : ""} ${className}`} />
+      {error && <span className="mt-0.5 text-[11px] text-rose-600">{error}</span>}
+    </span>
+  );
+}

@@ -57,7 +57,7 @@ export const BuscadorComandos = forwardRef(function BuscadorComandos({ comandos,
 
   const lista = useMemo(() => {
     const t = normal(q.trim());
-    const xs = comandos.filter((c) => !c.disabled);
+    const xs = comandos;
     if (!t) return xs.slice(0, 12);
     const palabras = t.split(/\s+/);
     return xs.filter((c) => { const h = normal(`${c.grupo} ${c.label} ${c.claves || ""}`); return palabras.every((p) => h.includes(p)); }).slice(0, 14);
@@ -82,7 +82,7 @@ export const BuscadorComandos = forwardRef(function BuscadorComandos({ comandos,
         onKeyDown={(e) => {
           if (e.key === "ArrowDown") { e.preventDefault(); setK((x) => Math.min(lista.length - 1, x + 1)); }
           else if (e.key === "ArrowUp") { e.preventDefault(); setK((x) => Math.max(0, x - 1)); }
-          else if (e.key === "Enter" && lista[k]) { e.preventDefault(); ejecutar(lista[k]); }
+          else if (e.key === "Enter" && lista[k]) { e.preventDefault(); if (!lista[k].disabled) ejecutar(lista[k]); }
           else if (e.key === "Escape") { setAbierto(false); e.currentTarget.blur(); }
         }}
         className="inp h-8 w-full !pl-7 !pr-14" />
@@ -92,8 +92,8 @@ export const BuscadorComandos = forwardRef(function BuscadorComandos({ comandos,
           {lista.length === 0 && <p className="px-3 py-2 text-sm text-slate-500">Ningún comando coincide.</p>}
           {lista.map((c, i) => (
             <button key={c.id} type="button" role="option" aria-selected={i === k}
-              onMouseEnter={() => setK(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => ejecutar(c)}
-              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] ${i === k ? "bg-teal/10 dark:bg-ink-3" : ""}`}>
+              onMouseEnter={() => setK(i)} onMouseDown={(e) => e.preventDefault()} onClick={() => { if (!c.disabled) ejecutar(c); }} title={c.disabled ? "No disponible en este momento" : undefined}
+              className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] ${c.disabled ? "opacity-45" : ""} ${i === k ? "bg-teal/10 dark:bg-ink-3" : ""}`}>
               <span className="w-20 shrink-0 truncate text-[11px] uppercase text-slate-500 dark:text-slate-400">{c.grupo}</span>
               <span className="flex-1">{c.label}</span>
               {c.atajo && <kbd className="text-[11px] text-slate-500 dark:text-slate-400">{c.atajo}</kbd>}

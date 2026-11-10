@@ -7,8 +7,9 @@ export default function Documentos({ docs, activo, onCambiar, onCerrar, onNuevo2
   useEffect(() => {
     if (!abierto) return;
     const h = (e) => { if (!ref.current?.contains(e.target)) setAbierto(false); };
-    window.addEventListener("mousedown", h);
-    return () => window.removeEventListener("mousedown", h);
+    const t = (e) => { if (e.key === "Escape" || e.key === "F1") setAbierto(false); };
+    window.addEventListener("mousedown", h); window.addEventListener("keydown", t);
+    return () => { window.removeEventListener("mousedown", h); window.removeEventListener("keydown", t); };
   }, [abierto]);
   const act = docs.find((d) => d.id === activo);
   const es3 = (d) => d.modelo?.tipo === "3d";
