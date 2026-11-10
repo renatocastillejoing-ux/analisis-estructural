@@ -44,17 +44,77 @@ export const MANUAL = [
     ],
   },
   {
-    id: "documentos", titulo: "3. Documentos del proyecto", bloques: [
-      { t: "p", x: "Puedes tener varios **documentos** abiertos a la vez: pórticos 2D y modelos 3D. Cambiar de documento no pierde nada; cada uno conserva su último resultado." },
+    id: "guia2d", titulo: "3. Guía rápida: tu primer pórtico 2D", bloques: [
+      { t: "p", x: "Ejemplo completo: un pórtico de un vano (6 m) y un piso (3.5 m), empotrado en la base, con carga en la viga. Sigue los pasos en orden." },
+      { t: "n", x: [
+        "**Documento nuevo**: en el selector de documentos (arriba a la izquierda) elige **+ Nuevo pórtico 2D**. Se abre un lienzo vacío.",
+        "**Material y sección**: en el árbol de la izquierda abre **Materiales** (deja el concreto por defecto o escribe su f'c) y **Secciones**: crea «C40» (b 0.40, h 0.40) para columnas y «V30×60» (b 0.30, h 0.60) para la viga. El nombre no puede repetirse ni quedar vacío.",
+        "**Nudos**: elige la herramienta **＋ Nudo** (tecla N) y haz clic en (0, 0), (0, 3.5), (6, 3.5) y (6, 0). El punto se ajusta a la grilla; las coordenadas del cursor salen en la barra de estado. También puedes escribirlas en **Nudos** del árbol o en Propiedades al seleccionar un nudo.",
+        "**Barras**: herramienta **⟋ Conectar** (C): clic en el nudo de abajo a la izquierda, luego en el de arriba (columna); vuelve a hacer clic en el siguiente nudo y la barra se encadena (viga), y otra vez para la segunda columna. **Esc** termina.",
+        "**Secciones de cada barra**: con **↖ Seleccionar** (V) haz clic en cada barra y, a la derecha, elige su sección (C40 en columnas, V30×60 en la viga).",
+        "**Apoyos**: selecciona los dos nudos de la base y en Propiedades elige **Empotrado**. Sin apoyos suficientes la barra de estado muestra ⛔ y no deja calcular.",
+        "**Cargas**: selecciona la viga y pulsa **+ Carga en este elemento**: distribuida uniforme con wy = **−2** t/m (negativo = hacia abajo). Para una fuerza lateral, selecciona el nudo superior izquierdo y agrega una carga Fx = 3 t.",
+        "**Calcular**: **▶ Calcular** (Ctrl+Enter). Se abre la vista **Resultados**.",
+        "**Leer**: revisa el DMF (dibujado del lado traccionado), el DFC y el DFN, la deformada, las reacciones y el cuadro de **equilibrio** (residuo ≈ 0). Pasa el cursor sobre un diagrama para ver valores.",
+        "**Método del profesor**: abre **Paso a paso** (tecla 4) y avanza con ▶: verás cómo se arma [A], cada [Aᵢ]ᵀ[kᵢ][Aᵢ], el ensamblaje de [K], la solución {D} y los momentos finales, tal como en clase.",
+        "**Guardar**: el modelo se guarda solo en el navegador; para entregarlo o llevarlo a otra computadora usa **Archivo › Exportar modelo (JSON)** (Ctrl+S).",
+      ] },
+      { t: "nota", x: "Atajo: **Archivo › Plantillas › EJ 1** abre el pórtico de 2 vanos del curso ya armado, y **Archivo › Generar pórtico regular** crea pórticos de varios pisos y vanos en un paso." },
+      { t: "h", x: "Editar lo que ya dibujaste" },
       { t: "l", x: [
-        "**Abrir una plantilla, generar un pórtico, importar o extraer un pórtico** crea un documento nuevo (no reemplaza el actual).",
-        "**Cerrar** un documento: pasa el cursor sobre él en el selector y pulsa ✕ (pide confirmación).",
-        "**Deshacer / Rehacer** (Ctrl+Z / Ctrl+Y) funcionan dentro del documento activo (hasta 100 pasos).",
+        "**Mover un nudo**: arrástralo con Seleccionar, o cambia x, y en Propiedades.",
+        "**Borrar**: herramienta ✕ (X) y clic, o selecciona y pulsa **Supr**. Borrar un nudo borra sus barras.",
+        "**Invertir una barra** (cambia i ↔ j y su eje local): botón ⇄ en la lista de Elementos.",
+        "**Deshacer** cualquier cosa con Ctrl+Z (hasta 100 pasos) y rehacer con Ctrl+Y.",
       ] },
     ],
   },
   {
-    id: "convenciones", titulo: "4. Unidades y convención de signos", bloques: [
+    id: "guia3d", titulo: "4. Guía rápida: tu primer modelo 3D", bloques: [
+      { t: "p", x: "Hay tres caminos. Elige el que se parezca a lo que tienes." },
+      { t: "h", x: "A) Edificio en grilla (el más rápido)" },
+      { t: "n", x: [
+        "Selector de documentos › **+ Nuevo modelo 3D…** (o Archivo › Nuevo modelo 3D).",
+        "Escribe las **luces en X** y **en Y** separadas por comas (por ejemplo «5, 5, 4» y «6, 6»), el número de **pisos** y su **altura**, y las secciones de columnas y vigas.",
+        "Indica la **carga de losa** por nivel (CM y CV en t/m²) y, si quieres, activa el **sismo E.030**.",
+        "Aceptar: se crean ejes, niveles, columnas empotradas en la base, vigas en ambas direcciones y la losa. Ya puedes calcular.",
+      ] },
+      { t: "h", x: "B) A partir de un pórtico 2D" },
+      { t: "n", x: [
+        "Abre o dibuja el pórtico 2D y pulsa **✎ Dibujar en 3D**: el mismo documento pasa a 3D con el pórtico en y = 0 (Ctrl+Z vuelve atrás).",
+        "Copia ese pórtico a otros ejes (Dibujar › **Copiar un pórtico a otro eje**) o inserta otros pórticos (Dibujar › **Insertar pórtico 2D**), eligiendo dirección, posición y cota.",
+        "**Une los pórticos con vigas** (Dibujar › Unir pórticos): se crea una viga en cada par de nudos alineados.",
+      ] },
+      { t: "h", x: "C) Dibujar a mano, en planta y en elevación" },
+      { t: "n", x: [
+        "Define **ejes y niveles** (botones «+ Eje X», «+ Eje Y», «+ Nivel» o Definir › Ejes y niveles).",
+        "Pasa a **2D** (conmutador arriba a la izquierda del lienzo) y elige en el selector una **planta** (nivel) o una **elevación** (eje). ◀ ▶ o RePág / AvPág cambian de plano.",
+        "En **planta**, la herramienta **Columna** (C) pone una columna desde el nivel inferior bajo el punto donde hagas clic; marca «Dibujar en todos los niveles» para repetirla en cada piso. **Barra** (B) une dos puntos del nivel (vigas).",
+        "En **elevación**, **Barra** (B) dibuja columnas, vigas o diagonales de punto a punto. Los puntos se enganchan a las intersecciones de ejes y a los nudos; fuera de la grilla se redondean al paso de **Ajuste**.",
+        "Vuelve a **3D** para ver el conjunto, selecciona barras para cambiar su sección y asigna apoyos a los nudos de la base.",
+      ] },
+      { t: "h", x: "Después, en cualquier camino" },
+      { t: "n", x: [
+        "**Secciones y materiales** (Definir): columnas (b en X, h en Y; «girar 90°» las intercambia), vigas (b ancho, h peralte) y placas (secciones alargadas).",
+        "**Cargas**: losa por nivel (t/m², se reparte sola en dos direcciones), cargas en barras (wz negativo hacia abajo) o en nudos; peso propio en Proyecto y opciones.",
+        "**Diafragma rígido y sismo** si es un edificio (sección «Sismo E.030»).",
+        "**Calcular** (Ctrl+Enter) y revisar **Resultados 3D**.",
+      ] },
+    ],
+  },
+  {
+    id: "documentos", titulo: "5. Documentos del proyecto", bloques: [
+      { t: "p", x: "Puedes tener varios **documentos** abiertos a la vez: pórticos 2D y modelos 3D. Cambiar de documento no pierde nada; cada uno conserva su último resultado." },
+      { t: "l", x: [
+        "**Abrir una plantilla, generar un pórtico, importar o extraer un pórtico** crea un documento nuevo (no reemplaza el actual).",
+        "**Cerrar** un documento: pasa el cursor sobre él en el selector y pulsa ✕ (pide confirmación).",
+        "**Deshacer / Rehacer** (Ctrl+Z / Ctrl+Y, o los botones ↶ ↷ de la barra de herramientas) funcionan dentro del documento activo (hasta 100 pasos).",
+        "**Historial de cambios** (botón ☰ de la barra de herramientas del modelo 3D): lista cada cambio con su nombre («Agregar 3 barras», «Copiar 11 objetos ×2», «Sección V30×60 en 8 barras»…). Un clic en un cambio vuelve a antes de él; los cambios deshechos aparecen arriba en gris (↷) y se pueden rehacer con un clic.",
+      ] },
+    ],
+  },
+  {
+    id: "convenciones", titulo: "6. Unidades y convención de signos", bloques: [
       { t: "p", x: "Unidades: **tonf** (toneladas fuerza) y **m**. Momentos en t·m, cargas distribuidas en t/m, cargas de losa en t/m², módulo E en t/m² y f'c en kgf/cm²." },
       { t: "t", cols: ["Magnitud", "Positivo", "Dónde"], filas: [
         ["Coordenadas 2D", "x a la derecha, y hacia arriba", "Editor 2D"],
@@ -71,7 +131,7 @@ export const MANUAL = [
     ],
   },
   {
-    id: "modelo2d", titulo: "5. Modelar un pórtico 2D", bloques: [
+    id: "modelo2d", titulo: "7. Modelar un pórtico 2D", bloques: [
       { t: "h", x: "Herramientas del lienzo (barra izquierda)" },
       { t: "t", cols: ["Herramienta", "Tecla", "Qué hace"], filas: [
         ["↖ Seleccionar", "V", "Clic en un nudo o barra para ver sus propiedades; arrastra un nudo para moverlo."],
@@ -113,7 +173,7 @@ export const MANUAL = [
     ],
   },
   {
-    id: "calculo2d", titulo: "6. Calcular y leer resultados 2D", bloques: [
+    id: "calculo2d", titulo: "8. Calcular y leer resultados 2D", bloques: [
       { t: "p", x: "**▶ Calcular estructura** resuelve con el **método directo de rigidez** (matriz 6×6 por barra en coordenadas globales). Con «despreciar axial» da los mismos resultados que el método [A] del profesor." },
       { t: "l", x: [
         "**Indicadores**: momento, cortante y normal máximos, y desplazamiento máximo.",
@@ -124,11 +184,20 @@ export const MANUAL = [
         "**Memoria de cálculo** (texto completo del procedimiento), **CSV** e **imprimir / PDF**.",
         "**Diseño E.060** del pórtico con los diagramas de ese cálculo (ver sección 12).",
       ] },
+      { t: "h", x: "Cómo leer los diagramas 2D" },
+      { t: "l", x: [
+        "**DMF**: se dibuja del lado **traccionado**. En una viga con carga de gravedad, el momento positivo (centro del vano) queda abajo y el negativo (apoyos) arriba.",
+        "**DFC**: el cortante salta en cada carga puntual y cambia de pendiente con la carga distribuida; donde cruza cero está el momento máximo del tramo.",
+        "**DFN**: tracción positiva; las columnas suelen estar en compresión (negativo).",
+        "**Reacciones**: Rx, Ry (t) y M (t·m, antihorario positivo) en cada apoyo.",
+        "**Fuerzas en extremos de barra**: N, V, M en i y en j, en ejes locales de la barra.",
+      ] },
       { t: "nota", x: "Si cambias el modelo después de calcular, verás un punto naranja en «Resultados» y un aviso para recalcular." },
+      { t: "aviso", x: "Si una carga puntual o un momento está fuera de la barra (a < 0 o a > L), el modelo muestra un error y no deja calcular hasta corregirlo." },
     ],
   },
   {
-    id: "metodo", titulo: "7. Paso a paso: el método del profesor", bloques: [
+    id: "metodo", titulo: "9. Paso a paso: el método del profesor", bloques: [
       { t: "p", x: "La vista **Paso a paso** resuelve el pórtico con el **Método Sistematizado de Rigidez**, tal como se hace en clase. Las deformaciones axiales se desprecian, así que las incógnitas son los **giros de nudo** y los **desplazamientos laterales independientes**." },
       { t: "f", x: "{d} = [A]{D}      [K] = Σ [Aᵢ]ᵀ [kᵢ] [Aᵢ]      {R} = Σ [Aᵢ]ᵀ {rᵢ}      {Q} = {Q}nudos − {R}      [K]{D} = {Q}      {q} = [k]{d} + {r}" },
       { t: "h", x: "Los pasos" },
@@ -154,11 +223,13 @@ export const MANUAL = [
       { t: "p", x: "⏮ ◀ ▶ ⏭ para moverte, **Reproducir** (o tecla P) para avanzar solo, **Velocidad** lento/normal/rápido, y los botones numerados para saltar a un paso. Flechas ← → también avanzan." },
       { t: "h", x: "Barras inclinadas" },
       { t: "p", x: "Si el pórtico tiene barras inclinadas (por ejemplo, un pórtico a dos aguas), los desplazamientos independientes se obtienen del **espacio nulo** de las condiciones de barra inextensible, la rotación de cuerda es ψ = n·(uⱼ − uᵢ)/L y {R} incluye, por trabajo virtual, los cortantes de empotramiento. Los GDL aparecen como «Δx N2», «Δy N4», etc." },
-      { t: "aviso", x: "Limitación: con barras inclinadas no se admiten barras con tramos de sección variable en el método [A] (el cálculo normal sí)." },
+      { t: "h", x: "Rótulas y tramos" },
+      { t: "p", x: "Las barras con **rótula** en un extremo o con **tramos** de sección variable entran al método con su rigidez [kᵢ] de 2×2 obtenida por condensación estática (y sus momentos de empotramiento propios), así que el paso a paso da los mismos momentos que el cálculo normal." },
+      { t: "p", x: "Una nota en el primer paso recuerda la convención: giros y momentos **horarios positivos**. En los dibujos del paso a paso los giros se marcan con ↻." },
     ],
   },
   {
-    id: "modelo3d", titulo: "8. Modelos 3D", bloques: [
+    id: "modelo3d", titulo: "10. Modelos 3D", bloques: [
       { t: "h", x: "Cómo empezar un modelo 3D" },
       { t: "l", x: [
         "**Desde un pórtico 2D**: botón **✎ Dibujar en 3D** (o Dibujar › Dibujar en 3D). El mismo documento pasa a ser 3D con el pórtico en el plano y = 0; Ctrl+Z vuelve al 2D.",
@@ -174,13 +245,49 @@ export const MANUAL = [
       { t: "h", x: "Trabajar en 2D o en 3D" },
       { t: "l", x: [
         "**2D**: trabajas un **plano** a la vez: la **elevación** de un eje (un pórtico) o la **planta** de un nivel. Elige el plano en el selector y pasa al anterior o al siguiente con ◀ ▶ (o RePág / AvPág).",
-        "**3D**: ves toda la estructura; arrastra para girar, clic derecho para desplazar, rueda para zoom, botones Iso / Planta / Frente / Lado. Puedes **resaltar** el último plano trabajado.",
+        "**3D**: ves toda la estructura (detalles del visor más abajo). Puedes **resaltar** el último plano trabajado en 2D.",
+      ] },
+      { t: "h", x: "El visor 3D (como Blender)" },
+      { t: "t", cols: ["Acción", "Cómo"], filas: [
+        ["Orbitar", "arrastrar con el botón izquierdo o el central"],
+        ["Desplazar", "botón derecho, o Shift + botón central"],
+        ["Zoom", "rueda (acerca hacia el cursor)"],
+        ["Vistas", "botones Iso / Planta / Frente / Lado, o teclas **7** planta, **1** frente, **3** lado, **0** iso; con **Ctrl** se mira desde el lado opuesto"],
+        ["Girar 15°", "teclas 2 4 6 8 del teclado numérico"],
+        ["Perspectiva / ortográfica", "tecla **5** o botón Persp/Orto (la ortográfica sirve para medir a ojo y para planos limpios)"],
+        ["Encuadrar", "**F** o «.»: lo seleccionado; **Inicio**: todo; botón Encuadrar"],
+        ["Gizmo X Y Z", "arriba a la derecha: gira con la cámara; clic en un eje para mirar desde él (X rojo, Y verde, Z azul)"],
+        ["Cuadrícula", "botón ▦: suelo con eje X rojo y eje Y verde"],
+        ["Imagen", "botón 📷: guarda la vista como PNG para el informe"],
+        ["Ayuda", "botón ?: lista de atajos del visor"],
+      ] },
+      { t: "p", x: "Las teclas del visor funcionan con el **puntero sobre el visor**; fuera de él, 1 a 5 cambian de vista de la aplicación como siempre." },
+      { t: "h", x: "Seleccionar en 3D" },
+      { t: "l", x: [
+        "**Clic** en una barra o un nudo: lo selecciona (los nudos se toman con acercar el puntero a unos 14 px, sin acertar a la esfera).",
+        "**Shift + clic**: suma o quita de la selección.",
+        "**Recuadro**: **Ctrl + arrastrar**, o la herramienta **⬚** (R) y arrastrar. Entran las barras con los dos extremos dentro y los nudos dentro; con Shift se suma a lo que ya había.",
+        "Con **varios objetos** seleccionados, el panel derecho permite cambiar a la vez la **sección** y el **material**, girar columnas a 0° o 90°, poner o quitar **rótulas**, asignar el mismo **apoyo** a los nudos, aplicar una **carga uniforme a todas las vigas** de la selección (eligiendo el caso), quitar sus cargas o **eliminar** todo.",
+        "**Esc** deselecciona; **Supr** elimina la selección.",
+      ] },
+      { t: "h", x: "Ocultar, aislar y cortar la vista" },
+      { t: "l", x: [
+        "**H** (o botón Ocultar): oculta lo seleccionado. **Shift + H** (Aislar): deja ver solo lo seleccionado. **Alt + H** (Mostrar todo): vuelve a mostrar todo.",
+        "Selector **«Ver todo el edificio»**: muestra el edificio **hasta un nivel** (para trabajar dentro de la torre) o **solo un pórtico** en X o en Y.",
+        "Ocultar y cortar **solo cambian lo que se ve**: el modelo y el cálculo no se alteran.",
+      ] },
+      { t: "h", x: "Mover y copiar" },
+      { t: "l", x: [
+        "**G** (o botón Mover): mueve lo seleccionado un Δx, Δy, Δz en metros.",
+        "**Shift + D** (o botón Copiar): copia lo seleccionado con sus secciones, rótulas, tramos y cargas. **Número de copias** > 1 repite el desplazamiento en serie: por ejemplo, selecciona un piso con el recuadro, Δz = altura de piso y 5 copias para levantar 5 pisos iguales. Si la copia sube por encima del último nivel, se crean los niveles.",
+        "**Imán**: los nudos que caen sobre uno existente **se unen a él** (no quedan nudos duplicados) y se avisa cuántos se unieron.",
       ] },
       { t: "h", x: "Herramientas de dibujo 3D" },
       { t: "t", cols: ["Herramienta", "Tecla", "Uso"], filas: [
-        ["Seleccionar", "V", "Clic en una barra o nudo (en 3D también)."],
+        ["Seleccionar", "V", "Clic en una barra o nudo; en 3D, Shift+clic suma y Ctrl+arrastre hace recuadro."],
+        ["Recuadro ⬚", "R", "Solo en 3D: arrastrar para seleccionar todo lo que quede dentro."],
         ["Columna", "C", "En planta: clic en un punto crea la columna desde el nivel inferior hasta el nivel visto. «Dibujar en todos los niveles» repite en cada piso."],
-        ["Barra", "B", "En planta o elevación: clic de punto a punto (vigas, columnas, diagonales). En 3D: de nudo a nudo (sirve para conectar pórticos)."],
+        ["Barra", "B", "En planta o elevación: clic de punto a punto (vigas, columnas, diagonales). En 3D: de nudo a nudo (sirve para conectar pórticos); Esc termina."],
         ["Eliminar", "X", "Clic en una barra o nudo."],
         ["Ajuste", "", "Fuera de la grilla, el punto se redondea al paso elegido (0.25 m por defecto)."],
       ] },
@@ -199,8 +306,8 @@ export const MANUAL = [
     ],
   },
   {
-    id: "sismo", titulo: "9. Sismo E.030", bloques: [
-      { t: "p", x: "Se activa en Asignar › Sismo E.030 (requiere diafragma rígido). Parámetros: **Z** (zona), **U** (uso), **S** (suelo), **TP** y **TL** (periodos del suelo), **R** (coeficiente de reducción) y **CT** (para T = hn/CT)." },
+    id: "sismo", titulo: "11. Sismo E.030", bloques: [
+      { t: "p", x: "Se activa en Asignar › Sismo E.030 (requiere diafragma rígido). Parámetros: **Z** (zona), **U** (uso), **S** (suelo), **TP** y **TL** (periodos del suelo), **R** (coeficiente de reducción) y **CT** (para T = hn/CT: **35** pórticos de concreto, **45** pórticos con muros en ascensores o escaleras / duales, **60** edificios de muros; un modelo nuevo empieza en 35)." },
       { t: "f", x: "V = Z·U·C·S / R · P      C = 2.5 (T < TP) · 2.5·TP/T (TP ≤ T < TL) · 2.5·TP·TL/T² (T ≥ TL)      Fi = V · Pi·hiᵏ / Σ Pj·hjᵏ" },
       { t: "l", x: [
         "**Peso sísmico** P = CM + 25 % CV por nivel.",
@@ -213,22 +320,36 @@ export const MANUAL = [
     ],
   },
   {
-    id: "resultados3d", titulo: "10. Resultados 3D", bloques: [
+    id: "resultados3d", titulo: "12. Resultados 3D", bloques: [
       { t: "l", x: [
         "**Caso o combinación**: CM, CV, SX, SY (estático), SDX, SDY (dinámico) y las combinaciones E.060 (1.4CM+1.7CV, 1.25(CM+CV)±S, 0.9CM±S).",
-        "**Ver**: geometría, deformada (con amplificación), mapas de |M|, N (compresión azul, tracción roja), |V| y **Diseño E.060** (verde cumple, rojo no cumple). Clic en una barra para ver sus esfuerzos y su diseño.",
-        "**Resumen**: equilibrio por caso y tabla del sismo (T, C, C/R, V estático y dinámico, escala, sistema).",
+        "**Ver › Deformada**: la forma deformada con amplificación regulable; **Animar la deformada** la hace oscilar para ver cómo se mueve el edificio.",
+        "**Ver › Diagrama de M**: dibuja el momento flector **sobre cada barra**, del lado traccionado (azul positivo, rojo negativo), con el valor máximo. Elige **Mz** (eje fuerte: flexión de vigas por gravedad) o **My** (eje débil). El tamaño se regula con el deslizador. Los casos espectrales (SDX, SDY) y sus combinaciones son envolventes y no tienen diagrama por barra: usa SX/SY o las combinaciones estáticas.",
+        "**Ver › Mapas** de |M|, N (compresión azul, tracción roja) y |V|: colorean cada barra según su valor máximo, con la escala debajo.",
+        "**Ver › Diseño E.060**: verde cumple, rojo no cumple, gris sin diseño.",
+        "**Clic en una barra**: sus esfuerzos (N, V, Mz, My, torsión) y su diseño (acero, estribos y avisos).",
+        "El botón **📷** del visor guarda la imagen de lo que ves (por ejemplo, el diagrama de M de una combinación) para el informe.",
+        "**Resumen**: equilibrio por caso (ΣF aplicadas contra reacciones: ✓ si cierran) y tabla del sismo: T, C, C/R, V estático, **V dinámico CQC** (sin escalar), **escala** al 80 % y **V de diseño**, R y porcentaje de cortante en placas.",
         "**Derivas**: por nivel en X e Y, estática y dinámica, contra el límite.",
         "**Modos**: periodos, frecuencias y porcentaje de masa en X, Y y torsión.",
         "**Diseño E.060**: conteo de barras que cumplen y tabla filtrable.",
         "**Reacciones** de cada apoyo.",
         "**Pórtico por eje**: DMF, DFC y DFN de cualquier pórtico tomados del 3D, sin salir del modelo; desde ahí, el **paso a paso** de ese pórtico o **abrirlo como documento 2D**.",
       ] },
+      { t: "h", x: "Cómo leer los resultados (orden recomendado)" },
+      { t: "n", x: [
+        "**Equilibrio** (Resumen): todas las filas con ✓. Si no, hay un error de modelo (apoyos, barras sueltas).",
+        "**Deformada** de CM y de SX/SY: que se mueva como esperas, sin nudos que «vuelen».",
+        "**Modos**: el primer periodo cerca de T ≈ hn/CT y la masa participante acumulada ≥ 90 %.",
+        "**Derivas** ≤ 0.007 en X e Y (la de control es la dinámica si la activaste).",
+        "**Diagramas** de M y **Pórtico por eje** para revisar valores de vigas y columnas.",
+        "**Diseño E.060**: barras en rojo → cambia la sección (edición en bloque con el recuadro) y recalcula.",
+      ] },
       { t: "nota", x: "Para comparar con el método del profesor, usa «Paso a paso de este pórtico»: se extrae el pórtico con la carga de losa del 3D y se resuelve con [A] (axial despreciada). Las diferencias con el 3D vienen sobre todo del acortamiento axial de columnas y placas y de los brazos rígidos." },
     ],
   },
   {
-    id: "torre", titulo: "11. Torre de Arequipa", bloques: [
+    id: "torre", titulo: "13. Torre de Arequipa", bloques: [
       { t: "p", x: "Edificio de oficinas de **10 pisos de 3.00 m**, grilla de 15 ejes numerados (4.50 m) por 9 ejes con letra (5.00 m)." },
       { t: "t", cols: ["Elemento", "Supuesto"], filas: [
         ["Concreto", "f'c 280 kgf/cm² (pisos 1–3) y 210 (4–10)"],
@@ -246,7 +367,7 @@ export const MANUAL = [
     ],
   },
   {
-    id: "diseno", titulo: "12. Diseño en concreto E.060", bloques: [
+    id: "diseno", titulo: "14. Diseño en concreto E.060", bloques: [
       { t: "p", x: "Se diseña con la **envolvente de las combinaciones** (3D) o con los diagramas del cálculo (2D). f'y = 4200 kgf/cm², recubrimiento al centro del acero d' = 6 cm." },
       { t: "h", x: "Vigas" },
       { t: "f", x: "Mu = φ·As·fy·(d − a/2),  a = As·fy / (0.85·f'c·b),  φ = 0.90      As,mín = 0.7·√f'c / fy · b·d      As,máx = 0.75·ρb·b·d" },
@@ -265,18 +386,24 @@ export const MANUAL = [
     ],
   },
   {
-    id: "atajos", titulo: "13. Atajos de teclado", bloques: [
+    id: "atajos", titulo: "15. Atajos de teclado", bloques: [
       { t: "t", cols: ["Tecla", "Acción"], filas: [
         ["Ctrl + Enter", "Calcular"], ["Ctrl + K", "Buscar comando"], ["Ctrl + Z / Ctrl + Y", "Deshacer / rehacer"],
         ["Ctrl + S / Ctrl + O", "Exportar / importar JSON"], ["Supr", "Eliminar la selección"], ["Esc", "Deseleccionar / terminar de dibujar"],
-        ["V · H · N · C · X", "Herramientas 2D"], ["V · H · C · B · X", "Herramientas 3D"], ["F · G · L", "Ajustar vista · grilla · etiquetas"],
+        ["V · H · N · C · X", "Herramientas 2D"], ["V · H · C · B · X · R", "Herramientas 3D (R: recuadro)"], ["F · G · L", "Ajustar vista · grilla · etiquetas (lienzo 2D)"],
         ["1 · 2 · 3 · 4 · 5", "Modelo · 3D · Resultados · Paso a paso · Historial"], ["RePág / AvPág", "Eje o nivel anterior / siguiente (modelo 3D en 2D)"],
         ["← → · P", "Paso anterior / siguiente · reproducir (Paso a paso)"], ["F1 o ?", "Manual / atajos"],
+      ] },
+      { t: "h", x: "En el visor 3D (puntero sobre el visor)" },
+      { t: "t", cols: ["Tecla", "Acción"], filas: [
+        ["7 · 1 · 3 · 0", "Planta · frente · lado · iso (Ctrl: lado opuesto)"], ["5", "Perspectiva / ortográfica"], ["2 4 6 8 (numérico)", "Girar 15°"],
+        ["F o . · Inicio", "Encuadrar selección · encuadrar todo"], ["Shift + clic · Ctrl + arrastrar", "Sumar a la selección · recuadro"],
+        ["H · Shift + H · Alt + H", "Ocultar · aislar · mostrar todo"], ["G · Shift + D", "Mover · copiar (en serie)"], ["Supr · Esc", "Eliminar · deseleccionar"],
       ] },
     ],
   },
   {
-    id: "glosario", titulo: "14. Glosario", bloques: [
+    id: "glosario", titulo: "16. Glosario", bloques: [
       { t: "t", cols: ["Término", "Significado"], filas: [
         ["GDL", "Grado de libertad: desplazamiento o giro independiente de un nudo."],
         ["[A]", "Matriz de compatibilidad: relaciona los GDL de la estructura {D} con las deformaciones de barra {d}."],
@@ -295,11 +422,13 @@ export const MANUAL = [
     ],
   },
   {
-    id: "problemas", titulo: "15. Problemas frecuentes", bloques: [
+    id: "problemas", titulo: "17. Problemas frecuentes", bloques: [
       { t: "l", x: [
         "**⛔ No hay apoyos / la estructura es inestable**: asigna al menos un apoyo que impida el movimiento (en 2D, un empotrado o la combinación adecuada de articulaciones y rodillos).",
-        "**Mecanismo** (resultados enormes o error): revisa rótulas en ambos extremos de varias barras, nudos sueltos y barras que se cruzan sin nudo.",
-        "**El paso a paso no resuelve**: el método [A] no admite barras con tramos cuando hay inclinadas; usa el cálculo normal.",
+        "**Mecanismo** («la estructura es inestable… Mecanismo detectado en: nudo (x, y, z) traslación X…»): el mensaje dice qué nudos y en qué dirección se mueven libremente. Revisa rótulas en ambos extremos de barras alineadas, nudos sueltos, barras que se cruzan sin nudo y apoyos articulados en una estructura sin vigas rígidas.",
+        "**No encuentro una barra dentro del edificio**: usa el corte «Hasta el nivel…» o «Solo un pórtico…», o selecciona lo que estorba y pulsa H.",
+        "**«Diagrama de M» dice que es una envolvente**: los casos espectrales no tienen diagrama por barra; elige SX, SY, CM, CV o una combinación estática.",
+        "**Copié un piso y quedaron barras repetidas**: no ocurre si los nudos coinciden (se unen solos); si el Δz no era exactamente la altura de piso, deshaz desde el Historial y repite con el valor correcto.",
         "**«El cálculo ya no está en memoria»** (Pórtico por eje): vuelve a calcular el modelo 3D.",
         "**Perdí mi modelo**: los datos viven en este navegador; exporta con Ctrl+S para tener respaldo.",
         "**Las derivas no cumplen**: agrega o alarga placas en la dirección que falla, usa el análisis dinámico (control de la norma) y revisa que el diafragma esté activo.",
@@ -307,7 +436,7 @@ export const MANUAL = [
     ],
   },
   {
-    id: "validacion", titulo: "16. Cómo se validó", bloques: [
+    id: "validacion", titulo: "18. Cómo se validó", bloques: [
       { t: "l", x: [
         "EJ 1 y EJ 2 del curso reproducidos con el método [A] (mismos valores que la pizarra).",
         "Método [A] general contra el motor directo en un pórtico a dos aguas con cargas laterales y en las faldas.",
@@ -315,7 +444,11 @@ export const MANUAL = [
         "Equilibrio global verificado en todos los casos (residuo ≈ 10⁻¹²).",
         "Diseño E.060 comprobado a mano (viga 30×60 con Mu = 20 t·m → As = 10.6 cm²; doble refuerzo con Mu = 60 t·m).",
       ] },
-      { t: "p", x: "Hay 25 pruebas automáticas en la carpeta tests/ (se ejecutan con pytest)." },
+      { t: "l", x: [
+        "Método [A] con rótulas y tramos contra el motor directo (diferencias < 0.002 t·m).",
+        "Detección de mecanismo en 3D y signo de los diagramas de M sobre las barras (positivo en el centro de la viga cargada).",
+      ] },
+      { t: "p", x: "Hay 28 pruebas automáticas en la carpeta tests/ (se ejecutan con pytest)." },
     ],
   },
 ];
