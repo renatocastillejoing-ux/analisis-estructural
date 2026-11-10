@@ -14,7 +14,7 @@ import sqlite3
 import datetime
 import traceback
 
-from flask import Flask, request, jsonify, render_template, g, send_from_directory
+from flask import Flask, request, jsonify, g, send_from_directory, redirect
 
 from core.constructor import construir, extraer_resultados
 from core.reporte import generar_reporte
@@ -23,7 +23,7 @@ from core import graficos
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "historial.db")
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
+app = Flask(__name__, static_folder="static")
 
 
 # ----------------------------------------------------------------------------
@@ -64,13 +64,14 @@ def init_db():
 # ----------------------------------------------------------------------------
 @app.route("/")
 def index():
-    return render_template("index.html")
+    """Interfaz (React + Tailwind), compilada en static/react/ (npm run build en frontend/)."""
+    return send_from_directory(os.path.join(BASE_DIR, "static", "react"), "index.html")
 
 
 @app.route("/nueva")
 def nueva():
-    """Interfaz nueva (React + Tailwind), compilada en static/react/ (npm run build en frontend/)."""
-    return send_from_directory(os.path.join(BASE_DIR, "static", "react"), "index.html")
+    """Ruta antigua de la interfaz React: se mantiene por los enlaces guardados."""
+    return redirect("/", code=301)
 
 
 # ----------------------------------------------------------------------------

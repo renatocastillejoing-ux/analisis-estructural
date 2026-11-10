@@ -7,6 +7,7 @@ import Paso from "./components/Paso.jsx";
 import Historial from "./components/Historial.jsx";
 const Vista3D = lazy(() => import("./components/Vista3D.jsx"));
 const Visor2D3D = lazy(() => import("./components/Visor2D3D.jsx"));
+const Manual = lazy(() => import("./components/Manual.jsx"));
 import { Arbol3D, PANELES3D, PanelEditor3D, Props3D } from "./components/Editor3D.jsx";
 import Lienzo3D, { HERR3D } from "./components/Lienzo3D.jsx";
 import Results3D from "./components/Results3D.jsx";
@@ -420,7 +421,7 @@ export default function App() {
     ] },
     { id: "ayuda", label: "Ayuda", items: [
       { id: "atajos", label: "Atajos de teclado", atajo: "?", accion: () => setDialogo("atajos") },
-      { id: "clasica", label: "Abrir la interfaz clásica", accion: () => window.open("/", "_blank") },
+      { id: "manual", label: "Manual de uso", atajo: "F1", accion: () => setVista("manual"), claves: "ayuda guia tutorial explicacion" },
     ] },
   ];
   const comandos = menus.flatMap((m) => m.items.filter((i) => i !== "sep").map((i) => ({ ...i, grupo: m.label })));
@@ -434,6 +435,7 @@ export default function App() {
       const enCampo = /INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName);
       const ctrl = e.ctrlKey || e.metaKey;
       if (ctrl && e.key === "Enter") { e.preventDefault(); t.ejecutarCalculo(); return; }
+      if (e.key === "F1") { e.preventDefault(); setVista("manual"); return; }
       if (ctrl && e.key.toLowerCase() === "k") { e.preventDefault(); buscador.current?.enfocar(); return; }
       if (ctrl && e.key.toLowerCase() === "s") { e.preventDefault(); t.exportarJSON(); return; }
       if (ctrl && e.key.toLowerCase() === "o") { e.preventDefault(); importar.current?.click(); return; }
@@ -609,6 +611,11 @@ export default function App() {
             if (!d || d.ok === false) { avisar(d?.error || "No se pudo cargar el pórtico.", "err"); return; }
             cargarModelo({ ...modeloVacio(), ...d });
           }} />
+          </Suspense>
+        )}
+        {vista === "manual" && (
+          <Suspense fallback={<div className="m-auto text-sm text-slate-500">Cargando el manual…</div>}>
+            <Manual onVolver={() => setVista("modelo")} />
           </Suspense>
         )}
         {vista === "historial" && (
