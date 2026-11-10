@@ -112,7 +112,7 @@ const btn = "rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-sla
 const etiquetaPaso = (p) => (p.id === "ensamble" ? "4b" : String(p.n));
 
 function mensajeError(e = "") {
-  if (/inclinad/i.test(e)) return "Hay barras inclinadas. El método sistematizado [A] todavía no las resuelve; el cálculo normal (Calcular estructura) sí las admite.";
+  if (/tramos/i.test(e)) return "Con barras inclinadas, el método [A] aún no admite barras con tramos de sección variable; el cálculo normal sí.";
   return e.replace(/^Caso aun no soportado por el metodo \[A\]:\s*/i, "Caso que el método [A] aún no admite: ") || "No se pudo resolver con el método sistematizado.";
 }
 
@@ -213,6 +213,13 @@ function Apoyos({ nudos, X, Y }) {
 // Desplazamientos de nudo (ux, uy, θ) para un vector de GDL del método [A].
 function despNudos(data, coef) {
   const out = Object.fromEntries(data.nudos.map((nd) => [nd.nombre, { ux: 0, uy: 0, th: 0 }]));
+  if (data.modos) {                       // método general: cada GDL trae su forma (traslaciones y giro)
+    data.modos.forEach((md, g) => {
+      const c = coef[g] || 0; if (!c) return;
+      Object.entries(md).forEach(([nom, [ux, uy, th]]) => { if (out[nom]) { out[nom].ux += c * ux; out[nom].uy += c * uy; out[nom].th += c * th; } });
+    });
+    return out;
+  }
   data.labels.forEach((lab, g) => {
     const c = coef[g] || 0; if (!c) return;
     const t = lab.replace(/^D\d+\(/, "").replace(/\)$/, "");
@@ -283,7 +290,9 @@ function Activar({ paso, data }) {
   const esGiro = corto.startsWith("θ");
   const amp = (esGiro ? 0.22 * Lm : 0.06 * span) * p;
   const nodoGiro = esGiro ? data.nudos.find((nd) => nd.nombre === corto.replace(/^θ\s*/, "")) : null;
-  const yPiso = !esGiro ? +corto.replace(/^Δ\s*y=/, "") : null;
+  const mNudo = corto.match(/^Δ([xy])\s+(.+)$/);
+  const nodoTras = mNudo ? data.nudos.find((nd) => nd.nombre === mNudo[2]) : null;
+  const yPiso = !esGiro && !mNudo ? +corto.replace(/^Δ\s*y=/, "") : null;
 
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_300px]">
@@ -301,6 +310,9 @@ function Activar({ paso, data }) {
             {nodoGiro && (
               <path d={`M${G.X(nodoGiro.x) + 18},${G.Y(nodoGiro.y)} A18,18 0 1,0 ${G.X(nodoGiro.x)},${G.Y(nodoGiro.y) - 18}`} fill="none" stroke="#F59E0B" strokeWidth={2.5} markerEnd="url(#fl-gdl)" style={{ opacity: p }} />
             )}
+            {nodoTras && (mNudo[1] === "x"
+              ? <line x1={G.X(nodoTras.x) - 55} y1={G.Y(nodoTras.y) - 18} x2={G.X(nodoTras.x) - 55 + 42 * p} y2={G.Y(nodoTras.y) - 18} stroke="#F59E0B" strokeWidth={3} markerEnd="url(#fl-gdl)" />
+              : <line x1={G.X(nodoTras.x) + 18} y1={G.Y(nodoTras.y) + 40} x2={G.X(nodoTras.x) + 18} y2={G.Y(nodoTras.y) + 40 - 42 * p} stroke="#F59E0B" strokeWidth={3} markerEnd="url(#fl-gdl)" />)}
             {yPiso != null && Number.isFinite(yPiso) && (() => {
               const xs = data.nudos.filter((nd) => Math.abs(nd.y - yPiso) < 1e-6).map((nd) => nd.x);
               const x0 = Math.min(...xs);
@@ -332,6 +344,8 @@ function Coordenadas({ data }) {
       <Figura data={data}>
         {(G) => data.labels.map((l, k) => {
           const t = l.replace(/^D\d+\(/, "").replace(/\)$/, "");
+          const mN = t.match(/^Δ([xy])\s+(.+)$/);
+          if (mN) { const q = data.nudos.find((x) => x.nombre === mN[2]); return q ? <text key={k} x={G.X(q.x) - 60} y={G.Y(q.y) + 4} className="celda-in fill-amber-600 text-[12px] font-bold dark:fill-amber-400" style={{ animationDelay: `${k * 120}ms` }}>D{k + 1}{mN[1] === "x" ? "→" : "↑"}</text> : null; }
           const nd = t.startsWith("θ") ? data.nudos.find((x) => x.nombre === t.replace(/^θ\s*/, "")) : null;
           if (nd) return <text key={k} x={G.X(nd.x) + 8} y={G.Y(nd.y) - 10} className="celda-in fill-amber-600 text-[12px] font-bold dark:fill-amber-400" style={{ animationDelay: `${k * 120}ms` }}>D{k + 1}↺</text>;
           const y = +t.replace(/^Δ\s*y=/, ""); const xs = data.nudos.filter((x) => Math.abs(x.y - y) < 1e-6).map((x) => x.x);

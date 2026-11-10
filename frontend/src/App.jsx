@@ -588,7 +588,7 @@ export default function App() {
                 <button onClick={ejecutarCalculo} className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white">Recalcular</button>
               </div>
             )}
-            <Results resultado={resultado} error={error} combos={combos} onVolver={() => setVista("modelo")}
+            <Results resultado={resultado} error={error} combos={combos} modelo={modeloCalculado || modelo} onVolver={() => setVista("modelo")}
               onExportar={(t) => (t === "csv" ? exportarCSV() : exportarMemoria())} />
           </div>
         )}

@@ -178,6 +178,8 @@ def _construir_pasos(labels, def_labels, barras, A, k, K, Pext, FEM, P, D, d, M,
 #  GDL (Q-D): primero desplazamientos laterales por piso, luego giros de nudo.
 # ==============================================================================
 def resolver_sistematizado(est, tol=1e-6):
+    if any(abs(e.sin) > 1e-6 and abs(e.cos) > 1e-6 for e in est.elementos):
+        return resolver_sistematizado_general(est, tol)
     nudos = sorted(est.nudos, key=lambda n: n.id)
     elementos = est.elementos
     ys = sorted({round(n.y, 6) for n in nudos})
@@ -366,3 +368,142 @@ def _pasos_sistematizado(labels, def_labels, barras, A, K, Qn, R, Q, D):
                       "dibujan los diagramas DMF/DFC.",
               "barras": [{"elem": b["elem"], "qT": b["qT"]} for b in barras]})
     return P
+
+
+# ==============================================================================
+#  MÉTODO SISTEMATIZADO GENERAL (barras inclinadas)
+#  Con las deformaciones axiales despreciadas, las traslaciones independientes
+#  son el espacio nulo de las restricciones de barra inextensible:
+#      (u_j − u_i)·e_x = 0   para cada barra,   u = 0 en los apoyos.
+#  Cada traslación independiente es un GDL {D}; la rotación de cuerda de cada
+#  barra es ψ = n·(u_j − u_i)/L con n la normal (giro +90°). Deformaciones de
+#  barra: φ = θ − ψ (convención directa), [k] = (EI/L)[[4,2],[2,4]].
+#  Fijación {R} por trabajo virtual de las fuerzas de empotramiento (momentos y
+#  cortantes). Se presenta en la convención del profesor (giros horarios +).
+# ==============================================================================
+def _rref_nulo(C, tol=1e-9):
+    """Base del espacio nulo por escalonamiento reducido; devuelve (N, libres)."""
+    C = np.array(C, float)
+    m, n = C.shape if C.size else (0, C.shape[1] if C.ndim == 2 else 0)
+    A = C.copy(); piv = []; r = 0
+    for c in range(n):
+        if r >= m: break
+        p = r + int(np.argmax(np.abs(A[r:, c]))) if m > r else r
+        if abs(A[p, c]) < tol: continue
+        A[[r, p]] = A[[p, r]]; A[r] /= A[r, c]
+        for k in range(m):
+            if k != r and abs(A[k, c]) > tol: A[k] -= A[k, c] * A[r]
+        piv.append(c); r += 1
+    libres = [c for c in range(n) if c not in piv]
+    N = np.zeros((n, len(libres)))
+    for k, f in enumerate(libres):
+        N[f, k] = 1.0
+        for row, pc in enumerate(piv):
+            N[pc, k] = -A[row, f]
+    N[np.abs(N) < 1e-12] = 0
+    return N, libres
+
+
+def resolver_sistematizado_general(est, tol=1e-6):
+    nudos = sorted(est.nudos, key=lambda n: n.id)
+    elementos = est.elementos
+    for e in elementos:
+        if hasattr(e, "es_segmentada") and e.es_segmentada():
+            raise NotImplementedError("barras con tramos de sección variable en una estructura con barras inclinadas")
+    # incógnitas de traslación (componentes libres) ordenadas de arriba hacia abajo,
+    # para que los GDL libres queden en los nudos altos (como los Δ de piso)
+    comp = []
+    for n in sorted(nudos, key=lambda q: (-q.y, q.x)):
+        for k in (0, 1):
+            if n.restriccion[k] == 0: comp.append((n.id, k))
+    col = {c: i for i, c in enumerate(comp)}
+    filas = []
+    for e in elementos:
+        f = np.zeros(len(comp))
+        for nd, sgn in ((e.nj, 1.0), (e.ni, -1.0)):
+            if (nd.id, 0) in col: f[col[(nd.id, 0)]] += sgn * e.cos
+            if (nd.id, 1) in col: f[col[(nd.id, 1)]] += sgn * e.sin
+        if np.any(f): filas.append(f)
+    if comp:
+        N, libres = _rref_nulo(np.array(filas) if filas else np.zeros((0, len(comp))))
+    else:
+        N, libres = np.zeros((0, 0)), []
+    nT = N.shape[1]
+    nombre = {n.id: n.nombre for n in nudos}
+    labels = [f"D{k+1}(Δ{'x' if comp[f][1] == 0 else 'y'} {nombre[comp[f][0]]})" for k, f in enumerate(libres)]
+    rot = {}
+    for n in nudos:
+        if n.restriccion[2] == 0:
+            rot[n.id] = len(labels); labels.append(f"D{len(labels)+1}(θ {n.nombre})")
+    nD = len(labels)
+
+    def tras(nd):
+        """Matriz 2 × nD: (ux, uy) del nudo en función de {D}."""
+        T = np.zeros((2, nD))
+        for k in (0, 1):
+            if (nd.id, k) in col: T[k, :nT] = N[col[(nd.id, k)]]
+        return T
+
+    barras, Kd, Rd = [], np.zeros((nD, nD)), np.zeros(nD)
+    for e in elementos:
+        L = e.L; EI = e.mat.E * e.sec.I; c, s = e.cos, e.sin
+        nrm = np.array([-s, c])
+        psi = nrm @ (tras(e.nj) - tras(e.ni)) / L               # 1 × nD
+        Ad = np.zeros((2, nD))
+        if e.ni.id in rot: Ad[0, rot[e.ni.id]] = 1.0
+        if e.nj.id in rot: Ad[1, rot[e.nj.id]] = 1.0
+        Ad -= psi                                               # φ = θ − ψ
+        Ki = (EI / L) * np.array([[4.0, 2.0], [2.0, 4.0]])
+        ff = e.ff_local_base()                                  # fuerzas de empotramiento sobre la barra
+        g = lambda N_, V_: np.array([c * N_ - s * V_, s * N_ + c * V_])
+        Rb = tras(e.ni).T @ g(ff[0], ff[1]) + tras(e.nj).T @ g(ff[3], ff[4])
+        if e.ni.id in rot: Rb[rot[e.ni.id]] += ff[2]
+        if e.nj.id in rot: Rb[rot[e.nj.id]] += ff[5]
+        Kd += Ad.T @ Ki @ Ad; Rd += Rb
+        tipo = "viga" if abs(s) < 1e-6 else "columna_piso" if abs(c) < 1e-6 else "inclinada"
+        barras.append({"e": e, "Ad": Ad, "Ki": Ki, "ff": ff, "tipo": tipo})
+    Qn = np.zeros(nD)
+    for n in nudos:
+        Qn += tras(n).T @ np.asarray(n.carga[:2], float)
+        if n.id in rot: Qn[rot[n.id]] += n.carga[2]
+    Qd = Qn - Rd
+    Dd = np.linalg.solve(Kd, Qd) if nD else np.zeros(0)
+
+    # ---- convención del profesor: giros y momentos horarios positivos ----
+    Sg = np.ones(nD); Sg[nT:] = -1.0
+    K = (Sg[:, None] * Kd) * Sg[None, :]; Q = Sg * Qd; R = Sg * Rd; Qn_p = Sg * Qn; D = Sg * Dd
+    out_barras, def_labels, A_rows = [], [], []
+    for b in barras:
+        e = b["e"]
+        A = -(b["Ad"] * Sg[None, :])
+        r = -np.array([b["ff"][2], b["ff"][5]])
+        d = A @ D
+        q = b["Ki"] @ d
+        qT = q + r
+        dl = [f"{e.nombre}·i", f"{e.nombre}·j"]
+        def_labels += dl; A_rows.append(A)
+        out_barras.append({"elem": e.nombre, "tipo": b["tipo"], "i": e.ni.nombre, "j": e.nj.nombre,
+                           "xi": float(e.ni.x), "yi": float(e.ni.y), "xj": float(e.nj.x), "yj": float(e.nj.y),
+                           "L": float(e.L), "EI": float(e.mat.E * e.sec.I), "def_labels": dl,
+                           "A": A.tolist(), "K": b["Ki"].tolist(), "AtKA": (A.T @ b["Ki"] @ A).tolist(),
+                           "r": r.tolist(), "d": d.tolist(), "q": q.tolist(), "qT": qT.tolist()})
+    A_full = np.vstack(A_rows).tolist() if A_rows else []
+    nudos_out = [{"nombre": n.nombre, "x": float(n.x), "y": float(n.y), "restr": list(n.restriccion)} for n in nudos]
+    # modos de traslación (para dibujar cada GDL en el reproductor)
+    modos = []
+    for k in range(nD):
+        u = {}
+        for n in nudos:
+            T = tras(n)
+            u[n.nombre] = [float(T[0, k]), float(T[1, k]), 0.0]
+        if k >= nT:
+            nid = next(i for i, v in rot.items() if v == k)
+            u[nombre[nid]][2] = -1.0            # giro horario positivo
+        modos.append(u)
+    pasos = _pasos_sistematizado(labels, def_labels, out_barras, A_full, K.tolist(), Qn_p.tolist(), R.tolist(), Q.tolist(), D.tolist())
+    for p in pasos:
+        if p["id"] == "R":
+            p["desc"] = "Con barras inclinadas, {R} se obtiene por trabajo virtual de las fuerzas de empotramiento (momentos y cortantes) sobre cada GDL."
+    return {"ok": True, "n_gdl": int(nD), "labels": labels, "def_labels": def_labels, "A": A_full,
+            "K": K.tolist(), "R": R.tolist(), "Qn": Qn_p.tolist(), "Q": Q.tolist(), "D": D.tolist(),
+            "barras": out_barras, "nudos": nudos_out, "pasos": pasos, "modos": modos, "general": True}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Diagrama } from "./Paso.jsx";
+import { propsSeccion } from "../model.js";
 
 const TIPOS = [
   { id: "M", label: "DMF", titulo: "Momento flector, del lado traccionado" },
@@ -8,7 +9,7 @@ const TIPOS = [
   { id: "def", label: "Deformada", titulo: "Deformada amplificada" },
 ];
 
-export default function Results({ resultado, error, onVolver, combos, onExportar }) {
+export default function Results({ resultado, error, onVolver, combos, onExportar, modelo }) {
   const [tipo, setTipo] = useState("M");
   const [seccion, setSeccion] = useState("simple");
 
@@ -61,6 +62,7 @@ export default function Results({ resultado, error, onVolver, combos, onExportar
         </div>
 
         {verCombos ? <Combinaciones data={combos} /> : <Simple resultado={resultado} tipo={tipo} setTipo={setTipo} />}
+        {!verCombos && resultado && modelo && <Diseno2D resultado={resultado} modelo={modelo} />}
       </div>
     </div>
   );
@@ -267,4 +269,59 @@ function fmtChico(v) {
   const x = Math.abs(+v);
   if (x < 1e-14) return "0";
   return x < 1e-3 ? (+v).toExponential(3) : fmt(v, 5);
+}
+
+// Diseño E.060 de las barras del pórtico con los diagramas del cálculo.
+function Diseno2D({ resultado, modelo }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const disenar = async () => {
+    const secs = Object.fromEntries(modelo.secciones.map((s) => [s.nombre, s]));
+    const mats = Object.fromEntries((modelo.materiales || []).map((m) => [m.nombre, m]));
+    const fcDef = modelo.material?.modo === "fc" ? +modelo.material.fc : 210;
+    const porNombre = Object.fromEntries(modelo.elementos.map((e) => [e.nombre, e]));
+    const nud = Object.fromEntries(modelo.nudos.map((n) => [n.id, n]));
+    const elementos = (resultado.diagramas?.elementos || []).map((d) => {
+      const e = porNombre[d.elem]; if (!e) return null;
+      const s = secs[e.seccion]; if (!s) return null;
+      const p = propsSeccion(s);
+      const b = (s.modo || "rect") === "rect" ? +s.b : p.A / (p.h || 1);
+      const vertical = Math.abs(nud[e.i].x - nud[e.j].x) < 1e-6;
+      const mat = mats[e.material];
+      return { nombre: e.nombre, tipo: vertical ? "columna" : "viga", b, h: p.h, fc: mat?.modo === "fc" ? +mat.fc : fcDef, M: d.M, V: d.V, N: d.N };
+    }).filter(Boolean);
+    setCargando(true); setError("");
+    try {
+      const r = await fetch("/api/diseno", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ elementos }) }).then((x) => x.json());
+      if (r.ok === false) setError(r.error); else setData(r.diseno);
+    } catch (e) { setError(String(e)); } finally { setCargando(false); }
+  };
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-ink-line dark:bg-ink-2">
+      <div className="mb-2 flex flex-wrap items-center gap-3">
+        <h2 className="font-semibold">Diseño en concreto armado (E.060)</h2>
+        <button onClick={disenar} disabled={cargando} className="rounded-md bg-teal px-3 py-1 text-sm font-semibold text-white disabled:opacity-60">{cargando ? "Diseñando…" : data ? "Volver a diseñar" : "Diseñar barras"}</button>
+        <span className="text-xs text-slate-500">Con los diagramas de este cálculo · f'y = 4200 kgf/cm² · d' = 6 cm. Si el modelo usa combinaciones, calcula primero con las cargas ya factoradas.</span>
+      </div>
+      {error && <p className="text-sm text-rose-600">{error}</p>}
+      {data && (
+        <div className="max-h-96 overflow-auto">
+          <table className="min-w-full text-xs">
+            <thead className="sticky top-0 bg-white dark:bg-ink-2"><tr className="border-b border-slate-200 text-left uppercase text-slate-500 dark:border-ink-line">{["Barra", "b × h", "Estado", "Flexión", "Cortante", "Observación"].map((c) => <th key={c} className="px-2 py-1.5">{c}</th>)}</tr></thead>
+            <tbody>{data.map((x) => (
+              <tr key={x.nombre} className="border-b border-slate-100 dark:border-ink-line">
+                <td className="px-2 py-1 font-medium">{x.nombre}</td>
+                <td className="px-2 py-1 tabular-nums">{fmt(x.b, 2)} × {fmt(x.h, 2)}</td>
+                <td className={`px-2 py-1 font-semibold ${x.estado === "cumple" ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>{x.estado}</td>
+                <td className="px-2 py-1 tabular-nums">{x.tipo === "viga" ? `M− ${x.Mu_sup ?? 0} t·m → ${x.As_sup ?? "—"} cm² (${x.barras_sup}) · M+ ${x.Mu_inf ?? 0} → ${x.As_inf ?? "—"} cm² (${x.barras_inf})` : `Pu ${x.Pu} t · Mu ${x.Mux} t·m → ρ ${x.rho ?? "—"} % (${x.barras})`}</td>
+                <td className="px-2 py-1">{x.estribos}{x.tipo === "viga" ? ` · φVc ${x.phiVc} t` : ""}</td>
+                <td className="px-2 py-1 text-slate-500">{(x.avisos || []).join(" · ")}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
 }

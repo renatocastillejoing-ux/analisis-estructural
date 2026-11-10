@@ -239,6 +239,17 @@ def api_calcular3d():
                         "detalle": traceback.format_exc()}), 400
 
 
+@app.route("/api/diseno", methods=["POST"])
+def api_diseno():
+    """Diseño E.060 de barras de un pórtico 2D a partir de sus diagramas."""
+    from core.diseno_e060 import disenar_2d
+    d = request.get_json(force=True)
+    try:
+        return jsonify({"ok": True, "diseno": disenar_2d(d["elementos"])})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
+
+
 @app.route("/api/calcular3d/portico", methods=["POST"])
 def api_calcular3d_portico():
     """Diagramas N/V/M en el plano de un pórtico, tomados del último cálculo 3D."""

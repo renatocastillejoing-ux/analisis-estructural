@@ -100,6 +100,13 @@ function Proyecto({ modelo, commit }) {
       <p className="text-xs text-slate-500 dark:text-slate-400">Unidades: tonf y m. Pórtico espacial con 6 GDL por nudo (deformación axial, flexión en dos planos y torsión).</p>
       <Interruptor label="Diafragma rígido en cada nivel (losa)" valor={!!modelo.diafragma} onChange={(v) => commit((m) => { m.diafragma = v; })} />
       <Interruptor label="Incluir peso propio de las barras" valor={!!modelo.peso_propio} onChange={(v) => commit((m) => { m.peso_propio = v; })} />
+      <Campo label="Brazos rígidos en los nudos" hint="Zona rígida de media dimensión del apoyo en los extremos de las vigas (y de las columnas en «todos»).">
+        <select className="inp" value={modelo.brazos_rigidos?.modo || "placas"} onChange={(e) => commit((m) => { m.brazos_rigidos = { ...(m.brazos_rigidos || {}), modo: e.target.value, factor: m.brazos_rigidos?.factor ?? 1 }; })}>
+          <option value="placas">Solo en vigas que llegan a placas</option>
+          <option value="todos">En todas las uniones viga–columna</option>
+          <option value="ninguno">Ninguno (barras de eje a eje)</option>
+        </select>
+      </Campo>
       {modelo.peso_propio && (
         <Campo label="Caso del peso propio">
           <select className="inp" value={modelo.caso_peso_propio || "CM"} onChange={(e) => commit((m) => { m.caso_peso_propio = e.target.value; })}>
@@ -318,8 +325,10 @@ function Sismo({ modelo, commit }) {
       <Interruptor label="Sismo estático E.030 en X e Y" valor={!!s.activo} onChange={(v) => commit((m) => { m.sismo = { ...(m.sismo || {}), activo: v }; if (v) m.diafragma = true; })} />
       <p className="text-[11px] text-slate-500">Fuerzas por nivel en el centro de masas, con 5 % de excentricidad accidental. Peso sísmico = CM + 25 % CV. Requiere diafragma rígido.</p>
       <div className="grid grid-cols-3 gap-1">
-        {[["Z", "Z"], ["U", "U"], ["S", "S"], ["R", "R"], ["TP", "TP (s)"], ["CT", "CT"]].map(([k, l]) => <Campo key={k} label={l}><NumIn value={s[k]} onChange={(v) => set(k, v)} /></Campo>)}
+        {[["Z", "Z"], ["U", "U"], ["S", "S"], ["R", "R"], ["TP", "TP (s)"], ["TL", "TL (s)"], ["CT", "CT"]].map(([k, l]) => <Campo key={k} label={l}><NumIn value={s[k] ?? (k === "TL" ? 2 : 0)} onChange={(v) => set(k, v)} /></Campo>)}
       </div>
+      <Interruptor label="Análisis dinámico espectral (CQC, ζ = 5 %)" valor={!!s.dinamico} onChange={(v) => set("dinamico", v)} />
+      <p className="text-[11px] text-slate-500">Escala el cortante dinámico al 80 % del estático (estructura regular). La deriva se controla con el dinámico y sus desplazamientos no se escalan (E.030 art. 4.6.4). R: pórticos 8 · dual 7 · muros 6 (el resultado sugiere el sistema según el cortante que toman las placas).</p>
       <Campo label="Periodo para las fuerzas">
         <select className="inp" value={s.periodo || "norma"} onChange={(e) => set("periodo", e.target.value)}>
           <option value="norma">T = hn / CT (norma)</option>
@@ -390,15 +399,14 @@ export function Props3D({ modelo, sel, setSel, commit, abrirPanel }) {
               <Campo label="Material"><select className="inp" value={el.material || ""} onChange={(e) => commit((m) => { m.elementos.find((q) => q.id === el.id).material = e.target.value || undefined; })}><option value="">Por defecto</option>{(modelo.materiales || []).map((x) => <option key={x.nombre}>{x.nombre}</option>)}</select></Campo>
             </div>
             {tipo === "columna" && <Interruptor label="Girar la sección 90° (b en Y)" valor={(+el.giro || 0) % 180 === 90} onChange={(v) => commit((m) => { m.elementos.find((q) => q.id === el.id).giro = v ? 90 : 0; })} />}
+            <div className="flex gap-4">
+              <Interruptor label="Rótula en i" valor={!!el.release_i} onChange={(v) => commit((m) => { m.elementos.find((q) => q.id === el.id).release_i = v; })} />
+              <Interruptor label="Rótula en j" valor={!!el.release_j} onChange={(v) => commit((m) => { m.elementos.find((q) => q.id === el.id).release_j = v; })} />
+            </div>
+            <Tramos3D modelo={modelo} el={el} L={L} commit={commit} />
             <h3 className="pt-2 text-xs font-semibold uppercase text-slate-500">Cargas en la barra</h3>
-            {cargas.map(({ c, i }) => (
-              <div key={i} className="grid grid-cols-[1fr_1fr_1.75rem] items-end gap-1">
-                <Campo label="Caso"><select className="inp" value={c.caso} onChange={(e) => commit((m) => { m.cargas_barras[i].caso = e.target.value; })}>{casos.map((x) => <option key={x.nombre}>{x.nombre}</option>)}</select></Campo>
-                <Campo label="wz (t/m)"><NumIn value={c.wz} onChange={(v) => commit((m) => { m.cargas_barras[i].wz = v; })} /></Campo>
-                <BtnIcon peligro title="Quitar" onClick={() => commit((m) => { m.cargas_barras.splice(i, 1); })}>✕</BtnIcon>
-              </div>
-            ))}
-            <BtnAgregar onClick={() => commit((m) => { m.cargas_barras = m.cargas_barras || []; m.cargas_barras.push({ elem: el.id, caso: casos[0]?.nombre || "CM", wz: -1 }); })}>+ Carga uniforme</BtnAgregar>
+            {cargas.map(({ c, i }) => <CargaBarra3D key={i} c={c} i={i} casos={casos} L={L} commit={commit} />)}
+            <BtnAgregar onClick={() => commit((m) => { m.cargas_barras = m.cargas_barras || []; m.cargas_barras.push({ elem: el.id, caso: casos[0]?.nombre || "CM", tipo: "uniforme", wz: -1 }); })}>+ Carga en la barra</BtnAgregar>
             <button className="w-full rounded-md border border-rose-200 py-1.5 text-sm text-rose-600 dark:border-rose-900 dark:text-rose-400" onClick={() => { commit((m) => borrarBarra(m, el.id)); setSel(null); }}>🗑 Eliminar barra (Supr)</button>
           </>);
         })()}
@@ -420,5 +428,51 @@ export function Props3D({ modelo, sel, setSel, commit, abrirPanel }) {
         </>)}
       </div>
     </aside>
+  );
+}
+
+function CargaBarra3D({ c, i, casos, L, commit }) {
+  const t = c.tipo || "uniforme";
+  const set = (k, v) => commit((m) => { m.cargas_barras[i][k] = v; });
+  return (
+    <div className="space-y-1 rounded-lg border border-slate-200 p-2 dark:border-ink-line">
+      <div className="grid grid-cols-[1fr_1.3fr_1.75rem] items-end gap-1">
+        <Campo label="Caso"><select className="inp" value={c.caso} onChange={(e) => set("caso", e.target.value)}>{casos.map((x) => <option key={x.nombre}>{x.nombre}</option>)}</select></Campo>
+        <Campo label="Tipo">
+          <select className="inp" value={t} onChange={(e) => commit((m) => {
+            const v = e.target.value, q = m.cargas_barras[i];
+            m.cargas_barras[i] = v === "puntual" ? { elem: q.elem, caso: q.caso, tipo: "puntual", Pz: -1, a: +(L / 2).toFixed(3) }
+              : v === "trapezoidal" ? { elem: q.elem, caso: q.caso, tipo: "trapezoidal", wz1: 0, wz2: -1 } : { elem: q.elem, caso: q.caso, tipo: "uniforme", wz: -1 };
+          })}>
+            <option value="uniforme">Uniforme</option><option value="trapezoidal">Trapezoidal</option><option value="puntual">Puntual</option>
+          </select>
+        </Campo>
+        <BtnIcon peligro title="Quitar" onClick={() => commit((m) => { m.cargas_barras.splice(i, 1); })}>✕</BtnIcon>
+      </div>
+      <div className="grid grid-cols-2 gap-1">
+        {t === "uniforme" && <Campo label="wz (t/m)" hint="negativo = hacia abajo"><NumIn value={c.wz ?? 0} onChange={(v) => set("wz", v)} /></Campo>}
+        {t === "trapezoidal" && <><Campo label="wz en i (t/m)"><NumIn value={c.wz1 ?? 0} onChange={(v) => set("wz1", v)} /></Campo><Campo label="wz en j (t/m)"><NumIn value={c.wz2 ?? 0} onChange={(v) => set("wz2", v)} /></Campo></>}
+        {t === "puntual" && <><Campo label="Pz (t)"><NumIn value={c.Pz ?? 0} onChange={(v) => set("Pz", v)} /></Campo><Campo label="a desde i (m)"><NumIn value={c.a ?? L / 2} onChange={(v) => set("a", v)} /></Campo></>}
+      </div>
+    </div>
+  );
+}
+
+function Tramos3D({ modelo, el, L, commit }) {
+  const tramos = el.segmentos || [];
+  const set = (fn) => commit((m) => { const x = m.elementos.find((q) => q.id === el.id); const t = structuredClone(x.segmentos || []); fn(t); if (t.length) x.segmentos = t; else delete x.segmentos; });
+  return (
+    <div className="space-y-1">
+      <h3 className="pt-2 text-xs font-semibold uppercase text-slate-500">Tramos (sección variable)</h3>
+      {tramos.length < 2 && <p className="text-[11px] text-slate-500">Barra prismática. Divídela en tramos con su propia sección (por ejemplo, un ensanche junto a los apoyos).</p>}
+      {tramos.map((t, k) => (
+        <div key={k} className="grid grid-cols-[4.5rem_1fr_1.75rem] items-end gap-1">
+          <Campo label="L (m)"><NumIn value={t.L} onChange={(v) => set((ts) => { ts[k].L = v; })} /></Campo>
+          <Campo label="Sección"><select className="inp" value={t.seccion || el.seccion} onChange={(e) => set((ts) => { ts[k].seccion = e.target.value; })}>{modelo.secciones.map((q) => <option key={q.nombre}>{q.nombre}</option>)}</select></Campo>
+          <BtnIcon peligro title="Quitar tramo" onClick={() => set((ts) => { ts.splice(k, 1); })}>✕</BtnIcon>
+        </div>
+      ))}
+      <BtnAgregar onClick={() => set((ts) => { if (!ts.length) ts.push({ L: +(L / 2).toFixed(3), seccion: el.seccion }, { L: +(L / 2).toFixed(3), seccion: el.seccion }); else ts.push({ L: 1, seccion: el.seccion }); })}>{tramos.length ? "+ Agregar tramo" : "+ Dividir en 2 tramos"}</BtnAgregar>
+    </div>
   );
 }

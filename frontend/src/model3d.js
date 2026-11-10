@@ -161,7 +161,10 @@ export function escena3d(m, { resultado, caso, modo = "geometria", escala = 1, s
     const t = tipoBarra(m, e);
     const vertical = t === "columna";
     let color;
-    if (val) {
+    if (modo === "diseno" && resultado?.diseno) {
+      const dd = resultado.diseno[idxRes[e.id]];
+      color = !dd ? "#94a3b8" : dd.estado === "cumple" ? "#16a34a" : "#e11d48";
+    } else if (val) {
       const v = val[idxRes[e.id]] ?? 0, f = Math.min(1, Math.abs(v) / vmax);
       color = modo === "N" ? (v < 0 ? `hsl(220, 70%, ${85 - 45 * f}%)` : `hsl(0, 70%, ${85 - 45 * f}%)`) : `hsl(${200 - 200 * f}, 75%, ${55 - 10 * f}%)`;
     }
@@ -170,7 +173,7 @@ export function escena3d(m, { resultado, caso, modo = "geometria", escala = 1, s
       id: e.id, a, b, w: vertical ? +s.b : +s.h, d: vertical ? +s.h : +s.b,
       wDir: vertical ? (((+e.giro || 0) % 180 === 90) ? [0, 1, 0] : [1, 0, 0]) : [0, 0, 1],
       tipo: vertical && Math.max(+s.b / +s.h, +s.h / +s.b) >= 4 ? "placa" : t, color, piso: null, grupos: [],
-      info: `${e.nombre} · ${e.seccion}${val ? ` · ${modo} = ${(val[idxRes[e.id]] ?? 0).toFixed(2)}` : ""}`,
+      info: `${e.nombre} · ${e.seccion}${val ? ` · ${modo} = ${(val[idxRes[e.id]] ?? 0).toFixed(2)}` : ""}${modo === "diseno" && resultado?.diseno?.[idxRes[e.id]] ? ` · ${resultado.diseno[idxRes[e.id]].estado}` : ""}`,
       sel: sel?.tipo === "elemento" && sel.id === e.id,
     });
   });
@@ -242,13 +245,21 @@ export function insertarPortico(m, m2, { angulo = 0, x0 = 0, y0 = 0, z0 = 0, cas
     el.nombre = e.nombre && !m.elementos.some((q) => q.id !== id && q.nombre === e.nombre) ? e.nombre : el.nombre;
     if (tipoBarra(m, el) === "columna") el.giro = Math.abs(s) > 0.7 ? 0 : 90;   // el peralte h queda en el plano del pórtico
     el.material = e.material || nomMat;
+    if (e.release_i) el.release_i = true;
+    if (e.release_j) el.release_j = true;
+    if ((e.segmentos || e.tramos || []).length >= 2) el.segmentos = structuredClone(e.segmentos || e.tramos);
     nuevos.push({ id2: e.id, id });
   });
   // cargas: uniformes verticales y nodales (las puntuales en barra no se trasladan)
   let omitidas = 0;
   const id3 = Object.fromEntries(nuevos.map((x) => [x.id2, x.id]));
   (m2.cargas_elementos || []).forEach((q) => {
-    if (q.tipo === "distribuida" && (q.subtipo || "uniforme") === "uniforme" && id3[q.elem] && !(+q.wx)) (m.cargas_barras ||= []).push({ elem: id3[q.elem], caso: q.caso || caso, wz: +q.wy });
+    const e3 = id3[q.elem];
+    if (!e3) { omitidas++; return; }
+    const cb = (m.cargas_barras ||= []);
+    if (q.tipo === "distribuida" && (q.subtipo || "uniforme") === "uniforme" && !(+q.wx)) cb.push({ elem: e3, caso: q.caso || caso, tipo: "uniforme", wz: +q.wy });
+    else if (q.tipo === "distribuida" && q.subtipo === "trapezoidal" && !(+q.wx1) && !(+q.wx2)) cb.push({ elem: e3, caso: q.caso || caso, tipo: "trapezoidal", wz1: +q.wy1, wz2: +q.wy2 });
+    else if (q.tipo === "puntual" && !(+q.Px)) cb.push({ elem: e3, caso: q.caso || caso, tipo: "puntual", Pz: +q.Py, a: q.a });
     else omitidas++;
   });
   (m2.cargas_nodales || []).forEach((q) => {

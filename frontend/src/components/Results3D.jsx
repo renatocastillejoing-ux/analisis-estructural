@@ -49,7 +49,7 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
         <div>
           <div className="mb-1 text-xs">Ver</div>
           <div className="grid grid-cols-2 gap-1">
-            {[["geometria", "Geometría"], ["deformada", "Deformada"], ["M", "Mapa de |M|"], ["N", "Mapa de N"], ["V", "Mapa de |V|"]].map(([k, l]) => (
+            {[["geometria", "Geometría"], ["deformada", "Deformada"], ["M", "Mapa de |M|"], ["N", "Mapa de N"], ["V", "Mapa de |V|"], ["diseno", "Diseño E.060"]].map(([k, l]) => (
               <button key={k} onClick={() => setModo(k)} className={`rounded-md border px-2 py-1 text-xs ${modo === k ? "border-teal bg-teal text-white" : "border-slate-200 dark:border-ink-line"}`}>{l}</button>
             ))}
           </div>
@@ -74,6 +74,25 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
             {[["N (+ tracción)", det.N, "t"], ["|V| máx.", det.V, "t"], ["|Mz| máx. (eje fuerte)", det.Mz, "t·m"], ["|My| máx.", det.My, "t·m"], ["Torsión", det.T, "t·m"]].map(([k, v, u]) => <div key={k} className="flex justify-between"><span>{k}</span><span className="tabular-nums">{f(v)} {u}</span></div>)}
           </div>
         )}
+        {elegido != null && res.diseno && (() => {
+          const x = res.diseno[idx[elegido]];
+          if (!x) return null;
+          return (
+            <div className={`rounded-lg p-3 text-xs ${x.estado === "cumple" ? "bg-emerald-50 dark:bg-emerald-900/20" : "bg-rose-50 dark:bg-rose-900/20"}`}>
+              <div className="mb-1 font-semibold">Diseño E.060 · {x.estado}</div>
+              {x.tipo.startsWith("viga") ? (<>
+                <div>Acero superior: {x.As_sup ?? "—"} cm² → {x.barras_sup}</div>
+                <div>Acero inferior: {x.As_inf ?? "—"} cm² → {x.barras_inf}</div>
+                <div>As mín. {x.As_min} · As máx. {x.As_max} cm² · d = {x.d_cm} cm</div>
+              </>) : (<>
+                <div>Pu = {x.Pu} t · Mux = {x.Mux} · Muy = {x.Muy} t·m</div>
+                <div>ρ = {x.rho ?? "—"} % → {x.barras}{x.ratio != null ? ` · uso ${x.ratio}` : ""}</div>
+              </>)}
+              <div>Estribos: {x.estribos}</div>
+              {(x.avisos || []).map((a, k) => <div key={k} className="text-rose-700 dark:text-rose-300">{a}</div>)}
+            </div>
+          );
+        })()}
         <button onClick={onVolver} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm dark:border-ink-line">← Editar modelo</button>
       </aside>
 
@@ -85,7 +104,7 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
         </div>
         <div className="flex-[2] overflow-y-auto border-t border-slate-200 bg-slate-50 p-4 dark:border-ink-line dark:bg-ink">
           <div className="mb-3 flex gap-1" role="tablist">
-            {[["resumen", "Resumen"], ["derivas", "Derivas"], ["modal", "Modos"], ["reacciones", "Reacciones"], ["porticos", "Pórtico por eje"]].map(([k, l]) => (
+            {[["resumen", "Resumen"], ["derivas", "Derivas"], ["modal", "Modos"], ["diseno", "Diseño E.060"], ["reacciones", "Reacciones"], ["porticos", "Pórtico por eje"]].map(([k, l]) => (
               <button key={k} role="tab" aria-selected={pestaña === k} onClick={() => setPestaña(k)} className={`rounded-full px-3 py-1 text-sm ${pestaña === k ? "bg-teal font-semibold text-white" : "bg-white dark:bg-ink-2"}`}>{l}</button>
             ))}
           </div>
@@ -93,6 +112,7 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
           {pestaña === "derivas" && <Derivas res={res} />}
           {pestaña === "modal" && <Modal res={res} />}
           {pestaña === "reacciones" && <Reacciones res={res} caso={caso} />}
+          {pestaña === "diseno" && <Diseno res={res} setElegido={setElegido} />}
           {pestaña === "porticos" && <PorticoDe3D modelo={modelo} res={res} caso={caso} onPaso={onPaso} onAbrir2d={(e, c) => onExtraer(e, c, { CM: 1.4, CV: 1.7 })} />}
         </div>
       </div>
@@ -115,8 +135,10 @@ function Resumen({ res, caso }) {
       </section>
       {Object.keys(res.sismo || {}).length > 0 && (
         <section className={caja}>
-          <h3 className="mb-2 font-semibold">Sismo estático E.030</h3>
-          <Tabla cols={["Dirección", "T (s)", "C", "k", "V basal (t)", "R"]} filas={Object.entries(res.sismo).map(([d, s]) => [d, f(s.T), f(s.C), f(s.k), f(s.V, 1), s.R])} />
+          <h3 className="mb-2 font-semibold">Sismo E.030</h3>
+          <Tabla cols={["Dir.", "T (s)", "C", "C/R", "V estático (t)", "V dinámico (t)", "Escala", "R", "Sistema (placas)"]} filas={Object.entries(res.sismo).map(([d, s]) => [d, f(s.T), f(s.C), `${f(s.C_R, 3)}${s.C_R_ok === false ? " < 0.11" : ""}`, f(s.V, 1), s.V_dinamico != null ? f(s.V_dinamico, 1) : "—", s.escala_dinamica != null ? f(s.escala_dinamica, 2) : "—", s.R,
+            res.cortante_base?.[d] ? `${res.cortante_base[d].sistema} (${(res.cortante_base[d].frac_placas * 100).toFixed(0)} %) → R0 ${res.cortante_base[d].R0_sugerido}` : "—"])} />
+          {Object.entries(res.cortante_base || {}).some(([d, c]) => c.R0_sugerido !== res.sismo?.[d]?.R) && <p className="mt-2 text-xs font-semibold text-amber-700 dark:text-amber-400">El R usado no coincide con el sistema que resulta del reparto del cortante: ajústalo en Sismo E.030 (la deriva no cambia con R; las fuerzas sí).</p>}
           <p className="mt-2 text-xs text-slate-500">Peso sísmico total = {f(res.resumen.pesos_nivel.reduce((a, b) => a + b, 0), 1)} t (CM + 25 % CV por nivel). Fuerzas en el centro de masas con 5 % de excentricidad accidental.</p>
         </section>
       )}
@@ -127,36 +149,94 @@ function Resumen({ res, caso }) {
 
 function Derivas({ res }) {
   const d = res.derivas || {};
+  const din = !!d.X?.dinamico;
+  const [fuente, setFuente] = useState(din ? "dinamico" : "max");
   if (!d.X) return <p className="text-sm text-slate-500">Activa el sismo (Asignar › Sismo E.030) para calcular derivas.</p>;
+  const serie = (dir) => d[dir][fuente] || d[dir].max;
   const n = d.X.max.length, lim = d.X.limite;
-  const vmax = Math.max(lim * 1.2, ...d.X.max, ...d.Y.max);
+  const vmax = Math.max(lim * 1.2, ...serie("X"), ...serie("Y"));
   const W = 520, H = 30 + n * 26, x = (v) => 70 + (v / vmax) * (W - 90);
+  const cumple = (dir) => Math.max(...serie(dir)) <= lim;
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,560px)_1fr]">
       <section className={caja}>
-        <h3 className="mb-2 font-semibold">Deriva inelástica por nivel (0.75·R·Δ/h)</h3>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <h3 className="font-semibold">Deriva inelástica por nivel ({f(d.X.factor ?? 0.75 * (res.sismo?.X?.R || 8), 2)}·Δ/h)</h3>
+          <div className="ml-auto flex gap-1 rounded-full bg-slate-100 p-0.5 text-xs dark:bg-ink-3">
+            {din && <button onClick={() => setFuente("dinamico")} className={`rounded-full px-2 py-0.5 ${fuente === "dinamico" ? "bg-white font-semibold shadow dark:bg-ink-line" : ""}`}>Dinámico (CQC)</button>}
+            <button onClick={() => setFuente("max")} className={`rounded-full px-2 py-0.5 ${fuente === "max" ? "bg-white font-semibold shadow dark:bg-ink-line" : ""}`}>Estático</button>
+          </div>
+        </div>
         <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-          {d.X.max.map((_, k) => {
+          {serie("X").map((_, k) => {
             const y = 14 + (n - 1 - k) * 26;
             return (
               <g key={k}>
                 <text x={60} y={y + 13} textAnchor="end" className="fill-slate-500 text-[11px]">Nivel {k + 1}</text>
-                <rect x={70} y={y + 2} width={x(d.X.max[k]) - 70} height={9} fill={d.X.max[k] > lim ? "#E11D48" : "#508C9B"} rx={2} />
-                <rect x={70} y={y + 13} width={x(d.Y.max[k]) - 70} height={9} fill={d.Y.max[k] > lim ? "#F59E0B" : "#6E9B54"} rx={2} />
+                <rect x={70} y={y + 2} width={x(serie("X")[k]) - 70} height={9} fill={serie("X")[k] > lim ? "#E11D48" : "#508C9B"} rx={2} />
+                <rect x={70} y={y + 13} width={x(serie("Y")[k]) - 70} height={9} fill={serie("Y")[k] > lim ? "#F59E0B" : "#6E9B54"} rx={2} />
               </g>
             );
           })}
           <line x1={x(lim)} y1={6} x2={x(lim)} y2={H - 4} stroke="#E11D48" strokeDasharray="5 3" />
           <text x={x(lim) + 4} y={12} className="fill-rose-600 text-[11px] font-semibold">límite {lim}</text>
         </svg>
-        <p className="text-xs text-slate-500">Barra superior: X · barra inferior: Y. En color de alerta, los niveles que superan el límite.</p>
+        <p className="text-xs text-slate-500">Barra superior: X · barra inferior: Y. {din ? "La E.030 controla la deriva con el análisis dinámico (los desplazamientos no se escalan al cortante mínimo)." : "Activa el análisis dinámico en Sismo E.030 para la deriva espectral."}</p>
       </section>
       <section className={caja}>
         <h3 className="mb-2 font-semibold">Valores</h3>
-        <Tabla cols={["Nivel", "X máx.", "X prom.", "Y máx.", "Y prom."]} filas={d.X.max.map((_, k) => [k + 1, f(d.X.max[k], 5), f(d.X.cm[k], 5), f(d.Y.max[k], 5), f(d.Y.cm[k], 5)]).reverse()} />
-        <p className={`mt-2 text-sm font-semibold ${d.X.cumple && d.Y.cumple ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-          X: {d.X.cumple ? "cumple" : "no cumple"} · Y: {d.Y.cumple ? "cumple" : "no cumple"} (límite {lim})
+        <Tabla cols={din ? ["Nivel", "X din.", "X est.", "Y din.", "Y est."] : ["Nivel", "X máx.", "X prom.", "Y máx.", "Y prom."]}
+          filas={d.X.max.map((_, k) => din ? [k + 1, f(d.X.dinamico[k], 5), f(d.X.max[k], 5), f(d.Y.dinamico[k], 5), f(d.Y.max[k], 5)] : [k + 1, f(d.X.max[k], 5), f(d.X.cm[k], 5), f(d.Y.max[k], 5), f(d.Y.cm[k], 5)]).reverse()} />
+        <p className={`mt-2 text-sm font-semibold ${cumple("X") && cumple("Y") ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+          {fuente === "dinamico" ? "Dinámico" : "Estático"} · X: {cumple("X") ? "cumple" : "no cumple"} ({f(Math.max(...serie("X")), 4)}) · Y: {cumple("Y") ? "cumple" : "no cumple"} ({f(Math.max(...serie("Y")), 4)}) · límite {lim}
         </p>
+      </section>
+    </div>
+  );
+}
+
+function Diseno({ res, setElegido }) {
+  const [filtro, setFiltro] = useState("no cumple");
+  const [tipo, setTipo] = useState("todos");
+  const lista = (res.diseno || []).filter((x) => (filtro === "todos" || x.estado === filtro) && (tipo === "todos" || (tipo === "vigas" ? x.tipo.startsWith("viga") : x.tipo === tipo)));
+  const cuenta = (est, t) => (res.diseno || []).filter((x) => x.estado === est && (t ? (t === "vigas" ? x.tipo.startsWith("viga") : x.tipo === t) : true)).length;
+  if (!res.diseno) return <p className="text-sm text-slate-500">Sin diseño (el cálculo no lo incluyó).</p>;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {[["vigas", "Vigas"], ["columna", "Columnas"], ["placa", "Placas"]].map(([t, l]) => (
+          <div key={t} className={caja}>
+            <div className="text-xs text-slate-500">{l}</div>
+            <div className="text-lg font-semibold"><span className="text-emerald-700 dark:text-emerald-400">{cuenta("cumple", t)} ✓</span> · <span className="text-rose-600 dark:text-rose-400">{cuenta("no cumple", t)} ✗</span></div>
+          </div>
+        ))}
+        <div className={`${caja} text-xs text-slate-600 dark:text-slate-300`}>E.060 con la envolvente de las combinaciones. f'y = 4200 kgf/cm², d' = 6 cm. Columnas y placas por diagrama de interacción biaxial (Bresler); placas sin elementos de borde (simplificación de curso).</div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <select className="inp" value={filtro} onChange={(e) => setFiltro(e.target.value)}><option value="no cumple">Solo las que no cumplen</option><option value="cumple">Solo las que cumplen</option><option value="todos">Todas</option></select>
+        <select className="inp" value={tipo} onChange={(e) => setTipo(e.target.value)}><option value="todos">Todos los tipos</option><option value="vigas">Vigas</option><option value="columna">Columnas</option><option value="placa">Placas</option></select>
+        <span className="text-xs text-slate-500">{lista.length} barras · clic en una fila para ubicarla en el 3D</span>
+      </div>
+      <section className={caja}>
+        <div className="max-h-80 overflow-auto">
+          <table className="min-w-full text-xs">
+            <thead className="sticky top-0 bg-white dark:bg-ink-2"><tr className="border-b border-slate-200 text-left uppercase text-slate-500 dark:border-ink-line">
+              {["Barra", "Sección", "Estado", "Flexión", "Cortante / estribos", "Observación"].map((c) => <th key={c} className="px-2 py-1.5">{c}</th>)}
+            </tr></thead>
+            <tbody>{lista.slice(0, 400).map((x) => (
+              <tr key={x.id} onClick={() => setElegido(x.id)} className="cursor-pointer border-b border-slate-100 hover:bg-slate-50 dark:border-ink-line dark:hover:bg-ink-3">
+                <td className="px-2 py-1 font-medium">{x.nombre}</td>
+                <td className="px-2 py-1">{x.sec}</td>
+                <td className={`px-2 py-1 font-semibold ${x.estado === "cumple" ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>{x.estado}</td>
+                <td className="px-2 py-1 tabular-nums">{x.tipo.startsWith("viga")
+                  ? `sup ${x.As_sup ?? "—"} cm² (${x.barras_sup}) · inf ${x.As_inf ?? "—"} cm² (${x.barras_inf})`
+                  : `Pu ${x.Pu} t · ρ ${x.rho ?? "—"} % (${x.barras})${x.ratio != null ? ` · uso ${x.ratio}` : ""}`}</td>
+                <td className="px-2 py-1">{x.estribos}</td>
+                <td className="px-2 py-1 text-slate-500">{(x.avisos || []).join(" · ")}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

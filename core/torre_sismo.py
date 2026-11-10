@@ -3,7 +3,7 @@
 Torre Arequipa - sismo estático E.030 (Perú) y deriva por pórtico (2D por eje).
 SUPUESTOS (asumidos por el equipo; cambiar aquí):
   Z = 0.35 (zona 3, Arequipa), S = 1.15 (suelo S2), TP = 0.6 s, TL = 2.0 s,
-  U = 1.00 (edificación común), R = 8 (sistema dual, con placas), CT = 60 (muros).
+  U = 1.00 (edificación común), R = 6 (muros estructurales, E.030-2018), CT = 60 (muros).
   Peso sísmico = CM + 25 % CV de todos los pisos (E.030, categoría C).
   Fuerzas laterales por piso: Fi = (V − Ft)·Pi·hi^k / Σ Pj·hj^k.
   Reparto a los pórticos por área tributaria (mitad de la distancia a cada eje).
@@ -14,7 +14,8 @@ import numpy as np
 from core.torre_arequipa import (N_X, N_Y, N_PISOS, H_PISO, SX, SY,
                                  CM_AREA, CV_AREA, GAMMA_HA, _viga_bh)
 
-Z, S, TP, TL, U, R, CT = 0.35, 1.15, 0.6, 2.0, 1.0, 8.0, 60.0
+# R0 = 6: muros estructurales (E.030-2018; las placas toman ≈ 75 % del cortante basal en X e Y)
+Z, S, TP, TL, U, R, CT = 0.35, 1.15, 0.6, 2.0, 1.0, 6.0, 60.0
 LIMITE_DERIVA = 0.007
 G_REF = 9.81
 
