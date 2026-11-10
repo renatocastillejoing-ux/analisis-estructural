@@ -1026,14 +1026,18 @@ def analizar_torre(diafragma=True, periodo="norma"):
 from collections import OrderedDict
 import uuid
 
+import threading
+
 _CALCULOS = OrderedDict()
+_CANDADO = threading.Lock()          # gunicorn usa varios hilos en un solo proceso
 
 
 def _guardar_calculo(d, maximo=6):
     k = uuid.uuid4().hex
-    _CALCULOS[k] = d
-    while len(_CALCULOS) > maximo:
-        _CALCULOS.popitem(last=False)
+    with _CANDADO:
+        _CALCULOS[k] = d
+        while len(_CALCULOS) > maximo:
+            _CALCULOS.popitem(last=False)
     return k
 
 
@@ -1048,7 +1052,8 @@ def diagramas_portico(id_calculo, caso, eje, valor, n=21):
     """Esfuerzos N, V, M en el plano del pórtico (convención del motor 2D) para las
     barras contenidas en él, a partir de un cálculo 3D guardado. Con brazos rígidos,
     los diagramas van de cara a cara del apoyo."""
-    d = _CALCULOS.get(id_calculo)
+    with _CANDADO:
+        d = _CALCULOS.get(id_calculo)
     if d is None:
         raise LookupError("El cálculo ya no está en memoria: vuelve a calcular el modelo 3D.")
     if caso not in d["FE"]:

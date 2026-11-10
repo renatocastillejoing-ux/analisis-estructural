@@ -3,7 +3,8 @@ services:
     name: analisis-estructural
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    # un solo proceso con varios hilos: el último cálculo 3D (para «Pórtico por eje») vive en memoria
+    startCommand: gunicorn app:app --workers 1 --threads 4 --timeout 180
     envVars:
       - key: PYTHON_VERSION
         value: "3.11"

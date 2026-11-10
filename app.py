@@ -371,6 +371,7 @@ if __name__ == "__main__":
     print("  Sistema de Analisis Estructural - Metodo de Rigidez")
     print(f"  Abrir en el navegador:  http://127.0.0.1:{port}")
     print("=" * 60)
-    app.run(debug=True, port=port)
+    # Depuración solo en local (FLASK_DEBUG=0 la apaga). En Render la app corre con gunicorn y no pasa por aquí.
+    app.run(debug=os.environ.get("FLASK_DEBUG", "1") == "1", port=port)
 else:
     init_db()
