@@ -999,8 +999,36 @@ def portico_desde_3d(m, eje, valor, caso_factores=None):
     h = "y" if comp == 0 else "x"
     nudos2 = [{"id": n["id"], "nombre": n.get("nombre") or f"N{n['id']}", "x": float(n[h]), "y": float(n["z"]),
                "apoyo": {"empotrado": "empotrado", "articulado": "fijo"}.get(n.get("apoyo"), "libre")} for n in sel if n["id"] in usados]
+    # un nudo del pórtico sin columna debajo EN este plano, pero que en 3D llega a barras de
+    # otro plano (una viga que apoya en una viga o columna perpendicular), se apoya en vertical:
+    # es lo que hace el análisis por ejes; si no, en 2D quedaría como la punta de un voladizo.
+    z_de = {n["id"]: float(n["z"]) for n in m["nudos"]}
+    con_columna = {e["j"] if z_de[e["j"]] > z_de[e["i"]] else e["i"] for e in ex if abs(z_de[e["i"]] - z_de[e["j"]]) > TOL}
+    ids_ex = {e["id"] for e in ex}
+    fuera = {k for e in m["elementos"] if e["id"] not in ids_ex for k in (e["i"], e["j"])}
+    for n2 in nudos2:
+        if n2["apoyo"] == "libre" and n2["id"] not in con_columna and n2["id"] in fuera:
+            n2["apoyo"] = "rodillo_y"
     nombres_sec = {e["seccion"] for e in ex} | {s.get("seccion") for e in ex for s in (e.get("segmentos") or []) if s.get("seccion")}
     secs2 = [{"nombre": s["nombre"], "modo": "rect", "b": s["b"], "h": s["h"]} for s in m["secciones"] if s["nombre"] in nombres_sec]
+    # columnas y placas: en 2D el peralte (h) es la dimensión EN EL PLANO del pórtico. En 3D,
+    # b va a lo largo de X (o de Y si giro = 90); una placa a lo largo de X trabaja con su
+    # largo en los pórticos en X y con su espesor en los pórticos en Y.
+    por_nombre = {s["nombre"]: s for s in m["secciones"]}
+    xyz = {n["id"]: n for n in m["nudos"]}
+    sec_de = {}
+    for e in ex:
+        a, b_ = xyz[e["i"]], xyz[e["j"]]
+        if abs(float(a["x"]) - float(b_["x"])) < TOL and abs(float(a["y"]) - float(b_["y"])) < TOL and e["seccion"] in por_nombre:
+            s0 = por_nombre[e["seccion"]]
+            giro90 = int(e.get("giro", 0) or 0) % 180 == 90
+            dx, dy = (float(s0["h"]), float(s0["b"])) if giro90 else (float(s0["b"]), float(s0["h"]))
+            prof, ancho = (dx, dy) if eje == "x" else (dy, dx)
+            if abs(prof - float(s0["h"])) > 1e-9 or abs(ancho - float(s0["b"])) > 1e-9:
+                nombre = f"{e['seccion']} ({'X' if eje == 'x' else 'Y'})"
+                if nombre not in {s["nombre"] for s in secs2}:
+                    secs2.append({"nombre": nombre, "modo": "rect", "b": ancho, "h": prof})
+                sec_de[e["id"]] = nombre
     # cargas: mismo reparto que el análisis 3D (losa en dos direcciones, peso propio, puntuales…)
     P = preparar_modelo3d(m)
     pos = {e["id"]: k for k, e in enumerate(m["elementos"])}
@@ -1032,7 +1060,7 @@ def portico_desde_3d(m, eje, valor, caso_factores=None):
             "material": {"modo": mat.get("modo", "fc"), "fc": mat.get("fc", 210), "E": mat.get("E", 2e6)},
             "materiales": [{"nombre": x["nombre"], "modo": x.get("modo", "fc"), "fc": x.get("fc"), "E": x.get("E"), "densidad": x.get("densidad", 0)} for x in mats],
             "secciones": secs2, "nudos": nudos2,
-            "elementos": [{"id": e["id"], "nombre": e.get("nombre") or f"E{e['id']}", "i": e["i"], "j": e["j"], "seccion": e["seccion"],
+            "elementos": [{"id": e["id"], "nombre": e.get("nombre") or f"E{e['id']}", "i": e["i"], "j": e["j"], "seccion": sec_de.get(e["id"], e["seccion"]),
                            **({"material": e["material"]} if e.get("material") else {}),
                            **({"release_i": True} if e.get("release_i") else {}), **({"release_j": True} if e.get("release_j") else {}),
                            **({"segmentos": e["segmentos"]} if len(e.get("segmentos") or []) >= 2 else {})} for e in ex],

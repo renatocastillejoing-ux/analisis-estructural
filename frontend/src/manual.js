@@ -350,20 +350,21 @@ export const MANUAL = [
   },
   {
     id: "torre", titulo: "13. Torre de Arequipa", bloques: [
-      { t: "p", x: "Edificio de oficinas de **10 pisos de 3.00 m**, grilla de 15 ejes numerados (4.50 m) por 9 ejes con letra (5.00 m)." },
-      { t: "t", cols: ["Elemento", "Supuesto"], filas: [
-        ["Concreto", "f'c 280 kgf/cm² (pisos 1–3) y 210 (4–10)"],
-        ["Columnas", "0.60×0.60 (1–3), 0.50×0.50 (4–7), 0.40×0.40 (8–10)"],
-        ["Vigas", "0.35×0.60 (pisos 1–8), 0.30×0.50 (9–10)"],
-        ["Placas", "0.30 × 3.50 m: 12 en X (ejes A, E, I × 3, 6, 10, 13) y 10 en Y (ejes 1, 4, 8, 12, 15 × B, H)"],
-        ["Cargas", "CM 0.40 t/m² + peso propio; CV 0.25 t/m² (oficinas); losa en dos direcciones"],
+      { t: "p", x: "Edificio de **10 pisos de 3.00 m** armado desde el **plano del curso** (PLANO ACTUALIZADO ANALISIS.dxf): ejes 1–15 y A–I con sus distancias reales, columnas C-1/C-2/C-3 con su sección dibujada, placas PL-1…PL-12 y vigas con la sección de su rótulo. La lectura del plano la hace tools/extraer_plano.py y queda en core/torre_plano.json." },
+      { t: "t", cols: ["Elemento", "Cómo entra"], filas: [
+        ["Plantas", "Pisos 1–3: planta completa. Pisos 4–10: planta reducida (sale el eje 1 y el bloque A–B)"],
+        ["Ejes partidos", "Un eje cortado por el vacío central sale en dos pórticos: 9, 10, 11, 12 y 13 en (I–H) y (E–A); el 14 en (I–D) y (D–A)"],
+        ["Placas", "Columna ancha en el centro del tramo de muro, con brazo rígido en las vigas que llegan; si la placa no recibe vigas de su eje, va en el cruce donde llega la viga perpendicular"],
+        ["Vigas sobre vigas", "En el pórtico 2D, el punto donde una viga apoya en otra perpendicular lleva apoyo vertical (rodillo)"],
+        ["Concreto", "f'c 280 kgf/cm² (pisos 1–3) y 210 (4–10): el plano no lo trae por piso"],
+        ["Cargas", "CM 0.40 t/m² + peso propio; CV 0.25 t/m²; losa en dos direcciones; el vacío central (ejes 8–14 entre H y F) no lleva losa"],
         ["Sismo", "Z 0.35, U 1, S 1.15, TP 0.6 s, TL 2.0 s, R₀ 6 (muros), CT 60"],
       ] },
       { t: "l", x: [
-        "**2D por eje**: Archivo › Torre de Arequipa (pórtico 2D): elige uno de los 24 pórticos, con las cargas ya combinadas (listo para el paso a paso) o con los casos CM y CV separados.",
-        "**3D completo**: Archivo › Torre de Arequipa (modelo 3D completo), y luego Calcular (unos 15 s).",
+        "**2D por eje**: Archivo › Torre de Arequipa (pórtico 2D): elige uno de los 34 pórticos del plano (un eje cortado por el vacío central sale en dos tramos, p. ej. «Eje 9 (I–H)» y «Eje 9 (E–A)»), con las cargas ya combinadas (listo para el paso a paso) o con los casos CM y CV separados.",
+        "**3D completo**: Archivo › Torre de Arequipa (modelo 3D completo), y luego Calcular (unos 10 s).",
       ] },
-      { t: "p", x: "Resultado del estudio: con esta configuración la **deriva dinámica** es ≈ 0.005 en ambas direcciones (≤ 0.007) y todas las barras cumplen el diseño E.060 (las vigas de acople junto a las placas llevan doble refuerzo)." },
+      { t: "p", x: "Resultado con la geometría del plano: la **deriva** sale ≈ 0.010 en X y ≈ 0.016 en Y, por encima del límite 0.007. El 3D usa un solo diafragma por piso, aunque el plano tiene ejes dobles (5/6 y 7/8) que parecen juntas sísmicas entre bloques." },
     ],
   },
   {

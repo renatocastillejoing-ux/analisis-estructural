@@ -116,10 +116,10 @@ def _dibujar_cargas(ax, est, d):
                     continue
                 npts = 9
                 ts = np.linspace(0, 1, npts)
-                # positions along the loaded portion
+                # posiciones a lo largo del tramo cargado
                 xs = e.ni.x + ((a0 + ts*(b0 - a0))/L)*(e.nj.x - e.ni.x)
                 ys = e.ni.y + ((a0 + ts*(b0 - a0))/L)*(e.nj.y - e.ni.y)
-                # interpolate wx and wy across the loaded portion
+                # interpola wx y wy a lo largo del tramo cargado
                 wxa = carga.wx1 + (carga.wx2 - carga.wx1)*(a0/L)
                 wxb = carga.wx1 + (carga.wx2 - carga.wx1)*(b0/L)
                 wya = carga.wy1 + (carga.wy2 - carga.wy1)*(a0/L)
@@ -129,21 +129,21 @@ def _dibujar_cargas(ax, est, d):
                 wmag = np.hypot(wxv, wyv)
                 wmax = max(np.max(wmag), 1e-9)
                 hbase = 0.10*d
-                # direction of each arrow (global components)
+                # dirección de cada flecha (componentes globales)
                 uxv = np.where(wmag > 1e-9, wxv / wmag, 0)
                 uyv = np.where(wmag > 1e-9, wyv / wmag, -1)
                 hh = hbase * (wmag / wmax)
-                # tail positions (away from element in load direction)
+                # posición de la cola (alejada del elemento, en el sentido de la carga)
                 tx = xs + uxv * hh
                 ty = ys + uyv * hh
-                # top line connecting tails
+                # línea superior que une las colas
                 ax.plot(tx, ty, color=C_CARGA, lw=1.1)
                 for xx, yy, ttx, tty in zip(xs, ys, tx, ty):
                     dist = np.hypot(ttx - xx, tty - yy)
                     if dist > 1e-9:
                         ax.annotate("", xy=(xx, yy), xytext=(ttx, tty),
                                     arrowprops=dict(arrowstyle="->", color=C_CARGA, lw=0.9))
-                # label
+                # etiqueta
                 if carga.uniforme:
                     w_ref = np.hypot(carga.wx1 or 0, carga.wy1 or 0)
                     etq = f"w={w_ref:g}"
@@ -153,7 +153,7 @@ def _dibujar_cargas(ax, est, d):
                     etq = f"{w1m:g}~{w2m:g}"
                 midx = (e.ni.x + e.nj.x) / 2
                 midy = (e.ni.y + e.nj.y) / 2
-                # label offset: use average load direction
+                # desplazamiento de la etiqueta: usa la dirección media de la carga
                 avg_wx = float(np.mean(wxv))
                 avg_wy = float(np.mean(wyv))
                 avg_mag = np.hypot(avg_wx, avg_wy) or 1
@@ -176,9 +176,9 @@ def _dibujar_cargas(ax, est, d):
                 by = e.ni.y + (a/L)*(e.nj.y-e.ni.y)
                 rr = 0.05*d
                 if carga.M >= 0:
-                    th = np.linspace(0.3, 2.2*np.pi, 40)  # CCW
+                    th = np.linspace(0.3, 2.2*np.pi, 40)  # antihorario
                 else:
-                    th = np.linspace(2.2*np.pi, 0.3, 40)  # CW
+                    th = np.linspace(2.2*np.pi, 0.3, 40)  # horario
                 ax.plot(bx+rr*np.cos(th), by+rr*np.sin(th), color=C_CARGA, lw=1.6)
                 ax.annotate("", xy=(bx+rr*np.cos(th[-1]), by+rr*np.sin(th[-1])),
                             xytext=(bx+rr*np.cos(th[-3]), by+rr*np.sin(th[-3])),

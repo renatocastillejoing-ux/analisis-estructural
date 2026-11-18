@@ -4,7 +4,7 @@ Construccion del modelo desde un diccionario de datos (el que envia el front)
 y extraccion de resultados estructurados (para las tablas de la interfaz).
 """
 import numpy as np
-from core.metodo_rigidez import (Material, Seccion, Nudo, Elemento,
+from core.metodo_rigidez import (RIGIDEZ_BRAZO, Material, Seccion, Nudo, Elemento,
                                  CargaDistribuida, CargaPuntual, CargaMomento,
                                  CargaTermica, Estructura)
 from core import secciones as Secc
@@ -40,6 +40,46 @@ def _seccion_desde(s, conv_l=1.0):
     b = float(s["b"]) * conv_l
     h = float(s["h"]) * conv_l
     return _fin(Seccion.rectangular(b, h, nombre=nombre))
+
+
+def _es_placa_2d(e):
+    """Muro: barra vertical con sección rectangular de proporción ≥ 4 (como en el 3D)."""
+    b, h = getattr(e.sec, "b", None), getattr(e.sec, "h", None)
+    return bool(abs(e.cos) < 1e-6 and b and h and max(b, h) >= 4 * min(b, h))
+
+
+def _placas_y_brazos(est, datos, _l):
+    """Marca las placas (deformación por corte) y pone brazos rígidos.
+    - placa: lo que diga el elemento; si no lo dice, se detecta por la sección.
+    - brazos: los del elemento; si no los trae y «brazos_auto» (por defecto sí),
+      una viga que llega a una placa recibe un brazo de media longitud de placa."""
+    auto = datos.get("brazos_auto", True)
+    for e in est.elementos:
+        ed = e._ed
+        e.placa = bool(ed["placa"]) if "placa" in ed else _es_placa_2d(e)
+    semi = {}
+    for e in est.elementos:
+        if e.placa:
+            for n in (e.ni, e.nj):
+                semi[n.id] = max(semi.get(n.id, 0.0), float(e.sec.h) / 2)
+    for e in est.elementos:
+        ed = e._ed
+        bi = _l(float(ed["brazo_i"] or 0)) if "brazo_i" in ed else (semi.get(e.ni.id, 0.0) if auto and abs(e.sin) < 1e-6 else 0.0)
+        bj = _l(float(ed["brazo_j"] or 0)) if "brazo_j" in ed else (semi.get(e.nj.id, 0.0) if auto and abs(e.sin) < 1e-6 else 0.0)
+        if e.placa:
+            bi = bj = 0.0
+        if bi < 0 or bj < 0 or bi + bj >= e.L - 1e-9:
+            raise ValueError(f"Elemento {e.nombre}: los brazos rígidos deben ser ≥ 0 y sumar menos que su longitud ({e.L:.3f} m).")
+        e.brazo_i, e.brazo_j = bi, bj
+        if bi > 0 or bj > 0:
+            Lf = e.L - bi - bj
+            flex = e.segmentos or [{"L": e.L, "mat": e.mat, "sec": e.sec, "sec_nombre": ed["seccion"]}]
+            suma = sum(sg["L"] for sg in flex)
+            flex = [dict(sg, L=sg["L"] * Lf / suma) for sg in flex]
+            def _rig(L):
+                sec_r = Seccion(e.sec.A * RIGIDEZ_BRAZO, e.sec.I * RIGIDEZ_BRAZO, nombre="brazo rígido")
+                return {"L": L, "mat": e.mat, "sec": sec_r, "sec_nombre": "brazo rígido", "rigido": True}
+            e.segmentos = ([_rig(bi)] if bi > 0 else []) + flex + ([_rig(bj)] if bj > 0 else [])
 
 
 def construir(datos):
@@ -149,8 +189,11 @@ def construir(datos):
                 for sg in segmentos:
                     sg["L"] *= fac
             e.segmentos = segmentos
+        e._ed = ed
         elementos[ed["id"]] = e
         est.agregar_elemento(e)
+
+    _placas_y_brazos(est, datos, _l)
 
     for cn in datos.get("cargas_nodales", []):
         nudos[cn["nudo"]].aplicar_carga(Fx=_f(cn.get("Fx", 0)),

@@ -134,6 +134,14 @@ function PropsElem({ modelo, e, commit, setSel }) {
         <Interruptor label="Rótula en i" valor={!!e.release_i} onChange={(v) => set("release_i", v)} />
         <Interruptor label="Rótula en j" valor={!!e.release_j} onChange={(v) => set("release_j", v)} />
       </div>
+      <div className="space-y-2 rounded-md border border-slate-200 p-2 dark:border-ink-line">
+        <Interruptor label="Placa (incluye deformación por corte, α)" valor={e.placa ?? false} onChange={(v) => set("placa", v)} />
+        <div className="grid grid-cols-2 gap-2">
+          <Campo label="Brazo rígido en i (m)"><NumIn placeholder="auto" value={e.brazo_i ?? ""} onChange={(v) => set("brazo_i", v)} /></Campo>
+          <Campo label="Brazo rígido en j (m)"><NumIn placeholder="auto" value={e.brazo_j ?? ""} onChange={(v) => set("brazo_j", v)} /></Campo>
+        </div>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">Si no los defines: una columna con sección de proporción ≥ 4 se toma como placa, y las vigas que llegan a una placa reciben un brazo de media longitud de placa.</p>
+      </div>
 
       <Seccion titulo="Tramos (placas / barra no prismática)" cuenta={tramos.length}>
         {tramos.length < 2 && <p className="text-xs text-slate-500 dark:text-slate-400">Barra prismática. Divide la barra en 2 o más tramos con su propia sección o material (por ejemplo, el tramo de placa dentro de una viga).</p>}

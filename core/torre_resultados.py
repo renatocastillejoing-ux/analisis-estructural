@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Resultados de la torre de Arequipa: resuelve los 24 pórticos con la combinación
+Resultados de la torre de Arequipa: resuelve los pórticos del plano con la combinación
 1.4·CM + 1.7·CV, verifica el equilibrio y valida el método sistematizado contra el
 motor directo. Genera un resumen por pórtico y un detalle por elemento (CSV).
 Ejecutar desde analisis_estructural_web/:  python -m core.torre_resultados
@@ -20,8 +20,8 @@ def carga_combinada(d):
     fac = COMBO["factores"]
     casos = {c["nombre"]: {x["elem"]: x for x in c["cargas_elementos"]} for c in d["casos"]}
     ce = []
-    for eid in casos["CM"]:
-        w = sum(fac[n] * casos[n][eid]["wy"] for n in fac)
+    for eid in sorted(set().union(*[set(c) for c in casos.values()])):
+        w = sum(fac[n] * casos.get(n, {}).get(eid, {}).get("wy", 0.0) for n in fac)
         ce.append({"elem": eid, "tipo": "distribuida", "subtipo": "uniforme",
                    "wy": w, "wx": 0.0})
     d2 = copy.deepcopy(d)

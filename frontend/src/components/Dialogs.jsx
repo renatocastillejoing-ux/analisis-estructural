@@ -85,7 +85,7 @@ export function DialogoTorre({ onCerrar, onElegir }) {
             <label className="flex items-center gap-2"><input type="radio" checked={!conCasos} onChange={() => setConCasos(false)} className="accent-teal-600" /> Ya combinadas (1.4CM + 1.7CV): listo para calcular y para el paso a paso</label>
             <label className="flex items-center gap-2"><input type="radio" checked={conCasos} onChange={() => setConCasos(true)} className="accent-teal-600" /> Casos CM y CV separados, con la combinación 1.4CM + 1.7CV (envolventes)</label>
           </fieldset>
-          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Supuestos: grilla 4.50 × 5.00 m, f'c 280/210, columnas 0.60/0.50/0.40, vigas 0.35×0.60 (pisos 1-8) y 0.30×0.50 (9-10). Placas 0.30 × 3.50 m: 12 en X (ejes A, E, I × 3, 6, 10, 13) y 10 en Y (ejes 1, 4, 8, 12, 15 × B, H). CM = 0.40 t/m², CV = 0.25 t/m², con la losa repartida en dos direcciones (igual que el modelo 3D).</p>
+          <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Geometría del plano del curso: ejes, columnas C-1/C-2/C-3, placas PL-1…PL-12 y vigas con su rótulo. Pisos 1–3 con la planta completa; desde el 4.º, la planta reducida (sin el eje 1 ni el bloque A–B). Un eje cortado por el vacío central sale en dos pórticos (p. ej. Eje 9 (I–H) y Eje 9 (E–A)). Supuestos que el plano no trae: 3.00 m por piso, f'c 280 (pisos 1–3) y 210 (4–10), CM = 0.40 t/m² + peso propio, CV = 0.25 t/m², losa en dos direcciones (igual que el modelo 3D).</p>
           {estado && <p className="mt-2 text-sm">{estado}</p>}
         </>
       )}

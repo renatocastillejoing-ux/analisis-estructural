@@ -11,7 +11,7 @@ SUPUESTOS (asumidos por el equipo; cambiar aquí):
 """
 import math
 import numpy as np
-from core.torre_arequipa import (N_X, N_Y, N_PISOS, H_PISO, SX, SY,
+from core.torre_reticula import (N_X, N_Y, N_PISOS, H_PISO, SX, SY,
                                  CM_AREA, CV_AREA, GAMMA_HA, _viga_bh)
 
 # R0 = 6: muros estructurales (E.030-2018; las placas toman ≈ 75 % del cortante basal en X e Y)
@@ -110,7 +110,7 @@ def info_sismo():
 def derivas(direccion_sismo="X"):
     """Resuelve, para cada pórtico que recibe el sismo, el caso sísmico elástico y
     devuelve la deriva inelástica máxima por pórtico (0.75·R·Δe/h)."""
-    from core.torre_arequipa import portico, todos_los_pórticos
+    from core.torre_reticula import portico, todos_los_pórticos
     from core.constructor import construir
     out = []
     for nombre, tipo, idx in todos_los_pórticos():

@@ -58,7 +58,7 @@ export default function Paso({ modelo, onVolver }) {
       <div className="m-auto max-w-lg space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-6 text-sm dark:border-amber-800 dark:bg-amber-950/40">
         <p className="font-semibold">Este modelo aún no se puede resolver paso a paso</p>
         <p>{error}</p>
-        <p className="text-xs text-slate-600 dark:text-slate-300">El método sistematizado admite pórticos ortogonales 2D (columnas verticales y vigas horizontales), con o sin varios pisos y cargas en vigas o columnas.</p>
+        <p className="text-xs text-slate-600 dark:text-slate-300">El método sistematizado admite pórticos 2D con varios pisos, barras inclinadas, placas, brazos rígidos, tramos y rótulas; no admite resortes ni asentamientos de apoyo.</p>
         <button onClick={onVolver} className="rounded-md bg-teal px-3 py-1.5 text-white">Volver al modelo</button>
       </div>
     );
@@ -101,7 +101,7 @@ export default function Paso({ modelo, onVolver }) {
           <div className="text-xs font-semibold uppercase tracking-wide text-teal-dark dark:text-teal-soft">Paso {etiquetaPaso(paso)}</div>
           <h2 className="text-lg font-semibold">{paso.titulo}</h2>
           <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-300">{paso.desc}</p>
-          {i === 0 && <p className="mt-2 max-w-3xl rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-ink-3 dark:text-slate-300">Convención del profesor: giros y momentos <b>horarios positivos</b> y deformación axial despreciada. En Resultados (motor directo) los giros y momentos son antihorarios positivos: verás el mismo valor con el signo contrario.</p>}
+          {i === 0 && <p className="mt-2 max-w-3xl rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-ink-3 dark:text-slate-300">Convención del profesor: giros y momentos <b>antihorarios positivos</b> (horario negativo), 4 GDL por barra (Δ y θ en cada extremo) y deformación axial despreciada. Las placas incluyen la deformación por corte (α).</p>}
         </div>
         <PasoCuerpo paso={paso} data={data} />
       </div>
@@ -132,15 +132,15 @@ function PasoCuerpo({ paso, data }) {
   switch (paso.id) {
     case "activar": return <Activar paso={paso} data={data} />;
     case "coords": return <Coordenadas data={data} />;
-    case "A": return <PasoBarras data={data} render={(b) => { const nz = colsNoCero(b.A); return <Matriz M={b.A.map((f) => nz.map((c) => f[c]))} filas={["i", "j"]} columnas={nz.map((c) => DL[c])} />; }}
-      arriba={(foco) => <Matriz M={data.A} filas={data.def_labels} columnas={DL} max={16} titulo={`[A] (${data.def_labels.length}×${DL.length}) · {d} = [A]{D}`} resaltarFilas={(r) => foco != null && data.def_labels[r].startsWith(data.barras[foco].elem + "·")} />}
+    case "A": return <PasoBarras data={data} render={(b) => <Matriz M={b.Asub} filas={locales(b)} columnas={b.Aidx.map((c) => DL[c])} />}
+      arriba={(foco) => data.A && <Matriz M={data.A} filas={data.def_labels} columnas={DL} max={16} titulo={`[A] (${data.def_labels.length}×${DL.length}) · {d} = [A]{D}`} resaltarFilas={(r) => foco != null && data.def_labels[r].startsWith(data.barras[foco].elem + "·")} />}
       pie="En cada barra solo se muestran las columnas de [A] distintas de cero: los GDL que la deforman." />;
-    case "Ki": return <PasoBarras data={data} render={(b) => <><Nota>EI = {fmt(b.EI)} · L = {fmt(b.L)} · {b.tipo === "viga" ? "Kv = (EI/L)[4 2; 2 4]" : "columna"}</Nota><Matriz M={b.K} /></>} />;
-    case "AtKA": return <PasoBarras data={data} render={(b) => { const nz = idxNoCero(b.AtKA); return <Matriz M={nz.map((r) => nz.map((c) => b.AtKA[r][c]))} filas={nz.map((c) => DL[c])} columnas={nz.map((c) => DL[c])} resaltarCeldas />; }}
+    case "Ki": return <PasoBarras data={data} render={(b) => <><Formulas b={b} /><Matriz M={b.K} filas={b.dnum} columnas={b.dnum} /></>} />;
+    case "AtKA": return <PasoBarras data={data} render={(b) => <Matriz M={b.AtKAsub} filas={b.Aidx.map((c) => DL[c])} columnas={b.Aidx.map((c) => DL[c])} resaltarCeldas />}
       pie="Se muestra la submatriz de los GDL de cada barra; el resto de [Aᵢ]ᵀ[Kᵢ][Aᵢ] es cero." />;
     case "ensamble": return <Ensamble paso={paso} data={data} />;
     case "K": return <Matriz M={paso.K} filas={DL} columnas={DL} titulo={`[K] = Σ [Aᵢ]ᵀ[Kᵢ][Aᵢ] (${DL.length}×${DL.length})`} grande max={16} />;
-    case "r": return <PasoBarras data={data} render={(b) => <Vector v={b.r} labels={["i", "j"]} />} />;
+    case "r": return <PasoBarras data={data} render={(b) => <Vector v={b.r} labels={locales(b)} />} />;
     case "R": return <Vector v={paso.R} labels={DL} titulo="{R} = Σ [Aᵢ]ᵀ{rᵢ}" />;
     case "Q": return (
       <div className="flex flex-wrap items-center gap-4">
@@ -150,9 +150,9 @@ function PasoCuerpo({ paso, data }) {
       </div>
     );
     case "D": return <Solucion paso={paso} data={data} />;
-    case "d": return <PasoBarras data={data} render={(b) => <Vector v={b.d} labels={b.def_labels || ["i", "j"]} />} />;
-    case "q": return <PasoBarras data={data} render={(b) => <Vector v={b.q} labels={["i", "j"]} />} />;
-    case "qT": return <PasoBarras data={data} render={(b) => <Vector v={b.qT} labels={["Mi", "Mj"]} resaltado />} pie="Con estos momentos de extremo y las cargas de cada tramo se trazan el DMF y el DFC (pasos siguientes)." />;
+    case "d": return <PasoBarras data={data} render={(b) => <Vector v={b.d} labels={locales(b)} />} />;
+    case "q": return <PasoBarras data={data} render={(b) => <Vector v={b.q} labels={locales(b)} />} />;
+    case "qT": return <PasoBarras data={data} render={(b) => <Vector v={b.qT} labels={["V i", "M i", "V j", "M j"].map((t, k) => `${b.dnum[k]} · ${t}`)} resaltado />} pie="Con estas cortantes y momentos de extremo y las cargas de cada tramo se trazan el DMF y el DFC (pasos siguientes)." />;
     case "DMF": return <DiagramaPaso data={data} tipo="M" />;
     case "DFC": return <DiagramaPaso data={data} tipo="V" />;
     default: return null;
@@ -283,7 +283,7 @@ function Activar({ paso, data }) {
   const [g, elegir, fijo, soltar] = useCiclo(labels.length, T_GDL);
   const p = useProgreso(g, 700);
   const barrasA = paso.barras || data.barras;
-  const afecta = (k) => (barrasA[k]?.A || []).some((r) => Math.abs(r[g] || 0) > 1e-12);
+  const afecta = (k) => (barrasA[k]?.Aidx || []).includes(g);
   const unit = useMemo(() => { const c = labels.map((_, k) => (k === g ? 1 : 0)); return despNudos(data, c); }, [g, labels, data]);
   const G0 = data.barras;
   const span = useMemo(() => Math.max(...G0.flatMap((b) => [b.xi, b.xj])) - Math.min(...G0.flatMap((b) => [b.xi, b.xj])) || 1, [G0]);
@@ -330,7 +330,7 @@ function Activar({ paso, data }) {
         <ul className="space-y-1">
           {data.barras.map((b, k) => ({ b, k })).filter(({ k }) => data.barras.length <= 30 || afecta(k)).map(({ b, k }) => (
             <li key={k} className={`flex justify-between rounded-md px-2 py-1 transition ${afecta(k) ? "bg-teal/10 font-medium" : "text-slate-400"}`}>
-              <span>{b.elem}</span><span className="tabular-nums">[{(barrasA[k]?.A || []).map((r) => fmt(r[g])).join(", ")}]</span>
+              <span>{b.elem}</span><span className="tabular-nums">[{colA(barrasA[k], g).map(fmt).join(", ")}]</span>
             </li>
           ))}
         </ul>
@@ -344,7 +344,15 @@ function Coordenadas({ data }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
       <Figura data={data}>
-        {(G) => data.labels.map((l, k) => {
+        {(G) => [...(data.barras.length <= 60 ? data.barras.flatMap((b, n) => {
+          // GDL locales: (Δ, θ) en el extremo i y en el j, junto a cada extremo
+          const L = Math.hypot(b.xj - b.xi, b.yj - b.yi) || 1, ux = (b.xj - b.xi) / L, uy = (b.yj - b.yi) / L;
+          const vert = Math.abs(ux) < 1e-6;
+          return [[0.2, 0], [0.8, 2]].map(([t, o]) => {
+            const x = G.X(b.xi + (b.xj - b.xi) * t) + (vert ? 7 : 0), y = G.Y(b.yi + (b.yj - b.yi) * t) + (vert ? 4 : 15);
+            return b.dnum && <text key={`l${n}-${o}`} x={x} y={y} textAnchor={vert ? "start" : "middle"} className="celda-in fill-sky-700 text-[10px] font-semibold dark:fill-sky-300" style={{ animationDelay: `${400 + n * 60}ms` }}>{b.dnum[o].slice(1)},{b.dnum[o + 1].slice(1)}</text>;
+          });
+        }) : []), ...data.labels.map((l, k) => {
           const t = l.replace(/^D\d+\(/, "").replace(/\)$/, "");
           const mN = t.match(/^Δ([xy])\s+(.+)$/);
           if (mN) { const q = data.nudos.find((x) => x.nombre === mN[2]); return q ? <text key={k} x={G.X(q.x) - 60} y={G.Y(q.y) + 4} className="celda-in fill-amber-600 text-[12px] font-bold dark:fill-amber-400" style={{ animationDelay: `${k * 120}ms` }}>D{k + 1}{mN[1] === "x" ? "→" : "↑"}</text> : null; }
@@ -352,7 +360,7 @@ function Coordenadas({ data }) {
           if (nd) return <text key={k} x={G.X(nd.x) + 8} y={G.Y(nd.y) - 10} className="celda-in fill-amber-600 text-[12px] font-bold dark:fill-amber-400" style={{ animationDelay: `${k * 120}ms` }}>D{k + 1}↻</text>;
           const y = +t.replace(/^Δ\s*y=/, ""); const xs = data.nudos.filter((x) => Math.abs(x.y - y) < 1e-6).map((x) => x.x);
           return xs.length ? <text key={k} x={G.X(Math.min(...xs)) - 52} y={G.Y(y) + 4} className="celda-in fill-amber-600 text-[12px] font-bold dark:fill-amber-400" style={{ animationDelay: `${k * 120}ms` }}>D{k + 1}→</text> : null;
-        })}
+        })]}
       </Figura>
       <div className="space-y-3 text-sm">
         <div>
@@ -360,8 +368,9 @@ function Coordenadas({ data }) {
           <ul className="space-y-1">{data.labels.map((l, k) => <li key={k} className="celda-in rounded-md border border-slate-200 px-3 py-1 dark:border-ink-line" style={{ animationDelay: `${k * 80}ms` }}><b>D{k + 1}</b> = {l.replace(/^D\d+\(/, "").replace(/\)$/, "")}</li>)}</ul>
         </div>
         <div>
-          <h3 className="mb-1 font-semibold">Deformaciones de barra {"{d}"} (sistema q–d)</h3>
-          <div className="flex flex-wrap gap-1">{data.def_labels.map((l, k) => <span key={k} className="celda-in rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-ink-3" style={{ animationDelay: `${k * 50}ms` }}>d{k + 1} · {l}</span>)}</div>
+          <h3 className="mb-1 font-semibold">GDL locales {"{d}"} (sistema q–d)</h3>
+          <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">En la figura, en azul: (Δ, θ) de cada extremo. Primero columnas y placas, luego vigas.</p>
+          <div className="max-h-72 space-y-1 overflow-y-auto">{data.barras.map((b, k) => <div key={k} className="celda-in flex justify-between gap-2 rounded-md border border-slate-200 px-2 py-0.5 text-xs dark:border-ink-line" style={{ animationDelay: `${k * 50}ms` }}><b>{b.elem}</b><span className="text-slate-500">{b.tipo}</span><span className="tabular-nums">{(b.dnum || []).map((d, q) => `${d} ${LOC[q]}`).join(" · ")}</span></div>)}</div>
         </div>
       </div>
     </div>
@@ -408,11 +417,11 @@ function Ensamble({ paso, data }) {
   const [k, elegir, , soltar] = useCiclo(bars.length + 1, T_ENS, true);   // k = barras ya sumadas
   const acc = useMemo(() => {
     const m = Array.from({ length: n }, () => Array(n).fill(0));
-    bars.slice(0, k).forEach((b) => b.AtKA.forEach((f, r) => f.forEach((v, c) => { m[r][c] += v; })));
+    bars.slice(0, k).forEach((b) => b.AtKAsub.forEach((f, r) => f.forEach((v, c) => { m[b.Aidx[r]][b.Aidx[c]] += v; })));
     return m;
   }, [k, bars, n]);
   const ultima = k > 0 ? bars[k - 1] : null;
-  const toca = (r, c) => ultima && Math.abs(ultima.AtKA[r][c]) > 1e-12;
+  const toca = (r, c) => { if (!ultima) return false; const a = ultima.Aidx.indexOf(r), b = ultima.Aidx.indexOf(c); return a >= 0 && b >= 0 && Math.abs(ultima.AtKAsub[a][b]) > 1e-12; };
   const DL = data.labels.map((_, x) => `D${x + 1}`);
   const idxBarra = ultima ? data.barras.findIndex((b) => b.elem === ultima.elem) : null;
   return (
@@ -448,7 +457,7 @@ function Ensamble({ paso, data }) {
         {ultima && k <= bars.length && (
           <div>
             <div className="mb-1 text-xs font-semibold uppercase text-slate-500">Aporte de {ultima.elem}</div>
-            <Matriz M={ultima.AtKA} filas={DL} columnas={DL} resaltarCeldas />
+            <Matriz M={ultima.AtKAsub} filas={ultima.Aidx.map((c) => DL[c])} columnas={ultima.Aidx.map((c) => DL[c])} resaltarCeldas />
           </div>
         )}
       </div>
@@ -619,8 +628,18 @@ function Vector({ v, labels, titulo, resaltado }) {
 
 const Op = ({ children }) => <span className="text-2xl font-light text-slate-400">{children}</span>;
 const Nota = ({ children }) => <div className="mb-2 text-[11px] text-slate-500 dark:text-slate-400">{children}</div>;
-const colsNoCero = (A) => (A[0] || []).map((_, c) => c).filter((c) => A.some((f) => Math.abs(f[c]) > 1e-12));
-const idxNoCero = (M) => M.map((_, k) => k).filter((k) => M[k].some((v) => Math.abs(v) > 1e-12) || M.some((f) => Math.abs(f[k]) > 1e-12));
+const LOC = ["Δi", "θi", "Δj", "θj"];
+const locales = (b) => (b.dnum || ["d1", "d2", "d3", "d4"]).map((d, k) => `${d} · ${LOC[k]}`);
+const colA = (b, g) => { const k = b?.Aidx?.indexOf(g) ?? -1; return k >= 0 ? b.Asub.map((f) => f[k]) : [0, 0, 0, 0]; };
+
+// Fórmulas de [k] con los valores reemplazados (EI y, en placas, G, Ac y α).
+function Formulas({ b }) {
+  return (
+    <div className="mb-2 space-y-0.5 rounded-md bg-slate-50 px-2 py-1.5 font-mono text-[11px] leading-snug text-slate-600 dark:bg-ink-3 dark:text-slate-300">
+      {(b.formula || []).map((t, k) => <div key={k}>{t}</div>)}
+    </div>
+  );
+}
 
 function fmt(x) {
   x = +x;

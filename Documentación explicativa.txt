@@ -1,0 +1,1013 @@
+================================================================================
+  DOCUMENTACIÓN EXPLICATIVA
+  Backend de cálculo y gráficas
+  Análisis Estructural por el Método Matricial de Rigidez (pórticos planos 2D)
+================================================================================
+
+Este documento explica cómo funciona la parte del backend que hace los cálculos
+y prepara los gráficos. Está escrito para que alguien que sepa de análisis
+estructural pueda seguir el código sin tener que reconstruir la teoría desde
+cero, y para que alguien que programe pueda ubicar dónde se hace cada cosa.
+
+Todo el backend vive en la carpeta "core/" más el servidor "app.py". El núcleo
+no depende de Flask: se puede usar como librería de Python aparte.
+
+
+--------------------------------------------------------------------------------
+0. MAPA DE ARCHIVOS
+--------------------------------------------------------------------------------
+
+core/metodo_rigidez.py
+    El motor. Contiene las clases Material, Seccion, Nudo, las clases de carga
+    (CargaDistribuida, CargaPuntual, CargaMomento, CargaTermica), Elemento y
+    Estructura. Aquí está toda la matemática: rigideces, ensamblaje, solución,
+    fuerzas internas, P-Delta y análisis modal.
+
+core/constructor.py
+    El puente entre el JSON que manda el navegador y los objetos del motor.
+    Construye la estructura, maneja las unidades (las pasa a una base interna y
+    luego devuelve los resultados en las unidades del usuario), resuelve la
+    dirección de las cargas, arma el diccionario de resultados y calcula las
+    combinaciones de carga.
+
+core/secciones.py
+    Calcula área (A) y momento de inercia (I) para varios tipos de sección:
+    rectangular, cajón, circular, tubular, perfil I y perfil T.
+
+core/graficos.py
+    Genera imágenes PNG con matplotlib (modelo, deformada, DMF, DFC, axial).
+    Hoy se generan solo bajo demanda, porque la interfaz dibuja los diagramas
+    como SVG en el navegador.
+
+core/reporte.py
+    Arma la memoria de cálculo paso a paso en texto plano: matrices por
+    elemento, ensamblaje, partición, solución, reacciones y fuerzas internas.
+
+app.py
+    El servidor Flask. Expone las rutas /api/calcular, /api/combinaciones,
+    /api/historial, etc. Recibe el JSON, llama al motor y devuelve los
+    resultados.
+
+
+--------------------------------------------------------------------------------
+1. QUÉ RESUELVE EL MOTOR Y CON QUÉ HIPÓTESIS
+--------------------------------------------------------------------------------
+
+El motor resuelve pórticos planos por el método matricial directo de rigidez.
+Cada nudo tiene 3 grados de libertad (GDL): traslación en X (ux), traslación en
+Y (uy) y giro en el plano (g). Cada elemento es una barra viga-columna que une
+dos nudos, con 6 GDL (3 por nudo).
+
+Las hipótesis son las del análisis lineal de barras:
+
+  - Material elástico lineal (ley de Hooke). El módulo E es constante por barra.
+  - Las barras son rectas y de sección constante en su longitud.
+  - Flexión de Euler-Bernoulli por defecto. Hay una opción para incluir la
+    deformación por cortante (Timoshenko).
+  - Pequeños desplazamientos en el análisis de primer orden. Hay una opción de
+    segundo orden (P-Delta) que itera con la fuerza axial.
+
+La ecuación que se resuelve es la de equilibrio del sistema:
+
+      [K] {D} = {P}
+
+donde [K] es la matriz de rigidez global, {D} el vector de desplazamientos de
+todos los GDL y {P} el vector de cargas en los GDL. El método arma [K] sumando
+la contribución de cada barra, separa los GDL libres de los restringidos,
+despeja los desplazamientos libres y de ahí saca reacciones y fuerzas internas.
+
+
+--------------------------------------------------------------------------------
+2. EL MODELO DE DATOS (LAS CLASES)
+--------------------------------------------------------------------------------
+
+Material guarda E, el peso específico (para peso propio y masa), el módulo de
+Poisson nu (para Timoshenko) y el coeficiente de dilatación térmica alpha.
+Tiene un constructor alterno para concreto a partir de f'c según la norma E.060:
+
+    @classmethod
+    def desde_fc(cls, fc, unidad="tonf/m2", nombre=None):
+        E_kgf_cm2 = 15000.0 * np.sqrt(fc)      # Ec = 15000*sqrt(f'c) en kgf/cm2
+        if unidad == "tonf/m2":
+            E = E_kgf_cm2 * 10.0               # 1 kgf/cm2 = 10 tonf/m2
+        ...
+
+Seccion guarda A e I. Tiene un atajo para rectángulos:
+
+    @classmethod
+    def rectangular(cls, b, h, nombre=None):
+        return cls(b*h, b*h**3/12.0, ...)
+
+Nudo guarda su posición (x, y), las restricciones como una tupla (ux, uy, g)
+donde 1 significa restringido y 0 libre, y tres vectores de 3 componentes: la
+carga nodal directa, la rigidez del resorte de apoyo elástico y el asentamiento
+impuesto. También guarda en self.gdl los números de GDL que le asigna el solver.
+
+Las cargas en elementos son cuatro clases pequeñas, cada una con un atributo
+.tipo que el motor usa para decidir cómo integrarla. Todas las componentes de
+fuerza están en ejes GLOBALES (X horizontal, Y vertical):
+
+    CargaDistribuida(wy=..., wx=..., wy1, wy2, wx1, wx2, a, b)
+        Uniforme, trapezoidal y parcial. wy y wx son las intensidades por unidad
+        de longitud. wy1/wy2 (y wx1/wx2) son los valores en los extremos cuando
+        es trapezoidal. a y b acotan el tramo cargado (si son None, va de 0 a L).
+
+    CargaPuntual(Px, Py, a)
+        Fuerza concentrada a la distancia a desde el nudo i.
+
+    CargaMomento(M, a)
+        Momento concentrado, positivo antihorario, a distancia a.
+
+    CargaTermica(dT, dT_grad)
+        dT es el cambio uniforme de temperatura (alarga o acorta el eje).
+        dT_grad es el gradiente entre cara superior e inferior (produce
+        curvatura). Se explica en la sección 7.4.
+
+Elemento calcula en su constructor la longitud L, el coseno y el seno del
+ángulo respecto a la horizontal, y guarda referencias a sus dos nudos, material
+y sección:
+
+    dx = nudo_j.x - nudo_i.x; dy = nudo_j.y - nudo_i.y
+    self.L = np.hypot(dx, dy)
+    self.cos = dx/self.L; self.sin = dy/self.L
+    self.angulo = np.degrees(np.arctan2(dy, dx))
+
+Estructura es el contenedor. Guarda la lista de nudos y elementos, las opciones
+(despreciar axial, Timoshenko, P-Delta, gravedad g) y, tras resolver, la matriz
+[K], el vector {P}, los desplazamientos {D}, las reacciones {R} y las fuerzas de
+extremo de cada barra.
+
+
+--------------------------------------------------------------------------------
+3. GRADOS DE LIBERTAD Y NUMERACIÓN
+--------------------------------------------------------------------------------
+
+Antes de armar nada, el solver numera los GDL. Primero numera todos los GDL
+LIBRES y después todos los RESTRINGIDOS. Con esto la matriz queda ordenada como
+[ libres | restringidos ], lo que permite partirla limpiamente al resolver.
+
+    def _numerar_gdl(self):
+        self.gdl_libres = []; self.gdl_restr = []
+        c = 0
+        for nd in self.nudos:                 # primero los libres
+            for k in range(3):
+                if nd.restriccion[k] == 0:
+                    nd.gdl[k] = c; self.gdl_libres.append(c); c += 1
+        self.n_libres = c
+        for nd in self.nudos:                 # luego los restringidos
+            for k in range(3):
+                if nd.restriccion[k] == 1:
+                    nd.gdl[k] = c; self.gdl_restr.append(c); c += 1
+        self.n_gdl = c
+
+Cada nudo termina con tres índices en nd.gdl, uno por dirección. Un elemento
+ocupa los seis GDL de sus dos nudos:
+
+    def _dofs_elemento(self, e): return e.ni.gdl + e.nj.gdl
+
+
+--------------------------------------------------------------------------------
+4. RIGIDEZ DEL ELEMENTO (LOCAL)
+--------------------------------------------------------------------------------
+
+Cada barra tiene una matriz de rigidez de 6x6 en sus ejes locales. El eje local
+x va de i a j; el eje local y es perpendicular. El orden de los 6 GDL locales
+es [u_i, v_i, g_i, u_j, v_j, g_j], donde u es axial y v es transversal.
+
+La matriz combina dos comportamientos independientes:
+
+  - Axial: una barra que se estira y comprime. Los términos son EA/L.
+  - Flexión: viga con los términos clásicos 12EI/L^3, 6EI/L^2, 4EI/L y 2EI/L.
+
+El código:
+
+    def k_local_base(self):
+        E, A, I, L = self.mat.E, self.sec.A, self.sec.I, self.L
+        EA_L = E*A/L*self.factor_axial
+        EI = E*I
+        ...
+        k[0, 0] = EA_L; k[0, 3] = -EA_L; k[3, 0] = -EA_L; k[3, 3] = EA_L
+        k11 = 12*EI/L**3*b
+        k12 = 6*EI/L**2*b
+        k22 = (4+phi)*EI/L*b
+        k25 = (2-phi)*EI/L*b
+        k[1, 1] = k11;   k[1, 2] = k12;   k[1, 4] = -k11;  k[1, 5] = k12
+        k[2, 1] = k12;   k[2, 2] = k22;   k[2, 4] = -k12;  k[2, 5] = k25
+        k[4, 1] = -k11;  k[4, 2] = -k12;  k[4, 4] = k11;   k[4, 5] = -k12
+        k[5, 1] = k12;   k[5, 2] = k25;   k[5, 4] = -k12;  k[5, 5] = k22
+        return k
+
+El factor_axial casi siempre vale 1. Cambia solo cuando se pide despreciar las
+deformaciones axiales (ver más abajo). El factor phi y b vienen de Timoshenko;
+si Timoshenko está apagado, phi = 0 y b = 1, y queda la matriz clásica de
+Euler-Bernoulli.
+
+
+--------------------------------------------------------------------------------
+5. TIMOSHENKO (DEFORMACIÓN POR CORTANTE)
+--------------------------------------------------------------------------------
+
+Cuando la barra es muy peraltada (relación canto/luz alta), la flexión de
+Euler-Bernoulli subestima la flecha porque ignora el cortante. La opción
+Timoshenko corrige esto con un factor phi:
+
+    if self.timoshenko:
+        nu = getattr(self.mat, "nu", 0.2)
+        G = E/(2*(1+nu))                       # módulo de corte
+        kcz = getattr(self.sec, "k_corte", 1.2)# factor de forma a cortante
+        As = A/kcz                             # área efectiva a cortante
+        phi = 12*EI/(G*As*L**2)
+    b = 1.0/(1.0+phi)
+
+phi mide cuánto pesa el cortante frente a la flexión. Los términos de la matriz
+se afectan con b = 1/(1+phi) y los términos 4EI/L y 2EI/L pasan a (4+phi)EI/L*b
+y (2-phi)EI/L*b. Si phi es 0, no cambia nada.
+
+
+--------------------------------------------------------------------------------
+6. TRANSFORMACIÓN LOCAL <-> GLOBAL
+--------------------------------------------------------------------------------
+
+La matriz local está en los ejes de la barra. Para sumarla con las demás hay que
+llevarla a los ejes globales con la matriz de rotación T (6x6), armada con dos
+bloques 3x3 iguales:
+
+    def matriz_T(self):
+        c, s = self.cos, self.sin
+        R = np.array([[c, s, 0], [-s, c, 0], [0, 0, 1]])
+        T[0:3, 0:3] = R; T[3:6, 3:6] = R
+        return T
+
+La rigidez global de la barra es:
+
+    def k_global(self):
+        T = self.matriz_T()
+        kl = self.k_local()
+        if self.usar_geometrica and abs(self.N_axial) > 0:
+            kl = kl + self.kg_geometrica_local()   # P-Delta, ver sección 14
+        return T.T @ kl @ T
+
+Es decir [K]e = [T]' [k] [T]. Lo mismo aplica a vectores: un vector en globales
+se pasa a locales multiplicando por T, y al revés con T transpuesta.
+
+
+--------------------------------------------------------------------------------
+7. CARGAS EN ELEMENTOS Y FUERZAS DE EMPOTRAMIENTO
+--------------------------------------------------------------------------------
+
+Una carga aplicada sobre el tramo de una barra (no en un nudo) se traslada a los
+nudos como "cargas nodales equivalentes". El método se apoya en las fuerzas de
+empotramiento perfecto: las reacciones que aparecerían si los dos extremos de la
+barra estuvieran empotrados.
+
+La función ff_local_base recorre todas las cargas de la barra y acumula un
+vector Peq de 6 componentes en ejes locales. Devuelve -Peq, que son las fuerzas
+de empotramiento:
+
+    def ff_local_base(self):
+        Peq = np.zeros(6)
+        for carga in self.cargas:
+            if carga.tipo == "distribuida":
+                Peq += self._feq_distribuida(carga)
+            elif carga.tipo == "puntual":
+                ...
+            elif carga.tipo == "momento":
+                ...
+            elif carga.tipo == "termica":
+                ...
+        self._Peq_base = Peq
+        return -Peq
+
+En el ensamblaje, estas fuerzas se restan del vector de cargas global, así que
+el efecto neto es que la carga del tramo se reparte a los nudos de forma
+consistente (el reparto correcto según las funciones de forma, no solo mitad y
+mitad).
+
+
+7.1 DISTRIBUIDAS: INTEGRACIÓN DE GAUSS
+......................................
+
+La carga distribuida puede ser uniforme, trapezoidal y parcial, todo a la vez.
+En lugar de fórmulas cerradas para cada caso, el motor integra la carga contra
+las funciones de forma del elemento usando cuadratura de Gauss-Legendre de 4
+puntos, que es exacta hasta polinomios de grado 7. Eso cubre cualquier
+combinación lineal de intensidad con funciones de forma cúbicas (Hermite).
+
+Primero, _w_local proyecta la intensidad global (wx, wy) a los ejes locales en
+una posición x, separando la componente axial (wa) de la perpendicular (wp):
+
+    def _w_local(self, carga, x):
+        ...
+        t = (x - a)/(b - a)
+        wx = carga.wx1 + (carga.wx2 - carga.wx1)*t
+        wy = carga.wy1 + (carga.wy2 - carga.wy1)*t
+        wa = wx*c + wy*s            # axial local
+        wp = -wx*s + wy*c           # perpendicular local
+        return wa, wp
+
+Después, _feq_distribuida integra wa contra las funciones axiales (lineales) y
+wp contra las transversales (Hermite), solo sobre el tramo [a, b]:
+
+    def _feq_distribuida(self, carga):
+        gp = [-0.8611363116, -0.3399810436, 0.3399810436, 0.8611363116]
+        gw = [0.3478548451, 0.6521451549, 0.6521451549, 0.3478548451]
+        for xi_g, w_g in zip(gp, gw):
+            x = 0.5*(b - a)*xi_g + 0.5*(a + b)
+            jac = 0.5*(b - a)
+            wa, wp = self._w_local(carga, x)
+            xi = x/L
+            Na_i = 1 - xi; Na_j = xi
+            N1 = 1 - 3*xi**2 + 2*xi**3
+            N2 = L*(xi - 2*xi**2 + xi**3)
+            N3 = 3*xi**2 - 2*xi**3
+            N4 = L*(-xi**2 + xi**3)
+            Peq[0] += w_g*jac*wa*Na_i
+            Peq[3] += w_g*jac*wa*Na_j
+            Peq[1] += w_g*jac*wp*N1
+            ...
+        return Peq
+
+Cambiar el rango de integración a [a, b] es lo que da soporte gratuito a las
+cargas parciales: una carga que actúa solo en un trozo de la barra.
+
+
+7.2 PUNTUALES
+.............
+
+Para una fuerza concentrada se usan las fórmulas cerradas de viga empotrada. Se
+separa la fuerza en axial (Pa) y perpendicular (Pp), y se reparte:
+
+    a = carga.a if carga.a is not None else L/2.0
+    b = L - a
+    Pa = carga.Px*c + carga.Py*s;  Pp = -carga.Px*s + carga.Py*c
+    Peq[0] += Pa*b/L;  Peq[3] += Pa*a/L
+    Peq[1] += Pp*b**2*(L+2*a)/L**3
+    Peq[2] += Pp*a*b**2/L**2
+    Peq[4] += Pp*a**2*(L+2*b)/L**3
+    Peq[5] += -Pp*a**2*b/L**2
+
+
+7.3 MOMENTOS
+............
+
+Un momento concentrado hace trabajo sobre el giro, así que se reparte usando las
+derivadas de las funciones de forma de Hermite evaluadas en la posición del
+momento:
+
+    xi = a/L; M0 = carga.M
+    N1p = 6*xi*(xi-1)/L
+    N2p = 1 - 4*xi + 3*xi**2
+    N3p = 6*xi*(1-xi)/L
+    N4p = -2*xi + 3*xi**2
+    Peq[1] += M0*N1p; Peq[2] += M0*N2p
+    Peq[4] += M0*N3p; Peq[5] += M0*N4p
+
+
+7.4 TÉRMICAS
+............
+
+Un cambio de temperatura uniforme dT quiere alargar la barra. Si la estructura
+lo impide, aparece una fuerza axial. La fuerza de empotramiento axial es
+N_T = E*A*alpha*dT. Un gradiente entre cara superior e inferior (dT_grad) genera
+curvatura, que se traduce en momentos de empotramiento E*I*alpha*dT_grad/h:
+
+    NT = E*A*alpha*carga.dT
+    Peq[0] += -NT; Peq[3] += NT
+    h = getattr(self.sec, "h", None)
+    if carga.dT_grad and h:
+        MT = E*I*alpha*carga.dT_grad/float(h)
+        Peq[2] += -MT; Peq[5] += MT
+
+El gradiente necesita el peralte h de la sección, por eso solo se aplica si la
+sección lo tiene definido.
+
+
+7.5 PESO PROPIO
+...............
+
+El peso propio se modela como una distribuida hacia abajo igual al peso
+específico por el área:
+
+    def aplicar_peso_propio(self):
+        for e in self.elementos:
+            dens = getattr(e.mat, "densidad", 0.0)
+            if dens:
+                e.agregar_carga(CargaDistribuida(wy=-dens*e.sec.A))
+
+
+--------------------------------------------------------------------------------
+8. RÓTULAS INTERNAS (CONDENSACIÓN ESTÁTICA)
+--------------------------------------------------------------------------------
+
+Una rótula en un extremo libera el momento ahí: la barra puede girar sin
+transmitir momento a ese nudo. Esto se modela liberando el GDL rotacional
+correspondiente (el 2 para el extremo i, el 5 para el j) mediante condensación
+estática.
+
+La idea es eliminar las filas y columnas de los GDL liberados de la matriz, pero
+condensando su efecto en los demás. Para una matriz k y un vector f:
+
+    def _condensar(self, k, f):
+        c = self._dofs_liberados()            # ej. [2] y/o [5]
+        if not c:
+            return k.copy(), f.copy()
+        r = [i for i in range(6) if i not in c]
+        kcc = k[np.ix_(c, c)]
+        kcc_inv = np.linalg.inv(kcc)
+        krc = k[np.ix_(r, c)]
+        kcr = k[np.ix_(c, r)]
+        km = np.zeros((6, 6))
+        km[np.ix_(r, r)] = k[np.ix_(r, r)] - krc @ kcc_inv @ kcr
+        fm = np.zeros(6)
+        fm[r] = f[r] - krc @ kcc_inv @ f[c]
+        return km, fm
+
+La matriz condensada km tiene ceros en las filas y columnas liberadas, y la
+rigidez de los GDL restantes ya descuenta el aporte del giro liberado. Después
+de resolver, el giro que se liberó se recupera para poder dibujar la deformada y
+calcular las fuerzas internas (ver sección 13).
+
+
+--------------------------------------------------------------------------------
+9. RESORTES Y ASENTAMIENTOS
+--------------------------------------------------------------------------------
+
+Un apoyo elástico (resorte) se modela sumando su rigidez a la diagonal del GDL
+correspondiente. No es un elemento aparte, es solo un término extra en [K]:
+
+    for nd in self.nudos:
+        for k in range(3):
+            if nd.resorte[k] != 0.0:
+                g = nd.gdl[k]
+                K[g, g] += nd.resorte[k]
+
+Un asentamiento es un desplazamiento impuesto en un GDL restringido. Entra como
+condición de borde no nula. En el sistema particionado, los desplazamientos
+restringidos Dr ya no son cero, y el término Kfr*Dr pasa al lado derecho.
+
+
+--------------------------------------------------------------------------------
+10. ENSAMBLAJE (K Y P)
+--------------------------------------------------------------------------------
+
+El ensamblaje recorre cada elemento, calcula su rigidez global y la suma en las
+posiciones de [K] que le corresponden según los GDL de sus nudos:
+
+    K = np.zeros((n, n))
+    for e in self.elementos:
+        kg = e.k_global(); self._kg_elementos[e.id] = kg
+        d = self._dofs_elemento(e)
+        for a in range(6):
+            for b in range(6):
+                K[d[a], d[b]] += kg[a, b]
+
+El vector de cargas {P} junta las cargas nodales directas y las cargas
+equivalentes de las cargas en elementos (con signo negativo, porque son fuerzas
+de empotramiento):
+
+    for nd in self.nudos:
+        for k in range(3):
+            P[nd.gdl[k]] += nd.carga[k]
+    for e in self.elementos:
+        ff = e.fuerzas_empotramiento_global()
+        d = self._dofs_elemento(e)
+        for a in range(6):
+            P[d[a]] += -ff[a]
+
+Nota sobre "despreciar axial": cuando se activa esa opción (la hipótesis típica
+del cálculo manual), no se elimina el GDL axial, sino que se rigidiza el eje de
+la barra con un factor de penalización grande. Así la deformación axial queda
+prácticamente en cero sin desestabilizar el sistema:
+
+    if self.despreciar_axial:
+        I_, A_, L_ = e.sec.I, e.sec.A, e.L
+        e.factor_axial = self._PENAL_AXIAL * 12*I_/(A_*L_**2)
+
+
+--------------------------------------------------------------------------------
+11. SOLUCIÓN DEL SISTEMA PARTICIONADO
+--------------------------------------------------------------------------------
+
+Con los GDL libres numerados primero, [K] queda partida así:
+
+      | Kff  Kfr | | Df |   | Pf |
+      | Krf  Krr | | Dr | = | Pr |
+
+Df son los desplazamientos libres (incógnitas), Dr son los impuestos (cero salvo
+asentamientos). Se despeja la parte libre:
+
+    Kff = self.K[:nl, :nl]; Kfr = self.K[:nl, nl:]
+    Pf = self.P[:nl]
+    # asentamientos: desplazamientos impuestos en GDL restringidos
+    Dr = np.zeros(self.n_gdl - nl)
+    for nd in self.nudos:
+        for k in range(3):
+            if nd.restriccion[k] == 1 and nd.asentamiento[k] != 0.0:
+                Dr[nd.gdl[k] - nl] = nd.asentamiento[k]
+    ...
+    Df = np.linalg.solve(Kff, Pf - Kfr @ Dr)
+    D = np.concatenate([Df, Dr])
+
+Antes de resolver, se verifica que Kff tenga rango completo. Si no lo tiene, la
+estructura es un mecanismo (inestable) y se lanza un error con un diagnóstico de
+dónde está el problema (ver sección 16). También se guarda el número de
+condición de Kff, que sirve para avisar de problemas numéricos:
+
+    if nl > 0 and np.linalg.matrix_rank(Kff) < nl:
+        detalle = self._diagnostico_inestabilidad(Kff)
+        raise ValueError("La estructura es inestable ... " + detalle)
+    self.cond_Kff = float(np.linalg.cond(Kff))
+
+
+--------------------------------------------------------------------------------
+12. REACCIONES
+--------------------------------------------------------------------------------
+
+Una vez que se tienen todos los desplazamientos, las reacciones salen de la
+parte restringida de la ecuación de equilibrio:
+
+    self.R = self.K[nl:, :] @ D - self.P[nl:]
+
+Es la fuerza que el apoyo tiene que dar para que el nudo restringido respete su
+desplazamiento. Para los resortes, la reacción se calcula aparte como -k*D, ya
+que el resorte no aparece en la partición restringida sino en la diagonal.
+
+
+--------------------------------------------------------------------------------
+13. FUERZAS DE EXTREMO Y FUERZAS INTERNAS A LO LARGO
+--------------------------------------------------------------------------------
+
+Hay dos cosas distintas: las fuerzas de extremo de barra (6 valores por barra) y
+las fuerzas internas a lo largo de la barra (los diagramas N, V, M).
+
+Las fuerzas de extremo se calculan llevando los desplazamientos globales del
+elemento a locales, multiplicando por la rigidez local base y sumando las
+fuerzas de empotramiento. Si la barra tiene rótula, primero se recupera el giro
+condensado:
+
+    def _calcular_fuerzas_elementos(self):
+        for e in self.elementos:
+            dg = self.D[self._dofs_elemento(e)]
+            dl = e.matriz_T() @ dg
+            kb = e.k_local_base()
+            ffb = e.ff_local_base()
+            cdofs = e._dofs_liberados()
+            if cdofs:                          # recuperar el giro liberado
+                r = [i for i in range(6) if i not in cdofs]
+                kcc = kb[np.ix_(cdofs, cdofs)]
+                kcr = kb[np.ix_(cdofs, r)]
+                dl_c = -np.linalg.inv(kcc) @ (kcr @ dl[r] + ffb[cdofs])
+                dl_full = dl.copy()
+                dl_full[cdofs] = dl_c
+            else:
+                dl_full = dl
+            f_loc = kb @ dl_full + ffb          # [Ni,Vi,Mi,Nj,Vj,Mj]
+            self.fuerzas_elem[e.id] = f_loc
+
+Las fuerzas internas a lo largo se obtienen barriendo la barra punto a punto.
+Se parte de las fuerzas en el extremo i y se les suma el efecto acumulado de las
+cargas que actúan antes de cada sección:
+
+    def fuerzas_internas(self, e, npts=51):
+        f = self.fuerzas_elem[e.id]
+        Ni, Vi, Mi = f[0], f[1], f[2]
+        xs = np.linspace(0, L, npts)
+        for k, x in enumerate(xs):
+            n_ax = -Ni; v = Vi; m = -Mi + Vi*x
+            for carga in e.cargas:
+                if carga.tipo == "distribuida":
+                    Fp, Mp, Fa = e._acumulado_distribuida(carga, x)
+                    v += Fp; m += Mp; n_ax += -Fa
+                elif carga.tipo == "puntual":
+                    if x >= a:
+                        n_ax += -Pa; v += Pp; m += Pp*(x-a)
+                elif carga.tipo == "momento":
+                    if x >= a:
+                        m += -carga.M           # salto del DMF en x = a
+            N[k] = n_ax; V[k] = v; M[k] = m
+        return xs, N, V, M
+
+Para la distribuida, _acumulado_distribuida integra de forma analítica la
+intensidad lineal desde el inicio del tramo cargado hasta x, dando la fuerza
+perpendicular acumulada, el momento que produce y la fuerza axial acumulada.
+
+Convención de signos de estas salidas (importante para leer los diagramas):
+
+  - N positivo es tracción.
+  - M positivo es sagging (tracción en la fibra inferior local de la barra).
+  - V es el cortante interno con el signo que sigue de dM/dx.
+
+La deformada se reconstruye en extraer_resultados interpolando los
+desplazamientos de los extremos con las mismas funciones de forma (axial lineal,
+transversal Hermite) y rotando el resultado a globales (ver sección 20).
+
+
+--------------------------------------------------------------------------------
+14. P-DELTA (SEGUNDO ORDEN GEOMÉTRICO)
+--------------------------------------------------------------------------------
+
+El efecto P-Delta tiene en cuenta que una barra comprimida pierde rigidez a
+flexión y una traccionada gana. Se modela con una matriz de rigidez geométrica
+que depende de la fuerza axial N de la barra:
+
+    def kg_geometrica_local(self):
+        N = self.N_axial; L = self.L
+        f = N/L
+        vals = f*np.array([
+            [0, 0,        0,        0, 0,        0],
+            [0, 6/5,      L/10,     0, -6/5,     L/10],
+            [0, L/10,     2*L**2/15,0, -L/10,    -L**2/30],
+            [0, 0,        0,        0, 0,        0],
+            [0, -6/5,     -L/10,    0, 6/5,      -L/10],
+            [0, L/10,     -L**2/30, 0, -L/10,    2*L**2/15],
+        ])
+        return vals
+
+El problema es que N depende de la solución, y la solución depende de N. Por eso
+se itera: se resuelve, se actualiza N en cada barra, se vuelve a resolver, y se
+repite hasta que los desplazamientos casi no cambian:
+
+    def resolver(self):
+        self._solve_core()
+        if self.pdelta:
+            for it in range(12):
+                Dprev = self.D.copy()
+                for e in self.elementos:
+                    e.N_axial = -self.fuerzas_elem[e.id][0]
+                self._solve_core()
+                if np.max(np.abs(self.D - Dprev)) < 1e-9*(1+max|D|):
+                    break
+
+El número de iteraciones realizadas se guarda en self.pdelta_iters.
+
+
+--------------------------------------------------------------------------------
+15. ANÁLISIS MODAL (MASA Y FRECUENCIAS)
+--------------------------------------------------------------------------------
+
+El análisis modal calcula los modos de vibración y sus frecuencias. Necesita una
+matriz de masa además de la de rigidez.
+
+La masa de cada barra es una matriz consistente 6x6 (no concentrada en los
+nudos), con su parte axial y su parte de flexión clásica:
+
+    def masa_local(self, m_lineal):
+        ax = m_lineal*L/6.0*[[2,1],[1,2]]                 # axial
+        Mb = m_lineal*L/420.0 * [
+            [156, 22L, 54, -13L],
+            [22L, 4L^2, 13L, -3L^2],
+            [54, 13L, 156, -22L],
+            [-13L, -3L^2, -22L, 4L^2]]                    # flexión (Hermite)
+
+La masa por unidad de longitud es la densidad de peso dividida por la gravedad,
+por el área: m_lineal = (densidad/g) * A. Por eso el análisis modal necesita que
+el material tenga peso específico y que g esté definido.
+
+El motor ensambla la masa global Mff (solo GDL libres) y resuelve el problema de
+autovalores generalizado K phi = w^2 M phi. Como Mff es simétrica y definida
+positiva, se factoriza con Cholesky y el problema se vuelve uno estándar:
+
+    Lm = np.linalg.cholesky(Mff)
+    Linv = np.linalg.inv(Lm)
+    A = Linv @ Kff @ Linv.T
+    lam, Y = np.linalg.eigh(A)                # autovalores w^2 y autovectores
+    omega = np.sqrt(np.clip(lam, 0, None))
+    Phi = Linv.T @ Y                          # formas modales
+
+Para cada modo devuelve omega (rad/s), la frecuencia en Hz (omega/2pi), el
+periodo (1/f) y la forma modal normalizada por su mayor desplazamiento de
+traslación, lista para dibujar.
+
+
+--------------------------------------------------------------------------------
+16. VERIFICACIONES: EQUILIBRIO Y DIAGNÓSTICO DE INESTABILIDAD
+--------------------------------------------------------------------------------
+
+verificar_equilibrio comprueba el equilibrio global: la suma de las cargas
+aplicadas más las reacciones debe dar cero en X, en Y y en momento. Devuelve las
+resultantes y los residuos, que deberían ser del orden del error de redondeo
+(1e-12 o menos):
+
+    return {
+        "sumFx_aplicado": ..., "sumFx_reaccion": ..., "residuo_Fx": ...,
+        ...
+    }
+
+equilibrio_elementos hace lo mismo pero barra por barra: comprueba que las
+fuerzas internas en el extremo i liguen con las fuerzas de extremo de la barra.
+Es un sello de calidad por elemento.
+
+Cuando la estructura es inestable, _diagnostico_inestabilidad intenta decir
+DÓNDE está el problema. Calcula la descomposición en valores singulares de Kff y
+toma el vector del menor valor singular, que apunta hacia el mecanismo. Los GDL
+con mayor componente en ese vector son los sospechosos, y se traducen a nombres
+legibles tipo "N3 (traslación-X)":
+
+    _, sv, Vt = np.linalg.svd(Kff)
+    null_vec = Vt[-1]                          # dirección de menor rigidez
+    orden = np.argsort(-np.abs(null_vec))
+    sospechosos = [etiquetas[i] for i in orden[:3] if abs(null_vec[i]) > 0.15]
+
+
+--------------------------------------------------------------------------------
+17. SECCIONES (A, I)
+--------------------------------------------------------------------------------
+
+secciones.py calcula área y momento de inercia para flexión respecto al eje
+fuerte (horizontal del plano). Todo en metros: A en m2, I en m4. Hay un registro
+TIPOS que mapea cada tipo a su función y a los campos que necesita:
+
+    TIPOS = {
+        "rectangular": (rectangular, ["b", "h"], "Rectangular maciza (b×h)"),
+        "cajon":       (cajon,       ["b", "h", "e"], "Cajón hueco ..."),
+        "circular":    (circular,    ["d"], "Circular maciza ..."),
+        "tubular":     (tubular,     ["d", "e"], "Tubo circular ..."),
+        "perfil_I":    (perfil_I,    ["b", "h", "tf", "tw"], "Perfil I ..."),
+        "perfil_T":    (perfil_T,    ["b", "h", "tf", "tw"], "Perfil T ..."),
+    }
+
+Ejemplos de las fórmulas:
+
+    rectangular: A = b*h ,  I = b*h^3/12
+    circular:    A = pi*d^2/4 ,  I = pi*d^4/64
+    cajón:       A = b*h - bi*hi ,  I = (b*h^3 - bi*hi^3)/12   (bi=b-2e, hi=h-2e)
+    perfil_I:    A = 2*b*tf + hw*tw ,  I = (b*h^3 - (b-tw)*hw^3)/12
+
+El perfil T usa el teorema de Steiner (eje paralelo) porque su centroide no está
+en la mitad del canto.
+
+
+--------------------------------------------------------------------------------
+18. UNIDADES (CONVERSIÓN A BASE Y DE VUELTA)
+--------------------------------------------------------------------------------
+
+El método de rigidez es agnóstico a unidades: si todas las magnitudes están en
+un sistema consistente, el resultado sale en ese sistema. Para que el usuario
+pueda mezclar elecciones (fuerza en kN, longitud en cm, por ejemplo), el
+constructor pasa todo a una base interna en tonf y metros, resuelve, y al final
+convierte los resultados de vuelta a las unidades del usuario.
+
+Los factores son fijos. cf es cuántos tonf vale una unidad de fuerza del
+usuario; cl es cuántos metros vale una unidad de longitud:
+
+    FORCE_FACTORS = {"tonf": 1.0, "kgf": 1/1000, "N": 1/9810, "kN": 1/9.81, ...}
+    LENGTH_FACTORS = {"m": 1.0, "mm": 1/1000, "cm": 1/100, "ft": 1/3.281, ...}
+    cf = FORCE_FACTORS[f_key]
+    cl = LENGTH_FACTORS[l_key]
+
+Las funciones de conversión a base:
+
+    def _f(v):  return float(v) * cf          # fuerza -> tonf
+    def _l(v):  return float(v) * cl          # longitud -> m
+    def _m(v):  return float(v) * cf * cl     # momento -> tonf·m
+    def _cd(v): return float(v) * cf / cl     # carga distribuida -> tonf/m
+
+Las secciones convierten cada dimensión por cl (y el módulo de inercia, que es
+longitud^4, sale solo al recalcular A e I con las dimensiones ya convertidas). E
+se convierte como fuerza/longitud^2: E_base = E * cf / cl^2.
+
+En extraer_resultados están las funciones inversas, base -> usuario:
+
+    def _rf(v):  return v / cf                 # tonf -> fuerza usuario
+    def _rl(v):  return v / cl                 # m -> longitud usuario
+    def _rm(v):  return v / (cf * cl)          # tonf·m -> momento usuario
+    def _rE(v):  return v * cl**2 / cf         # tonf/m² -> E usuario
+
+Para compatibilidad, si el JSON trae el campo viejo "unidad" (por ejemplo
+"kN_m"), se traduce al par (fuerza, longitud) con un mapa _OLD_MAP.
+
+
+--------------------------------------------------------------------------------
+19. CONSTRUCCIÓN DEL MODELO DESDE EL JSON (CONSTRUCTOR)
+--------------------------------------------------------------------------------
+
+construir(datos) toma el diccionario que manda el navegador y arma la estructura.
+El orden es:
+
+  1. Resuelve las unidades (cf, cl) y define las funciones de conversión.
+  2. Crea la Estructura con sus opciones (despreciar axial, Timoshenko, P-Delta,
+     gravedad g).
+  3. Crea los materiales (global y, opcionalmente, por nombre).
+  4. Crea las secciones llamando a secciones.calcular con las dimensiones ya en
+     metros.
+  5. Crea los nudos, sus resortes y asentamientos.
+  6. Crea los elementos, ligándolos a su material y sección.
+  7. Aplica las cargas nodales.
+  8. Aplica las cargas en elementos. Aquí ocurre la resolución de dirección:
+     una carga puede venir definida por dirección y magnitud en lugar de
+     componentes globales (ver abajo).
+  9. Si se pidió peso propio, lo agrega.
+
+Resolución de dirección de cargas. La interfaz deja elegir la dirección de una
+carga en elemento (vertical, horizontal, perpendicular al eje, axial, por ángulo
+o por componentes). _resolve_dir convierte esa elección a componentes globales
+(wx, wy) usando el coseno y seno de la barra:
+
+    cx, cy = e.cos, e.sin
+    # perpendicular orientada hacia arriba-derecha (igual que el frontend):
+    # en una columna apunta a +X, en una viga a +Y.
+    ppx, ppy = -cy, cx
+    if ppy < -1e-9 or (abs(ppy) < 1e-9 and ppx < 0):
+        ppx, ppy = -ppx, -ppy
+    _DIR_VEC = {
+        "vert":  (0.0, 1.0),
+        "horiz": (1.0, 0.0),
+        "perp":  (ppx, ppy),
+        "axial": (cx, cy),
+    }
+
+La perpendicular se orienta siempre hacia arriba o a la derecha, de modo que un
+valor positivo apunte en el sentido intuitivo: a la derecha en columnas, arriba
+en vigas. La misma regla está en el frontend, así dibujo y cálculo coinciden.
+
+
+--------------------------------------------------------------------------------
+20. EXTRACCIÓN DE RESULTADOS Y DATOS PARA LOS DIAGRAMAS
+--------------------------------------------------------------------------------
+
+extraer_resultados(est) arma el diccionario que se manda al navegador. Todo se
+convierte a las unidades del usuario antes de salir. Contiene:
+
+  - desplazamientos: ux, uy, giro por nudo.
+  - reacciones: Rx, Ry, M por apoyo.
+  - fuerzas: por elemento, las fuerzas internas en los extremos i y j (N, V, M)
+    más los máximos de M, V y N y dónde ocurren. Se reportan con la convención
+    interna (N tracción +, M sagging +) para que coincidan con los diagramas.
+  - resumen: conteos, máximos globales, E, número de condición y avisos.
+  - equilibrio y equilibrio_elem: las verificaciones.
+  - diagramas: los datos numéricos que el navegador usa para dibujar los SVG.
+  - K y Kff: las matrices, por si se quieren mostrar.
+
+Los datos de los diagramas son lo que alimenta el dibujo interactivo. Por cada
+elemento se guarda la posición de sus nudos, el arreglo de abscisas s y los
+arreglos N, V, M evaluados en 41 puntos, más la deformada (defx, defy):
+
+    xs, N, V, M = est.fuerzas_internas(e, NP)
+    dl = e.matriz_T() @ est.D[dofs]           # desplazamientos locales
+    ui, vi, ti, uj, vj, tj = dl
+    xi = xs / L
+    u = (1-xi)*ui + xi*uj                      # axial: lineal
+    N1 = 1-3*xi**2+2*xi**3; N2 = L*(xi-2*xi**2+xi**3)
+    N3 = 3*xi**2-2*xi**3;   N4 = L*(-xi**2+xi**3)
+    v = N1*vi + N2*ti + N3*vj + N4*tj          # transversal: Hermite
+    gx = c*u - s*v; gy = s*u + c*v             # rotación a globales
+    diag_elems.append({"elem": e.nombre, "s": [...], "N": [...], "V": [...],
+                       "M": [...], "defx": [gx...], "defy": [gy...]})
+
+El navegador toma estos arreglos y los dibuja como polígonos y curvas. El motor
+no decide de qué lado se pinta cada diagrama: eso lo hace la interfaz aplicando
+su convención de dibujo.
+
+
+--------------------------------------------------------------------------------
+21. CONVENCIONES DE SIGNOS
+--------------------------------------------------------------------------------
+
+Cargas de entrada (en ejes globales):
+  - Fy y wy positivos van hacia arriba; negativos hacia abajo (gravedad).
+  - Fx y wx positivos van hacia la derecha.
+  - M positivo es antihorario.
+  - Perpendicular a un elemento: positivo apunta hacia arriba o a la derecha
+    (a la derecha en columnas, arriba en vigas).
+  - Axial a un elemento: positivo va de i hacia j.
+
+Fuerzas internas de salida:
+  - N positivo es tracción, negativo es compresión.
+  - M positivo es sagging (tracción en la fibra inferior local).
+  - V sigue de la relación dM/dx.
+
+Geometría del elemento:
+  - El eje local x va de i a j. cos y sin son los del ángulo respecto a la
+    horizontal.
+
+
+--------------------------------------------------------------------------------
+22. COMBINACIONES Y ENVOLVENTES
+--------------------------------------------------------------------------------
+
+resolver_combinaciones(datos) resuelve la estructura una vez por cada caso de
+carga (D, L, S, etc.) y luego combina los resultados de forma lineal según los
+factores de cada combinación (por ejemplo 1.2D + 1.6L). La superposición solo es
+válida en régimen lineal, así que P-Delta se desactiva aquí:
+
+    base["pdelta"] = False
+
+Por cada combinación recorre los elementos, suma factor por factor los arreglos
+N, V, M de cada caso, y va guardando el máximo y el mínimo en cada punto. El
+resultado es la envolvente: para cada sección de cada barra, el rango de valores
+que puede tomar bajo todas las combinaciones. Igual con las reacciones.
+
+
+--------------------------------------------------------------------------------
+23. GRÁFICAS: PNG DE MATPLOTLIB Y DATOS PARA EL SVG
+--------------------------------------------------------------------------------
+
+Hay dos caminos para las gráficas.
+
+El principal es el SVG interactivo del navegador. El backend no dibuja nada ahí:
+solo entrega los arreglos numéricos de la sección 20 y la interfaz los pinta.
+
+El secundario es graficos.py, que genera imágenes PNG con matplotlib: el modelo,
+la deformada, el DMF, el DFC y el axial. Hoy esas imágenes se generan solo bajo
+demanda (con el parámetro ?imagenes=1 en /api/calcular), porque generarlas en
+cada cálculo es lento y la interfaz ya no las usa por defecto.
+
+La función central de los diagramas PNG escala cada diagrama y lo dibuja
+perpendicular a la barra, rellenando con un color según el signo del valor:
+
+    def _plot_diagrama(est, magnitud, archivo, titulo, signo_traccion=False):
+        for e in est.elementos:
+            xs, N, V, M = est.fuerzas_internas(e, 61)
+            arr = {"N": N, "V": V, "M": M}[magnitud]
+            pdx, pdy = (-s, c)
+            if signo_traccion:                # el DMF se dibuja del lado de tracción
+                pdx, pdy = (s, -c)
+            ...
+
+Las funciones públicas son plot_modelo, plot_deformada, plot_DMF, plot_DFC,
+plot_DFN, y generar_todas_base64, que devuelve las cinco imágenes ya en base64
+listas para incrustar.
+
+
+--------------------------------------------------------------------------------
+24. LA MEMORIA DE CÁLCULO PASO A PASO (REPORTE)
+--------------------------------------------------------------------------------
+
+generar_reporte(est) arma un texto largo con todo el procedimiento, pensado para
+revisar a mano o entregar como anexo. Las secciones del reporte son:
+
+  1. Datos de entrada (nudos, elementos, cargas, rótulas).
+  2. Numeración de GDL (libres primero, restringidos después).
+  3. Matrices por elemento: rigidez local, transformación T y rigidez global,
+     más las fuerzas de empotramiento de cada barra.
+  4. Matriz de rigidez global ensamblada.
+  5. Vector de cargas global.
+  6. Partición y solución (Kff, Pf, Df).
+  7. Desplazamientos y giros por nudo.
+  8. Reacciones en los apoyos.
+  9. Fuerzas internas en los extremos y los máximos por barra.
+  10. Verificación de equilibrio global.
+
+El formateador de matrices conmuta a notación científica cuando los valores son
+muy grandes (por ejemplo cuando se rigidiza el eje axial), para que las columnas
+no se solapen:
+
+    vmax = np.max(np.abs(M))
+    cientifico = vmax >= 1.0e5
+
+
+--------------------------------------------------------------------------------
+25. LA API FLASK (RUTAS)
+--------------------------------------------------------------------------------
+
+app.py expone el motor por HTTP. Las rutas principales:
+
+  POST /api/calcular
+      Recibe el JSON del modelo, construye, resuelve y devuelve el diccionario
+      de resultados, la memoria de texto y (si se pide modal) los modos. Guarda
+      el cálculo en el historial SQLite. Las imágenes PNG se generan solo si se
+      pasa ?imagenes=1.
+
+          est = construir(datos)
+          est.resolver()
+          resultados = extraer_resultados(est)
+          reporte = generar_reporte(est)
+          if datos.get("analisis_modal"):
+              modal = est.analisis_modal(n_modos=int(datos.get("n_modos", 6)))
+
+  POST /api/combinaciones
+      Resuelve por casos y devuelve las envolventes.
+
+  POST /api/seccion
+      Calcula A e I de una sección a partir de su tipo y dimensiones.
+
+  GET  /api/historial , GET /api/historial/<id> , DELETE ...
+      Lectura y borrado del historial de cálculos.
+
+  GET  /api/ejemplo
+      Devuelve un modelo de ejemplo para cargar en la interfaz.
+
+
+--------------------------------------------------------------------------------
+26. GLOSARIO RÁPIDO
+--------------------------------------------------------------------------------
+
+GDL              Grado de libertad. Cada nudo tiene 3: ux, uy, giro.
+[K]              Matriz de rigidez global.
+{P}              Vector de cargas en los GDL.
+{D}              Vector de desplazamientos de todos los GDL.
+Kff, Kfr         Bloques de [K]: libre-libre y libre-restringido.
+Df, Dr           Desplazamientos libres (incógnitas) y restringidos (impuestos).
+T                Matriz de transformación local a global de un elemento.
+Fuerza de        Reacción que aparecería si los dos extremos de la barra
+  empotramiento  estuvieran empotrados. Base para repartir cargas a los nudos.
+Condensación     Técnica para liberar un GDL (rótula) sin perder su efecto en
+  estática       los demás.
+N, V, M          Axial, cortante y momento flector internos.
+P-Delta          Análisis de segundo orden que ajusta la rigidez según el axial.
+cf, cl           Factores de unidad: tonf por unidad de fuerza, metros por
+                 unidad de longitud del usuario.
+
+================================================================================
+  FIN DE LA DOCUMENTACIÓN EXPLICATIVA
+================================================================================

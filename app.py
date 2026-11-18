@@ -59,6 +59,20 @@ def init_db():
     con.close()
 
 
+def memoria_de_calculo(est):
+    """Memoria con el método sistematizado del profesor (matriz [A], barras 4×4).
+    Si el modelo tiene algo que ese método no admite, se usa la memoria del
+    método directo y se dice por qué al inicio."""
+    from core.metodo_profesor import resolver_profesor, memoria_profesor
+    try:
+        return memoria_profesor(resolver_profesor(est), est.nombre)
+    except Exception as e:
+        return ("AVISO: este modelo no se puede presentar con el método sistematizado "
+                f"([A], barras 4×4): {e}" + "\n"
+                "Se muestra la memoria del método directo de rigidez." + "\n\n"
+                + generar_reporte(est))
+
+
 # ----------------------------------------------------------------------------
 #  Rutas de la interfaz
 # ----------------------------------------------------------------------------
@@ -91,7 +105,7 @@ def api_calcular():
         }), 400
 
     resultados = extraer_resultados(est)
-    reporte = generar_reporte(est)
+    reporte = memoria_de_calculo(est)
     # Los diagramas se renderizan como SVG interactivo en el navegador; los PNG
     # de matplotlib solo se generan bajo demanda (?imagenes=1) para no penalizar
     # cada cálculo. Por defecto se omiten.
@@ -201,11 +215,11 @@ def api_combinaciones():
 def api_metodo_a():
     """Resuelve por el METODO SISTEMATIZADO DE RIGIDEZ (matriz [A], como el
     profesor) y devuelve los datos de cada paso para el reproductor animado."""
-    from core.metodo_matricial_A import resolver_sistematizado
+    from core.metodo_profesor import resolver_profesor, a_api
     datos = request.get_json(force=True)
     try:
         est = construir(datos)
-        res = resolver_sistematizado(est)
+        res = a_api(resolver_profesor(est))
         # diagramas N/V/M por barra (del motor directo, para dibujar DMF/DFC)
         try:
             est.resolver()
@@ -224,8 +238,12 @@ def api_metodo_a():
 @app.route("/api/torre/lista", methods=["GET"])
 def api_torre_lista():
     from core.torre_arequipa import todos_los_pórticos
-    return jsonify({"ok": True, "items": [
-        {"nombre": n, "tipo": t, "idx": i} for n, t, i in todos_los_pórticos()]})
+    cuenta = {}
+    items = []
+    for n, t, _ in todos_los_pórticos():               # idx = posición dentro de su tipo
+        items.append({"nombre": n, "tipo": t, "idx": cuenta.get(t, 0)})
+        cuenta[t] = cuenta.get(t, 0) + 1
+    return jsonify({"ok": True, "items": items})
 
 
 @app.route("/api/calcular3d", methods=["POST"])

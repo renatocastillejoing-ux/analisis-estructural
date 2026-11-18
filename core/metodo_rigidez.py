@@ -138,6 +138,9 @@ class CargaTermica:
         self.tipo = "termica"
 
 
+NU_PLACA = 0.15          # Poisson del concreto para placas (metodo del profesor)
+RIGIDEZ_BRAZO = 1.0e6    # factor de rigidez de los tramos que modelan un brazo rigido
+
 # ==============================================================================
 #  RIGIDEZ PRISMATICA LOCAL (viga-columna 2D, 6x6)  -  helper reutilizable
 # ==============================================================================
@@ -188,6 +191,13 @@ class Elemento:
         #   {"L": longitud_tramo, "mat": Material, "sec": Seccion}
         # Vacia => barra prismatica (usa self.mat / self.sec en toda su longitud).
         self.segmentos = []
+        # Placa (muro de corte): incluye la deformacion por cortante (Timoshenko)
+        # con nu = 0.15 y Ac = 5/6·b·h, como en el metodo del profesor.
+        self.placa = False
+        # Brazos rigidos en los extremos (m): el constructor los agrega como
+        # tramos de rigidez muy alta; el metodo [A] los usa de forma exacta.
+        self.brazo_i = 0.0
+        self.brazo_j = 0.0
         self._despreciar_axial = False     # lo fija la Estructura al ensamblar
         self._penal_axial = 1.0e5
 
@@ -210,12 +220,18 @@ class Elemento:
         mat = seg.get("mat") or self.mat
         sec = seg.get("sec") or self.sec
         E = mat.E; A = sec.A; I = sec.I; L = float(seg["L"])
-        nu = getattr(mat, "nu", 0.2)
+        nu = NU_PLACA if self.placa else getattr(mat, "nu", 0.2)
         kcz = getattr(sec, "k_corte", 1.2)
         if self._despreciar_axial:
             # misma filosofia que en modo prismatico: EA >> rigidez de flexion,
             # calculada por tramo para no desestabilizar el condicionamiento.
-            fa = self._penal_axial * 12*I/(A*L**2)
+            kmax = getattr(self, "_kmax_axial", 0.0)
+            if seg.get("rigido") and kmax > 0:
+                # brazo rígido (A e I ya multiplicados): EA/L = PENAL·kmax, sin el ×10⁶ encima,
+                # que dejaba la condensación mal condicionada y el equilibrio sin cerrar
+                fa = self._penal_axial * kmax * L / (E * A)
+            else:
+                fa = self._penal_axial * max(12*I/(A*L**2), kmax * L / (E * A))
         else:
             fa = 1.0
         return E, A, I, L, nu, kcz, fa
@@ -380,7 +396,7 @@ class Elemento:
             self._Peq_cadena = Pc
             return Kc
         E, A, I, L = self.mat.E, self.sec.A, self.sec.I, self.L
-        nu = getattr(self.mat, "nu", 0.2)
+        nu = NU_PLACA if self.placa else getattr(self.mat, "nu", 0.2)
         kcz = getattr(self.sec, "k_corte", 1.2)
         return _k_beam_local(E, A, I, L, factor_axial=self.factor_axial,
                              timoshenko=self.timoshenko, nu=nu, kcz=kcz)
@@ -642,8 +658,13 @@ class Estructura:
 
     def ensamblar(self):
         self._numerar_gdl()
+        # rigidez lateral mayor de la estructura (12EI/L³). La penalización axial se mide
+        # contra ella y no contra la de cada barra: con placas muy rígidas, una viga con
+        # EA = PENAL·(su propia rigidez) seguía estirándose frente a la placa y el
+        # equilibrio horizontal no cerraba (2026-11-18, pórticos de la torre).
+        kmax = max((12 * e.mat.E * e.sec.I / e.L ** 3 for e in self.elementos if e.L > 0), default=0.0)
         for e in self.elementos:
-            e.timoshenko = self.timoshenko
+            e.timoshenko = self.timoshenko or e.placa
             e.usar_geometrica = self.pdelta
             # las barras segmentadas calculan la penalizacion axial por tramo
             e._despreciar_axial = self.despreciar_axial
@@ -652,7 +673,8 @@ class Estructura:
                 # rigidez axial ~ PENAL x rigidez de flexion (12EI/L^3):
                 # mantiene el condicionamiento acotado y la deformacion axial ~0
                 I_, A_, L_ = e.sec.I, e.sec.A, e.L
-                e.factor_axial = self._PENAL_AXIAL * 12*I_/(A_*L_**2)
+                e.factor_axial = self._PENAL_AXIAL * max(12*I_/(A_*L_**2), kmax * L_ / (e.mat.E * A_))
+                e._kmax_axial = kmax
             else:
                 e.factor_axial = 1.0
         n = self.n_gdl

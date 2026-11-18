@@ -421,3 +421,83 @@ export function borrarSeleccion(m, sel) {
   elems.forEach((id) => borrarBarra(m, id));
   nudos.forEach((id) => borrarNudo3d(m, id));
 }
+
+/* ----------------------------- columna entera: seleccionar y trasladar ----------------------------- */
+// Todas las barras verticales que están en la misma vertical (x, y) que la barra dada.
+export function columnaEntera(m, elemId) {
+  const e = m.elementos.find((q) => q.id === elemId);
+  if (!e || tipoBarra(m, e) !== "columna") return [];
+  const a = m.nudos.find((n) => n.id === e.i);
+  return m.elementos.filter((q) => {
+    if (tipoBarra(m, q) !== "columna") return false;
+    const p = m.nudos.find((n) => n.id === q.i);
+    return Math.abs(p.x - a.x) < TOL && Math.abs(p.y - a.y) < TOL;
+  }).map((q) => q.id);
+}
+
+// Corta en el punto (x, y, z) la viga horizontal que pasa por él (si hay) y devuelve el nudo.
+function nudoEnVigas(m, x, y, z, apoyoBase) {
+  const ya = buscarNudo(m, x, y, z);
+  if (ya) return ya;
+  const id = agregarNudo3d(m, x, y, z, apoyoBase);
+  const porId = Object.fromEntries(m.nudos.map((n) => [n.id, n]));
+  const pasa = m.elementos.find((e) => {
+    const a = porId[e.i], b = porId[e.j];
+    if (!a || !b || Math.abs(a.z - z) > TOL || Math.abs(b.z - z) > TOL) return false;
+    const L = Math.hypot(b.x - a.x, b.y - a.y);
+    if (L < TOL) return false;
+    const t = ((x - a.x) * (b.x - a.x) + (y - a.y) * (b.y - a.y)) / (L * L);
+    const dist = Math.abs((x - a.x) * (b.y - a.y) - (y - a.y) * (b.x - a.x)) / L;
+    return t > 1e-6 && t < 1 - 1e-6 && dist < 1e-4;
+  });
+  if (pasa) {
+    const a = porId[pasa.i], b = porId[pasa.j];
+    const L = Math.hypot(b.x - a.x, b.y - a.y), s = Math.hypot(x - a.x, y - a.y);
+    const jOrig = pasa.j, relJ = pasa.release_j;
+    pasa.j = id; pasa.release_j = undefined;                       // primer tramo: i → nuevo nudo
+    const nid = nextId(m.elementos);
+    const copia = { ...structuredClone(pasa), id: nid, nombre: `${pasa.nombre}b`, i: id, j: jOrig, release_i: undefined, release_j: relJ };
+    delete copia.segmentos;                                         // un tramo variable no se puede partir aquí
+    if (pasa.segmentos) delete pasa.segmentos;
+    m.elementos.push(copia);
+    const nuevas = [];
+    (m.cargas_barras || []).filter((c) => c.elem === pasa.id).forEach((c) => {
+      if (c.tipo === "puntual") {
+        const p = c.a === undefined || c.a === "" ? L / 2 : +c.a;
+        if (p > s) { c.elem = nid; c.a = r6(p - s); }
+      } else if (c.tipo === "trapezoidal") {
+        const k = (v1, v2) => (+v1 || 0) + ((+v2 || 0) - (+v1 || 0)) * s / L;
+        const medio = { wx: k(c.wx1, c.wx2), wy: k(c.wy1, c.wy2), wz: k(c.wz1, c.wz2) };
+        nuevas.push({ ...structuredClone(c), elem: nid, wx1: medio.wx, wy1: medio.wy, wz1: medio.wz });
+        c.wx2 = medio.wx; c.wy2 = medio.wy; c.wz2 = medio.wz;
+      } else {
+        nuevas.push({ ...structuredClone(c), elem: nid });
+      }
+    });
+    m.cargas_barras = [...(m.cargas_barras || []), ...nuevas];
+  }
+  return id;
+}
+
+// Traslada columnas (todas sus barras) en planta: dx, dy. Las vigas NO se arrastran:
+// quedan donde estaban, y en el destino la columna se conecta a la viga que pase por
+// ahí (se corta la viga) o a un nudo existente. Devuelve un resumen.
+export function trasladarColumnas(m, elemIds, dx, dy) {
+  const porId = () => Object.fromEntries(m.nudos.map((n) => [n.id, n]));
+  let movidas = 0;
+  elemIds.forEach((id) => {
+    const e = m.elementos.find((q) => q.id === id);
+    if (!e || tipoBarra(m, e) !== "columna") return;
+    const P = porId();
+    const ext = [["i", P[e.i]], ["j", P[e.j]]];
+    ext.forEach(([k, n]) => {
+      const destino = nudoEnVigas(m, n.x + dx, n.y + dy, n.z, n.apoyo !== "libre" ? n.apoyo : undefined);
+      e[k] = destino;
+    });
+    movidas++;
+  });
+  // apoyos que quedaron sin columna y nudos sueltos
+  const usados = new Set(m.elementos.flatMap((e) => [e.i, e.j]));
+  m.nudos = m.nudos.filter((n) => usados.has(n.id) || (m.cargas_nudos || []).some((c) => c.nudo === n.id));
+  return { movidas };
+}

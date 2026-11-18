@@ -350,7 +350,7 @@ export default function App() {
   };
 
   async function abrirTorre3d() {
-    avisar("Cargando la torre (1 485 nudos, 3 810 barras)…");
+    avisar("Cargando la torre del plano…");
     try { cargarModelo(await torre3dModelo(), "Torre de Arequipa cargada como modelo 3D. Pulsa Calcular estructura para el análisis espacial."); }
     catch (e) { avisar("No se pudo cargar la torre: " + e, "err"); }
   }

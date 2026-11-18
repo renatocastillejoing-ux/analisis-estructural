@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { APOYOS3D, borrarBarra, borrarNudo3d, borrarSeleccion, tipoBarra } from "../model3d.js";
+import { APOYOS3D, borrarBarra, borrarNudo3d, borrarSeleccion, columnaEntera, tipoBarra, trasladarColumnas } from "../model3d.js";
 import { pedir } from "../pedir.js";
 import { BtnAgregar, BtnIcon, Campo, NombreUnico, NumIn } from "./ui.jsx";
 import { Interruptor } from "./Editor.jsx";
@@ -402,6 +402,14 @@ export function Props3D({ modelo, sel, setSel, commit, abrirPanel }) {
               <Campo label="Material"><select className="inp" value={el.material || ""} onChange={(e) => commit((m) => { m.elementos.find((q) => q.id === el.id).material = e.target.value || undefined; })}><option value="">Por defecto</option>{(modelo.materiales || []).map((x) => <option key={x.nombre}>{x.nombre}</option>)}</select></Campo>
             </div>
             {tipo === "columna" && <Interruptor label="Girar la sección 90° (b en Y)" valor={(+el.giro || 0) % 180 === 90} onChange={(v) => commit((m) => { m.elementos.find((q) => q.id === el.id).giro = v ? 90 : 0; })} />}
+            {tipo === "columna" && (() => {
+              const ids = columnaEntera(modelo, el.id);
+              return ids.length > 1 && (
+                <button className="w-full rounded-md border border-slate-200 py-1.5 text-xs dark:border-ink-line" onClick={() => setSel({ tipo: "varios", elems: ids, nudos: [] })}>
+                  Seleccionar la columna entera ({ids.length} pisos) para moverla de eje
+                </button>
+              );
+            })()}
             <div className="flex gap-4">
               <Interruptor label="Rótula en i" valor={!!el.release_i} onChange={(v) => commit((m) => { m.elementos.find((q) => q.id === el.id).release_i = v; })} />
               <Interruptor label="Rótula en j" valor={!!el.release_j} onChange={(v) => commit((m) => { m.elementos.find((q) => q.id === el.id).release_j = v; })} />
@@ -550,9 +558,47 @@ function PropsVarios3D({ modelo, sel, setSel, commit }) {
             </div>
           </Campo>
         </>)}
+        {elems.length > 0 && tipos.columna === elems.length && <MoverAEje modelo={modelo} elems={elems} commit={commit} />}
         <p className="text-[11px] text-slate-500">Mover (G) y Copiar (Shift+D) están en la barra superior del 3D; los nudos que caen sobre otros se unen solos.</p>
         <button className="w-full rounded-md border border-rose-200 py-1.5 text-sm text-rose-600 dark:border-rose-900 dark:text-rose-400" onClick={() => { commit((m) => borrarSeleccion(m, sel), `Eliminar ${elems.length + nudos.length} objetos`); setSel(null); }}>🗑 Eliminar la selección (Supr)</button>
       </div>
     </aside>
+  );
+}
+
+// Traslada las columnas seleccionadas (todos sus pisos) a otro cruce de ejes. Las vigas
+// no se arrastran: en el destino la columna se conecta a la viga que pasa por ahí.
+function MoverAEje({ modelo, elems, commit }) {
+  const n0 = modelo.nudos.find((n) => n.id === elems[0].i);
+  const ejesX = modelo.ejes?.x || [], ejesY = modelo.ejes?.y || [];
+  const cerca = (lista, v) => lista.reduce((b, e) => (b === null || Math.abs(e.c - v) < Math.abs(b.c - v) ? e : b), null);
+  const [ex, setEx] = useState(cerca(ejesX, n0?.x)?.nombre || "");
+  const [ey, setEy] = useState(cerca(ejesY, n0?.y)?.nombre || "");
+  const [dx, setDx] = useState(0), [dy, setDy] = useState(0);
+  const conEjes = ejesX.length > 0 && ejesY.length > 0;
+  const destino = conEjes ? [+(ejesX.find((e) => e.nombre === ex)?.c ?? n0.x), +(ejesY.find((e) => e.nombre === ey)?.c ?? n0.y)] : [n0.x + (+dx || 0), n0.y + (+dy || 0)];
+  const d = [destino[0] - n0.x, destino[1] - n0.y];
+  const quieto = Math.abs(d[0]) < 1e-9 && Math.abs(d[1]) < 1e-9;
+  const pilas = new Set(elems.map((e) => { const a = modelo.nudos.find((n) => n.id === e.i); return `${a.x},${a.y}`; })).size;
+  return (
+    <div className="space-y-1 rounded-lg border border-slate-200 p-2 dark:border-ink-line">
+      <div className="text-xs font-semibold">Mover {pilas === 1 ? "la columna" : `las ${pilas} columnas`} a otro eje</div>
+      {conEjes ? (
+        <div className="grid grid-cols-2 gap-1">
+          <Campo label="Eje (X)"><select className="inp" value={ex} onChange={(e) => setEx(e.target.value)}>{ejesX.map((e) => <option key={e.nombre} value={e.nombre}>{e.nombre} · {(+e.c).toFixed(2)} m</option>)}</select></Campo>
+          <Campo label="Eje (Y)"><select className="inp" value={ey} onChange={(e) => setEy(e.target.value)}>{ejesY.map((e) => <option key={e.nombre} value={e.nombre}>{e.nombre} · {(+e.c).toFixed(2)} m</option>)}</select></Campo>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-1">
+          <Campo label="Δx (m)"><NumIn value={dx} onChange={setDx} /></Campo>
+          <Campo label="Δy (m)"><NumIn value={dy} onChange={setDy} /></Campo>
+        </div>
+      )}
+      <p className="text-[11px] text-slate-500">{quieto ? "Elige un eje distinto al actual." : `Se desplaza ${d[0].toFixed(2)} m en X y ${d[1].toFixed(2)} m en Y. Las vigas se quedan donde están; en el destino, la viga que pase por ahí se corta para recibir la columna. Se deshace con Ctrl+Z.`}</p>
+      <BtnAgregar onClick={() => {
+        if (quieto) return;
+        commit((m) => { trasladarColumnas(m, elems.map((e) => e.id), d[0], d[1]); }, `Mover columna al eje ${conEjes ? `${ey}${ex}` : ""}`.trim());
+      }}>Mover a este eje</BtnAgregar>
+    </div>
   );
 }
