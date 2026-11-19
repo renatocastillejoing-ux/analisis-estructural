@@ -49,7 +49,7 @@ export function guion(data) {
   add(2, { titulo: "Grados de libertad: global (Q–D) y local (q–d)" });
   add(2, { bloque: "coords", nota: `Se numeran ${data.labels.length} GDL globales {D}: primero los desplazamientos laterales y luego los giros de nudo.` });
   const nAct = B.reduce((s, b) => s + (b.act?.length ?? 4), 0);
-  add(2, { bloque: "locales", nota: `Cada barra tiene 4 GDL locales: Δ y θ en su extremo i y en su extremo j (antihorario positivo). Con este gráfico se ve qué desplazamiento o giro de la barra se activa con cada D (ahí va el 1 en [A]). Los que nunca se mueven (empotramiento en la base, Δ de las vigas con EA = ∞) valen 0 y no se numeran: quedan ${nAct} GDL locales, d1 … d${nAct}.` });
+  add(2, { bloque: "locales", nota: `Cada barra tiene 4 GDL locales: Δ y θ en su extremo i y en su extremo j (antihorario positivo). Con este gráfico se ve qué desplazamiento o giro de la barra se activa con cada D (ahí va el 1 en [A]). Los que nunca se mueven (empotramiento en la base, Δ de las vigas con EA = ∞) valen 0 y no se numeran: quedan ${nAct} GDL locales, d1 … d${nAct}. En columnas y placas (i abajo), Δ es positivo hacia la izquierda: por eso un desplazamiento lateral D hacia la derecha entra con −1 en [A], como en la hoja del profesor.` });
 
   // 3 · [A]
   add(3, { titulo: "Matriz de compatibilidad [A]: {d} = [A]{D}" });

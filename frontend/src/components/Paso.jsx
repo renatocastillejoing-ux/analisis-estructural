@@ -421,8 +421,7 @@ export function LocalesGDL({ data }) {
             <g key={lado}>
               <line x1={x} y1={y} x2={x} y2={y - 34} stroke={cD} strokeWidth={2} markerEnd={`url(#lg-${dD ? "a" : "g"})`} strokeDasharray={dD ? "" : "3 3"} />
               <text x={x + (lado === "i" ? -6 : 6)} y={y - 38} textAnchor={lado === "i" ? "end" : "start"} className="text-[11px] font-semibold" fill={cD}>{dD || "0"} Δ{lado}</text>
-              <path d={`M${x + 14},${y} A14,14 0 0,0 ${x},${y - 14}`} fill="none" stroke={cT} strokeWidth={2} markerEnd={`url(#lg-${dT ? "b" : "g"})`} strokeDasharray={dT ? "" : "3 3"}
-                transform={lado === "j" ? `translate(${2 * x},0) scale(-1,1)` : undefined} />
+              <path d={`M${x + 14},${y} A14,14 0 0,0 ${x},${y - 14}`} fill="none" stroke={cT} strokeWidth={2} markerEnd={`url(#lg-${dT ? "b" : "g"})`} strokeDasharray={dT ? "" : "3 3"} />
               <text x={x} y={y + 24} textAnchor="middle" className="text-[11px] font-semibold" fill={cT}>{dT || "0"} θ{lado}</text>
             </g>
           );
