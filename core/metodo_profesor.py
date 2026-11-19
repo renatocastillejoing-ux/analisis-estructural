@@ -117,7 +117,17 @@ def resolver_profesor(est):
         N, libres = np.zeros((0, 0)), []
     nT = N.shape[1]
     nombre = {n.id: n.nombre for n in nudos}
-    labels = [f"D{k+1}(Δ{'x' if comp[f][1] == 0 else 'y'} {nombre[comp[f][0]]})" for k, f in enumerate(libres)]
+    def _comp_real(k, f):
+        # componente que representa al GDL de traslación (modo de piso): la x si participa
+        # (la de mayor |valor|, el nudo más alto primero); si no, la y. Solo cambia la etiqueta.
+        nz = [i for i in range(len(comp)) if abs(N[i, k]) > 1e-9]
+        xs = [i for i in nz if comp[i][1] == 0]
+        cand = xs or nz or [f]
+        return max(cand, key=lambda i: (round(abs(N[i, k]), 9), -i))
+    labels = []
+    for k, f in enumerate(libres):
+        i = _comp_real(k, f)
+        labels.append(f"D{k+1}(Δ{'x' if comp[i][1] == 0 else 'y'} {nombre[comp[i][0]]})")
     rot = {}
     for n in nudos:
         if n.restriccion[2] == 0:

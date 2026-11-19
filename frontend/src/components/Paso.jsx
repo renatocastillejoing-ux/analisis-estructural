@@ -107,7 +107,7 @@ export default function Paso({ modelo, onVolver }) {
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 sm:px-6 dark:border-ink-line dark:bg-ink-2" role="tablist" aria-label="Pasos">
         {data.pasos.map((p, k) => (
           <button key={k} role="tab" aria-selected={k === i} onClick={() => ir(k)} title={p.titulo}
-            className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs tabular-nums transition ${k === i ? "border-teal bg-teal font-semibold text-white" : k < i ? "border-teal/40 bg-teal/10 text-teal-dark dark:text-teal-soft" : "border-slate-200 text-slate-500 dark:border-ink-line dark:text-slate-400"}`}>
+            className={`shrink-0 rounded-full border min-h-9 min-w-9 px-2.5 py-0.5 text-xs tabular-nums transition ${k === i ? "border-teal bg-teal font-semibold text-white" : k < i ? "border-teal/40 bg-teal/10 text-teal-dark dark:text-teal-soft" : "border-slate-200 text-slate-500 dark:border-ink-line dark:text-slate-400"}`}>
             {etiquetaPaso(p)}
           </button>
         ))}
@@ -328,7 +328,7 @@ function Activar({ paso, data }) {
         <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
           {labels.map((l, k) => (
             <button key={k} onClick={() => elegir(k)} title={l}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${k === g ? "scale-105 border-teal bg-teal text-white shadow" : "border-slate-200 text-slate-600 dark:border-ink-line dark:text-slate-300"}`}>D{k + 1}</button>
+              className={`rounded-full border min-h-9 min-w-9 px-3 py-1 text-xs font-semibold transition ${k === g ? "scale-105 border-teal bg-teal text-white shadow" : "border-slate-200 text-slate-600 dark:border-ink-line dark:text-slate-300"}`}>D{k + 1}</button>
           ))}
           {fijo && <button onClick={soltar} className="ml-2 text-xs text-teal-dark underline dark:text-teal-soft">reanudar ciclo</button>}
         </div>
@@ -456,7 +456,7 @@ function Ensamble({ paso, data }) {
         <Figura data={data} W={520} H={360} pad={55} foco={idxBarra} />
         <div className="flex flex-wrap gap-1">
           {bars.map((b, x) => (
-            <button key={x} onClick={() => elegir(x + 1)} className={`rounded-full border px-2.5 py-0.5 text-xs ${x < k ? "border-teal bg-teal/10 text-teal-dark dark:text-teal-soft" : "border-slate-200 text-slate-500 dark:border-ink-line"}`}>{x < k ? "✓ " : ""}{b.elem}</button>
+            <button key={x} onClick={() => elegir(x + 1)} className={`rounded-full border min-h-9 min-w-9 px-2.5 py-0.5 text-xs ${x < k ? "border-teal bg-teal/10 text-teal-dark dark:text-teal-soft" : "border-slate-200 text-slate-500 dark:border-ink-line"}`}>{x < k ? "✓ " : ""}{b.elem}</button>
           ))}
           <button onClick={() => { elegir(0); soltar(); }} className="text-xs underline">repetir</button>
         </div>
