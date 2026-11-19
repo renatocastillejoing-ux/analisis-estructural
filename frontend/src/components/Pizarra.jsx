@@ -156,7 +156,7 @@ export default function Pizarra({ data }) {
     const t = setTimeout(() => {
       if (fase < nf - 1) setFase(fase + 1);
       else { setK(Math.min(total - 1, k + 1)); setFase(0); }
-    }, r?.titulo ? vel * 0.5 : r?.bloque ? vel * 1.4 : vel);
+    }, r?.titulo && !r?.bloque ? vel * 0.5 : r?.bloque ? vel * 1.4 : vel);
     return () => clearTimeout(t);
   }, [play, k, fase, vel, total, R]);
 
@@ -201,7 +201,7 @@ export default function Pizarra({ data }) {
 }
 
 function Renglon({ r, data, fase }) {
-  if (r.titulo) return <h3 className="paso-in pt-3 text-lg font-semibold text-rose-700 dark:text-rose-400"><span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-rose-700 text-sm dark:border-rose-400">{r.sec}</span>{r.titulo}</h3>;
+  if (r.titulo && !r.bloque && !r.pasos) return <h3 className="paso-in pt-3 text-lg font-semibold text-rose-700 dark:text-rose-400"><span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-rose-700 text-sm dark:border-rose-400">{r.sec}</span>{r.titulo}</h3>;
   const cuerpo = () => {
     if (r.pasos) return (
       <div className="space-y-1 font-mono text-[13px]">
