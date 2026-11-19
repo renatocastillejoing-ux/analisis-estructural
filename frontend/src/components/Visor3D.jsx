@@ -128,6 +128,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       persp.aspect = width / Math.max(height, 1);
       persp.updateProjectionMatrix();
       orto.zoom = orto.zoom || 1; ajustarOrto();
+      if (st.current.autoFit) st.current.encuadrarAuto?.();   // el tamaño real llega después del primer encuadre
     });
     ro.observe(el);
     const q = new THREE.Quaternion(), v = new THREE.Vector3();
@@ -364,7 +365,8 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
     (sel.length ? sel : escena.miembros).forEach((m) => { box.expandByPoint(T(m.a)); box.expandByPoint(T(m.b)); });
     if (box.isEmpty()) return;
     const c = box.getCenter(new THREE.Vector3()), r = Math.max(box.getSize(new THREE.Vector3()).length() / 2, sel.length ? 1.5 : 5);
-    const dist = r / Math.sin((persp.fov * Math.PI) / 360) * 1.05;
+    const fovV = (persp.fov * Math.PI) / 180, fovH = 2 * Math.atan(Math.tan(fovV / 2) * Math.max(persp.aspect, 0.2)); // en pantallas verticales manda el ancho
+    const dist = r / Math.sin(Math.min(fovV, fovH) / 2) * 1.05;
     const dv = mantener ? camera.position.clone().sub(controls.target).normalize() : new THREE.Vector3(...(Array.isArray(dir) ? dir : DIRS[dir] || DIRS.iso)).normalize();
     [persp, orto].forEach((cam) => {
       cam.position.copy(c.clone().add(dv.clone().multiplyScalar(dist)));
@@ -409,7 +411,8 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
   }, [controles, escena]); // eslint-disable-line react-hooks/exhaustive-deps
   const claveAjuste = ajusteKey ?? escena;
   const [vInt, setVInt] = useState(null);
-  useEffect(() => { encuadrar(vistaKey?.dir); }, [claveAjuste, vistaKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  st.current.encuadrarAuto = () => encuadrar(vistaKey?.dir);
+  useEffect(() => { st.current.autoFit = true; encuadrar(vistaKey?.dir); const t = setTimeout(() => { st.current.autoFit = false; }, 1500); return () => clearTimeout(t); }, [claveAjuste, vistaKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (vInt) encuadrar(vInt.dir); }, [vInt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // selección con el puntero
@@ -493,7 +496,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
               </g>
             ))}
           </svg>
-          <div className="absolute bottom-3 right-3 z-10 flex flex-wrap justify-end overflow-hidden rounded-lg border border-slate-200 bg-white/95 text-xs shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Cámara">
+          <div className="absolute bottom-20 right-3 z-10 flex flex-wrap justify-end overflow-hidden md:bottom-3 rounded-lg border border-slate-200 bg-white/95 text-xs shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Cámara">
             {[["iso", "Iso", "0"], ["planta", "Planta", "7"], ["frente", "Frente", "1"], ["lado", "Lado", "3"]].map(([k, l, t]) => (
               <button key={k} onClick={() => vista(k)} className="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-ink-3" title={`Vista ${l.toLowerCase()} (tecla ${t})`}>{l}</button>
             ))}
@@ -506,7 +509,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
             <button onClick={() => setAyuda((a) => !a)} aria-pressed={ayuda} title="Atajos del visor" className="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-ink-3">?</button>
           </div>
           {ayuda && (
-            <div className="absolute bottom-12 right-3 z-10 w-64 rounded-lg border border-slate-200 bg-white/95 p-3 text-xs leading-relaxed shadow dark:border-ink-line dark:bg-ink-2/95">
+            <div className="absolute bottom-36 right-3 z-10 w-64 md:bottom-12 rounded-lg border border-slate-200 bg-white/95 p-3 text-xs leading-relaxed shadow dark:border-ink-line dark:bg-ink-2/95">
               <b>Ratón</b> · izquierdo o central: orbitar · derecho o Shift+central: desplazar · rueda: zoom hacia el cursor<br />
               <b>Teclado</b> (puntero sobre el visor) · 1 frente · 3 lado · 7 planta (Ctrl: lado opuesto) · 0 iso · 5 orto/persp · 2 4 6 8 girar 15° · F o . encuadrar selección · Inicio encuadrar todo<br />
               <b>Gizmo</b> · clic en X, Y o Z para mirar desde ese eje<br />

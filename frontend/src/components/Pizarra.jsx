@@ -54,14 +54,25 @@ export function guion(data) {
     const filas = (b.dnum || ["d1", "d2", "d3", "d4"]).map((d, k) => `${d} ${LOC[k]}`);
     const cols = b.Aidx.map((c) => data.labels[c].replace(/\(.*/, ""));
     const expl = [];
-    b.Asub.forEach((f, r) => f.forEach((v, c) => {
-      if (Math.abs(v) < 1e-12) return;
-      const D = cols[c];
-      if (r % 2 === 0 && Math.abs(Math.abs(v) - 1) > 1e-9) expl.push(`${b.dnum?.[r] || "d" + (r + 1)} = ${g(v)}·${D}: brazo rígido de ${g(Math.abs(v))} m, el giro ${D} desplaza el borde de la parte flexible.`);
-      else if (r % 2 === 0) expl.push(`${b.dnum?.[r] || "d" + (r + 1)} = ${v > 0 ? "" : "−"}${D}: el extremo se desplaza con el piso${v < 0 ? " (signo − por el sentido local de la barra)" : ""}.`);
-      else expl.push(`${b.dnum?.[r] || "d" + (r + 1)} = ${D}: el extremo gira con el nudo.`);
-    }));
-    add(3, { bloque: "A", b, filas, cols, M: b.Asub, nota: `[A] de ${nombre(b)}: cada fila dice cuánto se mueve ese GDL local cuando se activa un GDL global (y los demás quedan fijos). ${expl.slice(0, 3).join(" ")}` });
+    b.Asub.forEach((f, r) => {
+      const dn = b.dnum?.[r] || "d" + (r + 1);
+      const partes = [];
+      f.forEach((v, c) => {
+        if (Math.abs(v) < 1e-12) return;
+        const D = cols[c];
+        const giro = /^D\d+\(θ/.test(data.labels[b.Aidx[c]] || "");
+        const sg = v < 0 ? "−" : "";
+        const av = Math.abs(v);
+        if (r % 2 === 0) {
+          if (giro) partes.push(`${g(v)}·${D} (brazo rígido de ${g(av)} m: el giro ${D} desplaza el borde de la parte flexible)`);
+          else if (Math.abs(av - 1) < 1e-9) partes.push(`${sg}${D} (el extremo se desplaza con el piso${v < 0 ? "; signo − por el sentido local de la barra" : ""})`);
+          else partes.push(`${g(v)}·${D} (proyección: factor cos/sen del ángulo de la barra respecto al desplazamiento ${D}, no es un brazo)`);
+        } else if (giro) partes.push(`${sg}${D} (el extremo gira con el nudo)`);
+        else partes.push(`${g(v)}·${D} (rotación de cuerda: la barra gira al desplazarse ${D}, factor sen/cos α dividido por L)`);
+      });
+      if (partes.length) expl.push(`${dn} (${LOC[r]}) = ${partes.join(" + ")}.`);
+    });
+    add(3, { bloque: "A", b, filas, cols, M: b.Asub, nota: `[A] de ${nombre(b)}: cada fila dice cuánto se mueve ese GDL local cuando se activa un GDL global (y los demás quedan fijos). ${expl.join(" ")}` });
   });
 
   // 4–7 · EI, G, Ac, α

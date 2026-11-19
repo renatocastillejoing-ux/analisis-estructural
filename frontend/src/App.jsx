@@ -742,9 +742,9 @@ function BarraHerramientas3D({ tool, setTool, deshacer, rehacer, puedeDeshacer, 
   const [verHist, setVerHist] = useState(false);
   const herr = modo3d ? HERR3D.filter((h) => ["select", "recuadro", "barra", "eliminar"].includes(h.id)) : HERR3D.filter((h) => h.id !== "recuadro");
   return (
-    <div className="absolute left-3 top-14 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/95 p-1 shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Herramientas de dibujo 3D">
+    <div className="absolute bottom-36 left-3 flex flex-row flex-wrap gap-1 rounded-lg md:bottom-auto md:top-14 md:flex-col border border-slate-200 bg-white/95 p-1 shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Herramientas de dibujo 3D">
       {verHist && (
-        <div className="absolute left-12 top-0 z-20 max-h-80 w-60 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-ink-line dark:bg-ink-2" role="list" aria-label="Historial de cambios">
+        <div className="absolute bottom-full left-0 z-20 mb-1 max-h-60 w-60 md:bottom-auto md:left-12 md:top-0 md:mb-0 md:max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-ink-line dark:bg-ink-2" role="list" aria-label="Historial de cambios">
           <div className="px-2 py-1 font-semibold">Historial de cambios</div>
           {futuro.slice().reverse().map((t, k) => (
             <button key={`f${k}`} onClick={() => rehacer(futuro.length - k)} className="block w-full truncate rounded px-2 py-1 text-left text-slate-400 hover:bg-slate-100 dark:hover:bg-ink-3" title="Rehacer hasta aquí">↷ {t}</button>
@@ -759,7 +759,7 @@ function BarraHerramientas3D({ tool, setTool, deshacer, rehacer, puedeDeshacer, 
       {herr.map((h) => (
         <button key={h.id} className={b(tool === h.id)} title={`${h.label} (${h.kbd})`} aria-label={h.label} aria-pressed={tool === h.id} onClick={() => setTool(h.id)}>{h.icon}</button>
       ))}
-      <div className="my-0.5 border-t border-slate-200 dark:border-ink-line" />
+      <div className="mx-0.5 border-l border-slate-200 dark:border-ink-line md:mx-0 md:my-0.5 md:border-l-0 md:border-t" />
       <button className={b(false) + " disabled:opacity-30"} disabled={!puedeDeshacer} title="Deshacer (Ctrl+Z)" aria-label="Deshacer" onClick={deshacer}>↶</button>
       <button className={b(false) + " disabled:opacity-30"} disabled={!puedeRehacer} title="Rehacer (Ctrl+Y)" aria-label="Rehacer" onClick={() => rehacer()}>↷</button>
       <button className={b(verHist)} title="Historial de cambios" aria-label="Historial de cambios" aria-pressed={verHist} onClick={() => setVerHist((v) => !v)}>☰</button>
