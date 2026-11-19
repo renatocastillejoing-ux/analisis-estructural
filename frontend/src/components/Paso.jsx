@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { pellizcoEscala } from "../pinch.js";
+import { useCompacto, useEscalaTexto, useHorizontal } from "../movil.js";
 import { metodoA } from "../api.js";
 import Pizarra from "./Pizarra.jsx";
 import { BotonExcel } from "./Exportaciones.jsx";
+import { HojaInferior, SelectorPaso, Segmentado, btnIcono, btnPlay } from "./BarraMovil.jsx";
 
 // Reproductor del Método Sistematizado de Rigidez (matriz [A], K = AᵀkA):
 // cada paso trae su figura animada y sus matrices, cálculo a cálculo.
@@ -16,6 +20,8 @@ export default function Paso({ modelo, onVolver }) {
   const [play, setPlay] = useState(false);
   const [vel, setVel] = useState(2600);
   const [modo, setModo] = useState("pizarra");      // «pizarra» = como lo resuelve el profesor; «pasos» = reproductor animado
+  const compacto = useCompacto(), horizontal = useHorizontal();
+  const [menu, setMenu] = useState(false);
 
   useEffect(() => {
     let vivo = true;
@@ -68,11 +74,21 @@ export default function Paso({ modelo, onVolver }) {
       </div>
     );
   }
-  if (!data) return <div className="m-auto text-sm text-slate-600 dark:text-slate-300">Resolviendo con el método [A]…</div>;
+  if (!data) return (
+    <div className="flex min-h-0 flex-1 flex-col" aria-busy="true">
+      <div className="h-14 shrink-0 border-b border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" />
+      <div className="silueta space-y-3 p-3 sm:p-6">
+        <p className="text-sm text-slate-600 dark:text-slate-300">Resolviendo con el método [A]…</p>
+        <div className="h-7 w-2/3 max-w-md rounded-md bg-slate-200 dark:bg-ink-3" />
+        <div className="h-24 rounded-lg bg-slate-200 dark:bg-ink-3" />
+        <div className="h-40 rounded-lg bg-slate-200 dark:bg-ink-3" />
+      </div>
+    </div>
+  );
 
   const ir = (k) => { setPlay(false); setI(Math.max(0, Math.min(n - 1, k))); };
   const selector = (
-    <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs sm:px-6 dark:border-ink-line dark:bg-ink-3">
+    <div className="selector-ver flex items-center gap-1 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs sm:px-6 dark:border-ink-line dark:bg-ink-3">
       <span className="mr-1 text-slate-500 dark:text-slate-400">Ver:</span>
       {[["pizarra", "Como el profesor (hoja continua)"], ["pasos", "Pasos animados"]].map(([v, l]) => (
         <button key={v} onClick={() => setModo(v)} className={`rounded-full border px-3 py-0.5 ${modo === v ? "border-teal bg-teal font-semibold text-white" : "border-slate-300 dark:border-ink-line"}`}>{l}</button>
@@ -80,7 +96,52 @@ export default function Paso({ modelo, onVolver }) {
       {modo === "pizarra" && <span className="ml-auto"><BotonExcel modelo={modelo} className="rounded-md border border-slate-300 px-3 py-0.5 text-xs hover:bg-slate-100 dark:border-ink-line dark:hover:bg-ink-3" /></span>}
     </div>
   );
-  if (modo === "pizarra") return <div className="flex min-h-0 min-w-0 flex-1 flex-col">{selector}<Pizarra data={data} /></div>;
+  // teléfono: «Ver» y Excel pasan al menú ⋯ de la barra única
+  const verMovil = (
+    <>
+      <Segmentado etiqueta="Ver" valor={modo} onCambiar={(v) => { setMenu(false); setModo(v); }} opciones={[["pizarra", "Hoja continua"], ["pasos", "Pasos animados"]]} />
+      <BotonExcel modelo={modelo} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm hover:bg-slate-100 dark:border-ink-line dark:hover:bg-ink-3" />
+    </>
+  );
+  if (modo === "pizarra") return <div className="flex min-h-0 min-w-0 flex-1 flex-col">{!compacto && selector}<Pizarra data={data} menuExtra={compacto ? verMovil : null} /></div>;
+
+  if (compacto) {
+    const vertical = horizontal;
+    return (
+      <div className={`flex min-h-0 min-w-0 flex-1 ${vertical ? "flex-row" : "flex-col"}`}>
+        <div className={vertical ? "flex w-16 shrink-0 flex-col items-center justify-center gap-1.5 border-r border-slate-200 bg-white py-2 pl-[env(safe-area-inset-left)] dark:border-ink-line dark:bg-ink-2"
+          : "flex h-14 shrink-0 items-center gap-1 border-b border-slate-200 bg-white px-2 dark:border-ink-line dark:bg-ink-2"}>
+          <button onClick={() => { if (i >= n - 1) setI(0); setPlay((p) => !p); }} className={btnPlay} aria-label={play ? "Pausa" : "Reproducir"}>{play ? "⏸" : "▶"}</button>
+          <button onClick={() => ir(i - 1)} className={btnIcono} aria-label="Paso anterior">◀</button>
+          <SelectorPaso actual={i + 1} total={n} vertical={vertical} onElegir={(v) => ir(+v)}
+            opciones={data.pasos.map((p, k) => ({ valor: k, actual: k === i, texto: `Paso ${etiquetaPaso(p)} · ${p.titulo}` }))} />
+          <button onClick={() => ir(i + 1)} className={btnIcono} aria-label="Paso siguiente">▶</button>
+          <button onClick={() => setMenu(true)} className={`${btnIcono} ${vertical ? "" : "ml-auto"}`} aria-label="Más opciones">⋯</button>
+        </div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="h-1 shrink-0 bg-slate-200 dark:bg-ink-3"><div className="h-1 bg-teal transition-all duration-500" style={{ width: `${((i + 1) / n) * 100}%` }} /></div>
+          <div key={i} className="paso-in min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-3 pb-[max(.75rem,env(safe-area-inset-bottom))]">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wide text-teal-dark dark:text-teal-soft">Paso {etiquetaPaso(paso)}</div>
+              <h2 className="text-lg font-semibold">{paso.titulo}</h2>
+              <p className="max-w-3xl text-sm text-slate-600 dark:text-slate-300">{paso.desc}</p>
+              {i === 0 && <p className="mt-2 max-w-3xl rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-ink-3 dark:text-slate-300">Convención del profesor: giros y momentos <b>antihorarios positivos</b> (horario negativo), 4 GDL por barra (Δ y θ en cada extremo) y deformación axial despreciada. Las placas incluyen la deformación por corte (α).</p>}
+            </div>
+            <PasoCuerpo paso={paso} data={data} />
+          </div>
+        </div>
+        <HojaInferior abierta={menu} onCerrar={() => setMenu(false)} titulo="Opciones del paso a paso">
+          {verMovil}
+          <Segmentado etiqueta="Velocidad" valor={vel} onCambiar={setVel} opciones={VELOCIDADES.map(([l, v]) => [v, l])} />
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => { setMenu(false); ir(0); }} className={btn}>⏮ Primer paso</button>
+            <button onClick={() => { setMenu(false); ir(n - 1); }} className={btn}>Último paso ⏭</button>
+          </div>
+          <p className="text-center text-xs text-slate-500">{data.n_gdl} GDL · {data.barras.length} barras · K = Σ AᵀkA</p>
+        </HojaInferior>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -276,8 +337,9 @@ function curvaBarra(b, d, amp, X, Y) {
 function Figura({ data, W = 720, H = 400, pad = 70, foco, tenue, children, deformada, amp = 0 }) {
   const barras = data.barras;
   const G = useGeom(barras, W, H, pad);
+  const ref = useRef(null), esc = useEscalaTexto(ref, W);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto max-h-[440px] w-full rounded-xl border border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2">
+    <svg ref={ref} style={esc.style} viewBox={`0 0 ${W} ${H}`} className={`${esc.className} h-auto max-h-[440px] w-full rounded-xl border border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2`}>
       <Apoyos nudos={data.nudos} X={G.X} Y={G.Y} />
       {barras.map((b, k) => {
         const on = foco == null ? !tenue?.(k) : foco === k;
@@ -328,7 +390,7 @@ function Activar({ paso, data }) {
         <div className="flex max-h-28 flex-wrap gap-1.5 overflow-y-auto">
           {labels.map((l, k) => (
             <button key={k} onClick={() => elegir(k)} title={l}
-              className={`rounded-full border min-h-9 min-w-9 px-3 py-1 text-xs font-semibold transition ${k === g ? "scale-105 border-teal bg-teal text-white shadow" : "border-slate-200 text-slate-600 dark:border-ink-line dark:text-slate-300"}`}>D{k + 1}</button>
+              className={`ficha rounded-full border min-h-9 min-w-9 px-3 py-1 text-xs font-semibold transition ${k === g ? "scale-105 border-teal bg-teal text-white shadow" : "border-slate-200 text-slate-600 dark:border-ink-line dark:text-slate-300"}`}>D{k + 1}</button>
           ))}
           {fijo && <button onClick={soltar} className="ml-2 text-xs text-teal-dark underline dark:text-teal-soft">reanudar ciclo</button>}
         </div>
@@ -451,19 +513,21 @@ function PasoBarras({ data, render, arriba, pie }) {
   const nb = data.barras.length;
   const [foco, elegir, fijo, soltar] = useCiclo(nb, T_BARRA, true);
   const refs = useRef([]);
-  useEffect(() => { refs.current[foco]?.scrollIntoView({ block: "nearest", behavior: "smooth" }); }, [foco]);
+  const compacto = useCompacto();
+  // en el teléfono las tarjetas van en carrusel: se centra la barra en foco
+  useEffect(() => { refs.current[foco]?.scrollIntoView({ block: "nearest", inline: compacto ? "center" : "nearest", behavior: "smooth" }); }, [foco, compacto]);
   return (
     <div className="space-y-4">
       {arriba && arriba(foco)}
       <div className="grid gap-4 xl:grid-cols-[minmax(0,420px)_1fr]">
-        <div className="xl:sticky xl:top-0 xl:self-start">
+        <div className={compacto ? "sticky -top-3 z-10 -mx-3 bg-slate-50 px-3 pb-1 pt-1 dark:bg-ink [&_svg]:max-h-[38dvh]" : "xl:sticky xl:top-0 xl:self-start"}>
           <Figura data={data} W={520} H={360} pad={55} foco={foco} />
           <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Barra {foco + 1} de {nb}. {fijo ? <button className="underline" onClick={soltar}>recorrer todas</button> : "Clic en una tarjeta para fijarla."}</p>
         </div>
-        <div className="grid content-start gap-3 sm:grid-cols-2">
+        <div className={compacto ? "-mx-3 flex snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain px-3 pb-2 [scrollbar-width:none]" : "grid content-start gap-3 sm:grid-cols-2"}>
           {data.barras.map((b, k) => (
             <button type="button" key={k} ref={(el) => (refs.current[k] = el)} onClick={() => elegir(k)}
-              className={`celda-in rounded-xl border p-3 text-left transition ${k === foco ? "border-amber-400 bg-amber-50 shadow ring-2 ring-amber-300 dark:bg-amber-900/20" : "border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2"}`}
+              className={`celda-in rounded-xl border p-3 text-left transition ${compacto ? "w-[86%] max-w-sm shrink-0 snap-center self-start" : ""} ${k === foco ? "border-amber-400 bg-amber-50 shadow ring-2 ring-amber-300 dark:bg-amber-900/20" : "border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2"}`}
               style={{ animationDelay: `${k * 60}ms` }}>
               <div className="mb-2 flex items-center gap-2 text-sm">
                 <b>{b.elem}</b><span className="rounded-full bg-slate-100 px-2 text-[11px] dark:bg-ink-3">{b.tipo}</span>
@@ -493,13 +557,16 @@ function Ensamble({ paso, data }) {
   const toca = (r, c) => { if (!ultima) return false; const a = ultima.Aidx.indexOf(r), b = ultima.Aidx.indexOf(c); return a >= 0 && b >= 0 && Math.abs(ultima.AtKAsub[a][b]) > 1e-12; };
   const DL = data.labels.map((_, x) => `D${x + 1}`);
   const idxBarra = ultima ? data.barras.findIndex((b) => b.elem === ultima.elem) : null;
+  const compacto = useCompacto();
+  const fichas = useRef(null);
+  useEffect(() => { if (compacto) fichas.current?.children[Math.max(0, k - 1)]?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" }); }, [k, compacto]);
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,420px)_1fr]">
-      <div className="space-y-2">
+      <div className={compacto ? "sticky -top-3 z-10 -mx-3 space-y-2 bg-slate-50 px-3 pb-1 pt-1 dark:bg-ink [&_svg]:max-h-[38dvh]" : "space-y-2"}>
         <Figura data={data} W={520} H={360} pad={55} foco={idxBarra} />
-        <div className="flex flex-wrap gap-1">
+        <div ref={fichas} className={compacto ? "flex snap-x gap-1 overflow-x-auto [scrollbar-width:none]" : "flex flex-wrap gap-1"}>
           {bars.map((b, x) => (
-            <button key={x} onClick={() => elegir(x + 1)} className={`rounded-full border min-h-9 min-w-9 px-2.5 py-0.5 text-xs ${x < k ? "border-teal bg-teal/10 text-teal-dark dark:text-teal-soft" : "border-slate-200 text-slate-500 dark:border-ink-line"}`}>{x < k ? "✓ " : ""}{b.elem}</button>
+            <button key={x} onClick={() => elegir(x + 1)} className={`ficha shrink-0 snap-center rounded-full border min-h-9 min-w-9 px-2.5 py-0.5 text-xs ${x < k ? "border-teal bg-teal/10 text-teal-dark dark:text-teal-soft" : "border-slate-200 text-slate-500 dark:border-ink-line"}`}>{x < k ? "✓ " : ""}{b.elem}</button>
           ))}
           <button onClick={() => { elegir(0); soltar(); }} className="text-xs underline">repetir</button>
         </div>
@@ -508,8 +575,8 @@ function Ensamble({ paso, data }) {
         <div className="rounded-lg bg-slate-100 px-3 py-2 text-sm dark:bg-ink-3">
           {k === 0 ? "[K] empieza en cero." : k < bars.length ? <>Se suma <b>{ultima.elem}</b>: [K] ← [K] + [A]ᵀ[k][A]</> : <><b>[K] completa</b> = Σ [Aᵢ]ᵀ[Kᵢ][Aᵢ] ({bars.length} barras)</>}
         </div>
-        <div className="overflow-x-auto">
-          <table className="text-sm tabular-nums">
+        <div className="tabla-scroll">
+          <table className="matriz text-sm tabular-nums">
             <thead><tr><th />{DL.map((d) => <th key={d} className="px-2 py-1 text-xs text-slate-500">{d}</th>)}</tr></thead>
             <tbody>
               {acc.map((f, r) => (
@@ -553,10 +620,11 @@ function Deformada({ data, p }) {
   const els = data.diagramas.elementos;
   const W = 720, H = 400;
   const G = useGeom(els, W, H, 70);
+  const ref = useRef(null), esc = useEscalaTexto(ref, W);
   const dmax = Math.max(1e-12, ...els.flatMap((e) => (e.defx || []).map((v, k) => Math.hypot(v, e.defy?.[k] || 0))));
   const f = (0.08 * G.span) / dmax * p;
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto max-h-[440px] w-full rounded-xl border border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2">
+    <svg ref={ref} style={esc.style} viewBox={`0 0 ${W} ${H}`} className={`${esc.className} h-auto max-h-[440px] w-full rounded-xl border border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2`}>
       <Apoyos nudos={data.nudos} X={G.X} Y={G.Y} />
       {els.map((e, k) => <line key={k} x1={G.X(e.xi)} y1={G.Y(e.yi)} x2={G.X(e.xj)} y2={G.Y(e.yj)} className="stroke-slate-300 dark:stroke-ink-line" strokeWidth={4} />)}
       {els.map((e, k) => {
@@ -583,6 +651,7 @@ export function DiagramaPaso({ data, tipo }) {
 // Diagrama N/V/M sobre el pórtico (se usa también en Resultados).
 export function Diagrama({ elementos, nudos = [], tipo, animado, W = 900, H = 440 }) {
   const G = useGeom(elementos.length ? elementos : [{ xi: 0, yi: 0, xj: 1, yj: 1 }], W, H, 90);
+  const ref = useRef(null), esc = useEscalaTexto(ref, W);
   if (!elementos.length) return <p className="text-sm text-slate-500">Sin datos de diagrama.</p>;
   const vmax = Math.max(1e-9, ...elementos.flatMap((e) => (e[tipo] || []).map(Math.abs)));
   const k = 70 / vmax;
@@ -627,7 +696,7 @@ export function Diagrama({ elementos, nudos = [], tipo, animado, W = 900, H = 44
     );
   });
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="mx-auto h-auto max-h-[460px] w-full">
+    <svg ref={ref} style={esc.style} viewBox={`0 0 ${W} ${H}`} className={`${esc.className} mx-auto h-auto max-h-[460px] w-full`}>
       {elementos.map((e, q) => <line key={q} x1={G.X(e.xi)} y1={G.Y(e.yi)} x2={G.X(e.xj)} y2={G.Y(e.yj)} className="stroke-slate-700 dark:stroke-slate-300" strokeWidth={2.5} strokeLinecap="round" />)}
       <Apoyos nudos={nudos} X={G.X} Y={G.Y} />
       {formas}
@@ -638,6 +707,8 @@ export function Diagrama({ elementos, nudos = [], tipo, animado, W = 900, H = 44
 
 /* ---------- piezas de matrices ---------- */
 export function Matriz({ M: M0, filas: f0, columnas: c0, titulo, resaltarFilas, resaltarCols, resaltarCeldas, grande, max = 60 }) {
+  const compacto = useCompacto();
+  const [ampliar, setAmpliar] = useState(false);
   if (!M0 || !M0.length) return null;
   const nr = M0.length, nc = Array.isArray(M0[0]) ? M0[0].length : 1;
   const recorte = nr > max || nc > max;
@@ -647,10 +718,16 @@ export function Matriz({ M: M0, filas: f0, columnas: c0, titulo, resaltarFilas, 
   let seq = 0;
   return (
     <div>
-      {titulo && <div className="mb-2 text-sm font-semibold text-teal-dark dark:text-teal-soft">{titulo}</div>}
+      {(titulo || (compacto && nc > 3)) && (
+        <div className="mb-2 flex items-center gap-2">
+          {titulo && <div className="text-sm font-semibold text-teal-dark dark:text-teal-soft">{titulo}</div>}
+          {compacto && nc > 3 && <button type="button" onClick={(e) => { e.stopPropagation(); setAmpliar(true); }} className="ficha ml-auto rounded-md border border-slate-300 px-2 text-xs dark:border-ink-line" aria-label="Ampliar la matriz a pantalla completa">⤢ Ampliar</button>}
+        </div>
+      )}
+      {ampliar && <MatrizAmpliada M={M0} filas={f0} columnas={c0} titulo={titulo} onCerrar={() => setAmpliar(false)} />}
       {recorte && <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">Matriz de {nr}×{nc}: se muestran las primeras {Math.min(nr, max)} filas y {Math.min(nc, max)} columnas. La matriz completa entra en el cálculo y en la memoria.</p>}
-      <div className="overflow-x-auto">
-        <table className={`tabular-nums ${grande ? "text-sm" : "text-xs"}`}>
+      <div className="tabla-scroll">
+        <table className={`matriz tabular-nums ${grande ? "text-sm" : "text-xs"}`}>
           {columnas && (
             <thead><tr><th />{columnas.map((c, j) => <th key={j} className={`px-2 py-1 font-semibold ${resaltarCols?.includes(j) ? "text-amber-600 dark:text-amber-400" : "text-slate-500 dark:text-slate-400"}`}>{c}</th>)}</tr></thead>
           )}
@@ -674,6 +751,55 @@ export function Matriz({ M: M0, filas: f0, columnas: c0, titulo, resaltarFilas, 
         </table>
       </div>
     </div>
+  );
+}
+
+// Matriz a pantalla completa (teléfono): encabezado y primera columna fijos, zoom de dos dedos o
+// A−/A+, factor común opcional (×10ⁿ) y aviso de girar el teléfono si es ancha y está en vertical.
+function MatrizAmpliada({ M, filas, columnas, titulo, onCerrar }) {
+  const caja = useRef(null);
+  const [esc, setEsc] = useState(1);
+  const escRef = useRef(1); escRef.current = esc;
+  const [factor, setFactor] = useState(false);
+  const [vertical, setVertical] = useState(() => window.matchMedia?.("(orientation: portrait)").matches);
+  useEffect(() => pellizcoEscala(caja.current, () => escRef.current, setEsc, { min: 0.5, max: 3 }), []);
+  useEffect(() => {
+    const m = window.matchMedia?.("(orientation: portrait)"); if (!m) return undefined;
+    const h = () => setVertical(m.matches); m.addEventListener?.("change", h);
+    const k = (e) => { if (e.key === "Escape") onCerrar(); }; window.addEventListener("keydown", k);
+    return () => { m.removeEventListener?.("change", h); window.removeEventListener("keydown", k); };
+  }, [onCerrar]);
+  const filasM = M.map((f) => (Array.isArray(f) ? f : [f]));
+  const nc = filasM[0]?.length || 1;
+  const amax = Math.max(0, ...filasM.flat().map((v) => Math.abs(+v) || 0));
+  const exp = amax >= 1e3 ? Math.floor(Math.log10(amax) / 3) * 3 : 0;      // múltiplo de 3: ×10³, ×10⁶
+  const div = factor && exp ? 10 ** exp : 1;
+  const sup = (n) => String(n).split("").map((c) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[+c] ?? c).join("");
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex flex-col bg-white dark:bg-ink" role="dialog" aria-label={titulo || "Matriz"}>
+      <div className="pad-seguro-x flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 pt-[env(safe-area-inset-top)] dark:border-ink-line">
+        <b className="min-w-0 flex-1 truncate text-sm text-teal-dark dark:text-teal-soft">{titulo || "Matriz"}{div > 1 ? `  ×10${sup(exp)}` : ""}</b>
+        {exp > 0 && <button onClick={() => setFactor((f) => !f)} aria-pressed={factor} className={`rounded-md border px-2 text-sm ${factor ? "border-teal bg-teal/15 font-semibold" : "border-slate-300 dark:border-ink-line"}`} title="Sacar un factor común">×10{sup(exp)}</button>}
+        <button onClick={() => setEsc((e) => Math.max(0.5, +(e - 0.15).toFixed(2)))} className="rounded-md border border-slate-300 px-2 text-sm dark:border-ink-line" aria-label="Letra más chica">A−</button>
+        <button onClick={() => setEsc((e) => Math.min(3, +(e + 0.15).toFixed(2)))} className="rounded-md border border-slate-300 px-2 text-sm dark:border-ink-line" aria-label="Letra más grande">A+</button>
+        <button onClick={onCerrar} className="rounded-md bg-teal px-3 text-sm font-semibold text-white" aria-label="Cerrar">✕</button>
+      </div>
+      {vertical && nc > 5 && <p className="shrink-0 bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">↻ Gira el teléfono para ver más columnas · pellizca para acercar</p>}
+      <div ref={caja} className="tabla-scroll matriz-amplia min-h-0 flex-1 overflow-auto overscroll-contain pb-[env(safe-area-inset-bottom)]" style={{ touchAction: "pan-x pan-y" }}>
+        <table className="tabular-nums text-xs" style={{ zoom: esc }}>
+          {columnas && <thead><tr><th className="px-2 py-1" />{columnas.map((c, j) => <th key={j} className="whitespace-nowrap px-2 py-1 font-semibold text-slate-500 dark:text-slate-400">{c}</th>)}</tr></thead>}
+          <tbody>
+            {filasM.map((f, r) => (
+              <tr key={r}>
+                <th className="whitespace-nowrap px-2 py-1 text-left font-semibold text-slate-500 dark:text-slate-400">{filas?.[r] ?? r + 1}</th>
+                {f.map((v, c) => <td key={c} className={`min-w-14 border border-slate-200 px-2 py-1 text-right dark:border-ink-line ${Math.abs(+v) < 1e-12 ? "text-slate-400" : ""}`}>{fmt(+v / div)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

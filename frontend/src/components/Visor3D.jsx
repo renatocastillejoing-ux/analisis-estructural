@@ -79,7 +79,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
   // montaje: renderer, cámara, controles, luces
   useEffect(() => {
     const el = host.current;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });   // permite exportar la imagen
+    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: false });   // exportarImagen renderiza justo antes de toDataURL
     // en móviles (puntero táctil) se baja la resolución: menos píxeles = fluidez y menos batería
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.matchMedia?.("(pointer: coarse)").matches ? 1.5 : 2));
     el.appendChild(renderer.domElement);
@@ -111,6 +111,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       const oscuro = document.documentElement.classList.contains("dark");
       scene.background = new THREE.Color(oscuro ? 0x0e1421 : 0xf1f5f9);
       st.current.oscuro = oscuro;
+      st.current.pedir?.();
     };
     tema();
     const mo = new MutationObserver(tema);
@@ -130,13 +131,20 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       persp.updateProjectionMatrix();
       orto.zoom = orto.zoom || 1; ajustarOrto();
       if (st.current.autoFit) st.current.encuadrarAuto?.();   // el tamaño real llega después del primer encuadre
+      st.current.pedir?.();
     });
     ro.observe(el);
     const q = new THREE.Quaternion(), v = new THREE.Vector3();
-    renderer.setAnimationLoop(() => {
-      controls.update();
+    // render bajo demanda: solo cuando la cámara o la escena cambian (y mientras dura la
+    // amortiguación de la órbita); en pausa si la pestaña está oculta o el visor fuera de pantalla
+    let raf = 0, visible = true;
+    const pedir = () => { if (!raf && visible && !document.hidden) raf = requestAnimationFrame(cuadro); };
+    const cuadro = () => {
+      raf = 0;
+      const mov = controls.update();
       const cam = st.current.camera || persp;
       renderer.render(scene, cam);
+      if (mov) pedir();
       // gizmo de navegación: proyecta los ejes del mundo con la orientación de la cámara
       const giz = st.current.gizmo;
       if (giz) {
@@ -150,7 +158,14 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
           if (ln) { ln.setAttribute("x2", 40 + v.x * 28); ln.setAttribute("y2", 40 - v.y * 28); }
         });
       }
-    });
+    };
+    controls.addEventListener("change", pedir);
+    controls.addEventListener("start", pedir);
+    const alVer = () => pedir();
+    document.addEventListener("visibilitychange", alVer);
+    const io = new IntersectionObserver(([en]) => { visible = en.isIntersecting; pedir(); });
+    io.observe(el);
+    pedir();
 
     // perspectiva ⇄ ortográfica sin perder el encuadre
     const usarCamara = (ortografica) => {
@@ -162,13 +177,14 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
         persp.position.copy(controls.target).add(orto.position.clone().sub(controls.target).normalize().multiplyScalar(dist));
         persp.quaternion.copy(orto.quaternion); st.current.camera = persp;
       }
-      controls.object = nueva; controls.update();
+      controls.object = nueva; controls.update(); st.current.pedir?.();
     };
 
-    st.current = { ...st.current, renderer, scene, camera, persp, orto, controls, raiz, suelo, usarCamara, ajustarOrto };
+    st.current = { ...st.current, renderer, scene, camera, persp, orto, controls, raiz, suelo, usarCamara, ajustarOrto, pedir };
     el.__visor = st;                                   // inspección en pruebas
     return () => {
-      renderer.setAnimationLoop(null);
+      cancelAnimationFrame(raf); io.disconnect(); document.removeEventListener("visibilitychange", alVer);
+      controls.removeEventListener("change", pedir); controls.removeEventListener("start", pedir);
       renderer.domElement.removeEventListener("pointerdown", alPulsar, true);
       ro.disconnect(); mo.disconnect(); controls.dispose();
       raiz.traverse((o) => { o.geometry?.dispose(); (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m?.map?.dispose(); m?.dispose(); }); });
@@ -176,6 +192,9 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
       el.removeChild(renderer.domElement);
     };
   }, []);
+
+  // cualquier cambio de props/estado (geometría, colores, selección…) repinta un cuadro
+  useEffect(() => { st.current.pedir?.(); });
 
   const visibles = useMemo(() => escena.miembros.map((m, k) => ({ m, k })).filter(({ m }) => m.piso == null || m.piso <= pisoMax), [escena, pisoMax]);
 
@@ -376,7 +395,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
     orto.zoom = 1;
     controls.target.copy(c);
     persp.updateProjectionMatrix(); st.current.ajustarOrto?.(); orto.updateProjectionMatrix();
-    controls.update();
+    controls.update(); st.current.pedir?.();
   };
   const [ortografica, setOrtografica] = useState(false);
   useEffect(() => { st.current.usarCamara?.(ortografica); }, [ortografica]);
@@ -403,7 +422,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
         const off = camera.position.clone().sub(controls.target);
         if (k === "4" || k === "6") off.applyAxisAngle(new THREE.Vector3(0, 1, 0), k === "4" ? -a : a);
         else { const lat = new THREE.Vector3().crossVectors(camera.up, off).normalize(); off.applyAxisAngle(lat, k === "8" ? -a : a); }
-        camera.position.copy(controls.target).add(off); camera.lookAt(controls.target); controls.update();
+        camera.position.copy(controls.target).add(off); camera.lookAt(controls.target); controls.update(); st.current.pedir?.();
       } else hecho = false;
       if (hecho) { e.preventDefault(); e.stopPropagation(); }
     };
@@ -450,7 +469,15 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
     <div className="relative h-full w-full">
       <div ref={host} className="absolute inset-0"
         onPointerEnter={() => { dentro.current = true; }}
-        onPointerDown={(e) => { dentro.current = true; abajo.current = [e.clientX, e.clientY]; }}
+        onPointerDown={(e) => {
+          dentro.current = true; abajo.current = [e.clientX, e.clientY];
+          // doble toque (táctil) en el visor: encuadra todo
+          if (e.pointerType === "touch" && e.isPrimary) {
+            const t = performance.now(), u = st.current.ultToque;
+            if (u && t - u.t < 320 && Math.hypot(e.clientX - u.x, e.clientY - u.y) < 30) { st.current.ultToque = null; encuadrar("iso", false, true); }
+            else st.current.ultToque = { t, x: e.clientX, y: e.clientY };
+          }
+        }}
         onPointerDownCapture={(e) => {      // en captura: se desactiva la órbita antes de que la cámara reciba el clic
           if (onRecuadro && e.button === 0 && (recuadro || e.ctrlKey)) {
             const r = host.current.getBoundingClientRect();

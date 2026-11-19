@@ -1,8 +1,25 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BuscadorComandos } from "./MenuBar.jsx";
 
 // Menú de pantallas chicas: vistas, buscador, todos los menús y el tema en un panel lateral.
 export default function MenuMovil({ abierto, onCerrar, menus, comandos, vistas, vista, setVista, tema, setTema, onFoto }) {
+  // deslizar a la derecha para cerrar (el panel sigue al dedo; > 80 px o un gesto rápido lo cierra)
+  const [dx, setDx] = useState(0);
+  const g = useRef(null);
+  useEffect(() => { if (abierto) setDx(0); }, [abierto]);
+  const ini = (e) => { const t = e.touches[0]; g.current = { x: t.clientX, y: t.clientY, t: performance.now(), h: null }; };
+  const mov = (e) => {
+    const s = g.current; if (!s) return;
+    const t = e.touches[0], ddx = t.clientX - s.x, ddy = t.clientY - s.y;
+    if (s.h == null && Math.hypot(ddx, ddy) > 8) s.h = Math.abs(ddx) > Math.abs(ddy);
+    if (s.h) setDx(Math.max(0, ddx));
+  };
+  const fin = () => {
+    const s = g.current; g.current = null;
+    if (!s?.h) { setDx(0); return; }
+    const rapido = dx > 30 && dx / Math.max(1, performance.now() - s.t) > 0.5;
+    if (dx > 80 || rapido) onCerrar(); else setDx(0);
+  };
   useEffect(() => {
     if (!abierto) return;
     const h = (e) => { if (e.key === "Escape") onCerrar(); };
@@ -11,8 +28,10 @@ export default function MenuMovil({ abierto, onCerrar, menus, comandos, vistas, 
   }, [abierto, onCerrar]);
   if (!abierto) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40" onMouseDown={(e) => { if (e.target === e.currentTarget) onCerrar(); }}>
-      <aside className="absolute inset-y-0 right-0 flex w-[88vw] max-w-sm flex-col bg-white shadow-2xl dark:bg-ink-2" aria-label="Menú">
+    <div className="fixed inset-0 z-50 bg-slate-900/40" onPointerDown={(e) => { if (e.target === e.currentTarget) onCerrar(); }}>
+      <aside className="absolute inset-y-0 right-0 flex w-[88vw] max-w-sm flex-col bg-white pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] shadow-2xl dark:bg-ink-2" aria-label="Menú"
+        style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: g.current ? "none" : "transform .2s ease" }}
+        onTouchStart={ini} onTouchMove={mov} onTouchEnd={fin} onTouchCancel={fin}>
         <div className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-ink-line">
           <span className="font-semibold">Menú</span>
           <button onClick={onCerrar} className="ml-auto grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Cerrar menú">✕</button>

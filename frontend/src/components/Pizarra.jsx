@@ -1,5 +1,8 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
+import { pellizcoEscala } from "../pinch.js";
+import { useCompacto, useHorizontal, useWakeLock } from "../movil.js";
+import { HojaInferior, SelectorPaso, Segmentado, btnIcono, btnPlay } from "./BarraMovil.jsx";
 import { Coordenadas, DiagramaPaso, LocalesGDL, Matriz, Vector } from "./Paso.jsx";
 
 // «Como el profesor»: la solución escrita renglón a renglón, en el mismo orden de su hoja
@@ -200,7 +203,7 @@ export function guion(data) {
 // por renglón (enfoque de HyperFrames: tiempo explícito y seek a cualquier punto): las fórmulas se
 // escriben de izquierda a derecha, las matrices aparecen celda a celda y la explicación entra al
 // lado. La cámara sigue lo que se está escribiendo.
-export default function Pizarra({ data }) {
+export default function Pizarra({ data, menuExtra }) {
   const R = useMemo(() => guion(data), [data]);
   const raiz = useRef(null), hoja = useRef(null), tl = useRef(null);
   const [play, setPlay] = useState(true);
@@ -208,6 +211,15 @@ export default function Pizarra({ data }) {
   const [prog, setProg] = useState(0);
   const [secAct, setSecAct] = useState(1);
   const [completa, setCompleta] = useState(false);
+  const compacto = useCompacto(), horizontal = useHorizontal();
+  const [lista, setLista] = useState(false);          // línea de tiempo armada (antes: silueta)
+  const [menu, setMenu] = useState(false);
+  const [escala, setEscala] = useState(1);            // zoom de la hoja (pellizco o A−/A+)
+  const escalaRef = useRef(1); escalaRef.current = escala;
+  const [verCtrl, setVerCtrl] = useState(true);       // controles visibles en modo inmersivo
+  const pausaCam = useRef(0);                         // la cámara no se mueve hasta este instante
+  const lienzo = useRef(null);
+  const compactoRef = useRef(compacto); compactoRef.current = compacto;
   const etiquetas = useRef({});
   const base = useRef(1);
   const secs = useMemo(() => [...new Set(R.map((r) => r.sec))], [R]);
@@ -215,9 +227,22 @@ export default function Pizarra({ data }) {
   const filas = useMemo(() => R.map((r, i) => <Renglon key={i} i={i} r={r} data={data} />), [R, data]);
 
   // ---- línea de tiempo ----
-  useLayoutEffect(() => {
+  // se arma después de pintar la silueta (armarla tarda ~1.5 s en una hoja grande)
+  useEffect(() => {
     const el = hoja.current;
     if (!el) return undefined;
+    setLista(false);
+    let t = null;
+    const id = setTimeout(() => {
+      const antes = tl.current?.progress?.() || 0;       // al pasar de escritorio a teléfono se rearma sin perder el avance
+      t = armar(el);
+      if (antes > 0 && antes < 1) t.progress(antes); else if (antes >= 1) t.progress(1);
+      setLista(true);
+    }, 30);
+    return () => { clearTimeout(id); t?.kill(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [R, compacto]);
+  const armar = (el) => {
     const reducir = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     // la barra de tiempo se refresca ~10 veces por segundo (no en cada cuadro: re-renderizar
     // React 60 veces por segundo con cientos de matrices bajaba la animación a 7 fps)
@@ -227,8 +252,10 @@ export default function Pizarra({ data }) {
     const camara = (nodo) => {
       const ahora = performance.now();
       if (ahora - ultimaCam < 250) return;              // sin sacudidas al hacer seek rápido
+      if (ahora < pausaCam.current) return;             // el usuario está leyendo o desplazando
       ultimaCam = ahora;
-      nodo.scrollIntoView({ behavior: reducir ? "auto" : "smooth", block: "nearest", inline: "nearest" });
+      // en el teléfono el renglón en curso queda al centro (con nearest quedaba pegado al borde)
+      nodo.scrollIntoView({ behavior: reducir ? "auto" : "smooth", block: compactoRef.current ? "center" : "nearest", inline: "nearest" });
     };
     etiquetas.current = {};
     const nodos = [...el.querySelectorAll("[data-renglon]")];
@@ -267,13 +294,33 @@ export default function Pizarra({ data }) {
     base.current = Math.min(4, Math.max(1, t.duration() / 150));
     t.timeScale(ritmo * base.current);
     if (reducir) { t.progress(1); setPlay(false); } else if (play) t.play();
-    return () => t.kill();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [R]);
+    return t;
+  };
 
   useEffect(() => { tl.current?.timeScale(ritmo * base.current); }, [ritmo]);
   useEffect(() => { const t = tl.current; if (!t) return; if (play) { if (t.progress() >= 1) t.restart(); else t.play(); } else t.pause(); }, [play]);
   useEffect(() => { if (prog >= 1) setPlay(false); }, [prog]);
+  useWakeLock(play && lista);                           // la pantalla no se apaga mientras se escribe
+
+  // pellizco sobre la hoja (teléfono y tablet)
+  useEffect(() => pellizcoEscala(lienzo.current, () => escalaRef.current, setEscala, { min: 0.5, max: 2.5 }), [compacto]);
+  // tocar, arrastrar o girar la rueda sobre la hoja pausa la cámara automática ~4 s
+  const pausarCamara = () => { if (compacto) pausaCam.current = performance.now() + 4000; };
+
+  // modo inmersivo (teléfono en pantalla completa): fuera cabecera, pie y selector; controles en
+  // cápsula flotante que se esconde sola a los 3 s mientras reproduce
+  const inmersivo = completa && compacto;
+  useEffect(() => {
+    if (!inmersivo) return undefined;
+    document.documentElement.classList.add("inmersivo");
+    return () => document.documentElement.classList.remove("inmersivo");
+  }, [inmersivo]);
+  useEffect(() => { if (!inmersivo) setVerCtrl(true); }, [inmersivo]);
+  useEffect(() => {
+    if (!inmersivo || !verCtrl || !play || menu) return undefined;
+    const t = setTimeout(() => setVerCtrl(false), 3000);
+    return () => clearTimeout(t);
+  }, [inmersivo, verCtrl, play, menu]);
 
   // ---- teclado y pantalla completa ----
   const irA = (sec) => { const p = etiquetas.current[sec]; if (p == null) return; setPlay(false); tl.current?.seek(p + 0.01); };
@@ -297,11 +344,92 @@ export default function Pizarra({ data }) {
   const alternarCompleta = () => {
     if (document.fullscreenElement) { document.exitFullscreen?.(); return; }
     if (completa) { setCompleta(false); return; }
-    const p = raiz.current?.requestFullscreen?.();
+    // en el teléfono se pide la pantalla completa de toda la página (así el menú ⋯ sigue visible)
+    const p = (compacto ? document.documentElement : raiz.current)?.requestFullscreen?.();
     if (p?.catch) p.catch(() => setCompleta(true)); else if (!p) setCompleta(true);   // sin API (iPhone): ocupa la ventana
   };
 
   const total = tl.current?.duration() || 1;
+  const fondoHoja = "bg-[linear-gradient(#e2e8f0_1px,transparent_1px),linear-gradient(90deg,#e2e8f0_1px,transparent_1px)] bg-[size:22px_22px] dark:bg-[linear-gradient(#1e293b_1px,transparent_1px),linear-gradient(90deg,#1e293b_1px,transparent_1px)]";
+  const hojaNodo = (
+    <div ref={hoja} className="hoja-gsap flex flex-wrap content-start items-start gap-3" style={escala !== 1 ? { zoom: escala } : undefined}>
+      {filas}
+    </div>
+  );
+  const silueta = !lista && (
+    <div className="silueta pointer-events-none absolute inset-x-3 top-3 space-y-3 sm:inset-x-6 sm:top-6" aria-hidden="true">
+      <div className="h-7 w-2/3 max-w-md rounded-md bg-slate-200 dark:bg-ink-3" />
+      <div className="h-24 rounded-lg bg-slate-200 dark:bg-ink-3" />
+      <div className="h-40 rounded-lg bg-slate-200 dark:bg-ink-3" />
+    </div>
+  );
+  const tiempo = (
+    <input type="range" min={0} max={1000} value={Math.round(prog * 1000)} aria-label="Avance de la resolución" disabled={!lista}
+      onChange={(e) => { setPlay(false); tl.current?.progress(+e.target.value / 1000); }}
+      className="tiempo w-full" style={{ "--p": `${prog * 100}%` }} />
+  );
+
+  if (compacto) {
+    const titulos = Object.fromEntries(R.filter((r) => r.titulo && !r.bloque && !r.pasos).map((r) => [r.sec, r.titulo]));
+    const ultimo = secs[secs.length - 1];
+    const vertical = horizontal && !inmersivo;            // teléfono en horizontal: franja de controles a la izquierda
+    const controles = (
+      <div className={vertical ? "flex h-full w-16 shrink-0 flex-col items-center justify-center gap-1.5 border-r border-slate-200 bg-white py-2 pl-[env(safe-area-inset-left)] dark:border-ink-line dark:bg-ink-2"
+        : "flex h-14 items-center gap-1 px-2"}>
+        <button onClick={() => setPlay((p) => !p)} className={btnPlay} disabled={!lista} aria-label={play ? "Pausa" : prog >= 1 ? "Repetir" : "Reproducir"}>{play ? "⏸" : prog >= 1 ? "↺" : "▶"}</button>
+        <button onClick={() => irA(Math.max(1, secAct - 1))} className={btnIcono} aria-label="Paso anterior">◀</button>
+        <SelectorPaso actual={secAct} total={ultimo} vertical={vertical} onElegir={(v) => irA(+v)}
+          opciones={secs.map((x) => ({ valor: x, actual: x === secAct, texto: `Paso ${x} · ${titulos[x] || ""}` }))} />
+        <button onClick={() => irA(Math.min(ultimo, secAct + 1))} className={btnIcono} aria-label="Paso siguiente">▶</button>
+        <button onClick={() => setMenu(true)} className={`${btnIcono} ${vertical ? "" : "ml-auto"}`} aria-label="Más opciones">⋯</button>
+      </div>
+    );
+    return (
+      <div ref={raiz} className={`flex min-h-0 flex-1 bg-slate-50 dark:bg-ink ${vertical ? "flex-row" : "flex-col"} ${completa ? "fixed inset-0 z-[60]" : ""}`}>
+        {!inmersivo && vertical && controles}
+        {!inmersivo && !vertical && (
+          <div className="relative shrink-0 border-b border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2">
+            {controles}
+            <div className="absolute inset-x-0 -bottom-3 z-10 px-1">{tiempo}</div>
+          </div>
+        )}
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          {!inmersivo && vertical && <div className="shrink-0 border-b border-slate-200 bg-white px-2 dark:border-ink-line dark:bg-ink-2">{tiempo}</div>}
+          <div ref={lienzo} onPointerDown={pausarCamara} onWheel={pausarCamara} onTouchMove={pausarCamara}
+            onClick={() => { if (inmersivo) setVerCtrl((v) => !v); }}
+            className={`relative min-h-0 flex-1 overflow-auto overscroll-contain p-3 ${inmersivo ? "pb-28 pt-[max(.75rem,env(safe-area-inset-top))]" : ""} ${fondoHoja}`}>
+            {silueta}
+            {hojaNodo}
+          </div>
+        </div>
+        {inmersivo && (
+          <div className={`capsula pad-seguro-x fixed inset-x-0 bottom-0 z-[65] ${verCtrl ? "" : "capsula-oculta"}`} onClick={(e) => e.stopPropagation()}>
+            <div className="mx-auto max-w-md rounded-2xl border border-slate-200 bg-white/95 px-1 pt-1 shadow-xl backdrop-blur dark:border-ink-line dark:bg-ink-2/95">
+              <div className="px-2">{tiempo}</div>
+              {controles}
+            </div>
+          </div>
+        )}
+        <HojaInferior abierta={menu} onCerrar={() => setMenu(false)} titulo="Opciones de la hoja">
+          {menuExtra}
+          <Segmentado etiqueta="Ritmo" valor={ritmo} onCambiar={setRitmo} opciones={[[0.6, "Lento"], [1, "Normal"], [1.8, "Rápido"], [3.5, "Muy r."], [8, "×8"]]} />
+          <div className="flex items-center gap-2">
+            <span className="w-16 shrink-0 text-xs text-slate-500 dark:text-slate-400">Letra</span>
+            <button onClick={() => setEscala((e) => Math.max(0.5, +(e - 0.15).toFixed(2)))} className={btn} aria-label="Hoja más chica">A−</button>
+            <span className="w-12 text-center text-xs tabular-nums">{Math.round(escala * 100)} %</span>
+            <button onClick={() => setEscala((e) => Math.min(2.5, +(e + 0.15).toFixed(2)))} className={btn} aria-label="Hoja más grande">A+</button>
+            <span className="ml-auto text-xs text-slate-500">o pellizca la hoja</span>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => { setMenu(false); setPlay(false); tl.current?.progress(1); }} className={btn}>Ver todo</button>
+            <button onClick={() => { setMenu(false); alternarCompleta(); }} className={btn}>{completa ? "⤡ Salir de pantalla completa" : "⛶ Pantalla completa"}</button>
+          </div>
+          <p className="text-center text-xs tabular-nums text-slate-500">{Math.round(prog * 100)} % · faltan {Math.max(0, Math.round((1 - prog) * total / (ritmo * base.current)))} s</p>
+        </HojaInferior>
+      </div>
+    );
+  }
+
   return (
     <div ref={raiz} className={`flex min-h-0 flex-1 flex-col bg-slate-50 dark:bg-ink ${completa ? "fixed inset-0 z-[60]" : ""}`}>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-6 dark:border-ink-line dark:bg-ink-2">
@@ -323,10 +451,9 @@ export default function Pizarra({ data }) {
           onChange={(e) => { setPlay(false); tl.current?.progress(+e.target.value / 1000); }} className="h-2 flex-1 accent-teal-600" />
         <span className="w-24 text-right text-xs tabular-nums text-slate-500">{Math.round(prog * 100)} % · {Math.max(0, Math.round((1 - prog) * total / (ritmo * base.current)))} s</span>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto bg-[linear-gradient(#e2e8f0_1px,transparent_1px),linear-gradient(90deg,#e2e8f0_1px,transparent_1px)] bg-[size:22px_22px] p-3 sm:p-6 dark:bg-[linear-gradient(#1e293b_1px,transparent_1px),linear-gradient(90deg,#1e293b_1px,transparent_1px)]">
-        <div ref={hoja} className="hoja-gsap flex flex-wrap content-start items-start gap-3">
-          {filas}
-        </div>
+      <div ref={lienzo} onPointerDown={pausarCamara} onWheel={pausarCamara} onTouchMove={pausarCamara} className={`relative min-h-0 flex-1 overflow-auto p-3 sm:p-6 ${fondoHoja}`}>
+        {silueta}
+        {hojaNodo}
       </div>
     </div>
   );

@@ -35,3 +35,23 @@ export function crearPinch(getView, setView, { min = 2, max = 5000 } = {}) {
     activo: () => !!g,
   };
 }
+
+// Pellizco de dos dedos para escalar un contenido (hoja, matriz ampliada) con eventos táctiles.
+// Un dedo sigue desplazando de forma nativa; con dos dedos se cancela el zoom del navegador y se
+// llama a set(escala). Devuelve la función para quitar los eventos.
+export function pellizcoEscala(el, get, set, { min = 0.5, max = 3 } = {}) {
+  if (!el) return () => {};
+  let g = null;
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY) || 1;
+  const ini = (e) => { if (e.touches.length === 2) g = { d: dist(e.touches), s: get() }; };
+  const mov = (e) => {
+    if (!g || e.touches.length !== 2) return;
+    e.preventDefault();
+    set(Math.min(max, Math.max(min, +(g.s * dist(e.touches) / g.d).toFixed(3))));
+  };
+  const fin = (e) => { if (e.touches.length < 2) g = null; };
+  el.addEventListener("touchstart", ini, { passive: true });
+  el.addEventListener("touchmove", mov, { passive: false });
+  el.addEventListener("touchend", fin); el.addEventListener("touchcancel", fin);
+  return () => { el.removeEventListener("touchstart", ini); el.removeEventListener("touchmove", mov); el.removeEventListener("touchend", fin); el.removeEventListener("touchcancel", fin); };
+}

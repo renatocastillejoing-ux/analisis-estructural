@@ -139,7 +139,8 @@ export default function App() {
   const [paso3d, setPaso3d] = useState(null);             // pórtico del 3D elegido para el paso a paso
   const resRef = useRef({});                              // resultados guardados por documento
   const [menuMovil, setMenuMovil] = useState(false);
-  const [arbolMovil, setArbolMovil] = useState(false);     // panel izquierdo en pantallas chicas
+  const [arbolMovil, setArbolMovil] = useState(false);
+  const [cabOculta, setCabOculta] = useState(false);       // teléfono: la cabecera se esconde al bajar     // panel izquierdo en pantallas chicas
   useEffect(() => { if (sel && window.innerWidth < 768) setArbolMovil(false); }, [sel]);
   const tridim = es3d(modelo);
   const buscador = useRef(null);
@@ -531,11 +532,35 @@ export default function App() {
   const herramienta = (tridim ? HERR3D : HERRAMIENTAS).find((h) => h.id === tool);
   useEffect(() => { if (!(tridim ? HERR3D : HERRAMIENTAS).some((h) => h.id === tool)) setTool("select"); }, [tridim, tool]);
 
+  // teléfono, vistas de lectura (paso y resultados): la cabecera se esconde al bajar y vuelve al subir
+  const lectura = vista === "paso" || vista === "resultados";
+  useEffect(() => {
+    setCabOculta(false);
+    if (!lectura) return undefined;
+    const mq = window.matchMedia?.("(max-width: 767px), (max-height: 500px)");
+    const ultimo = new WeakMap();
+    let toque = 0;
+    const marca = () => { toque = performance.now(); };
+    const h = (e) => {
+      const el = e.target;
+      if (!mq?.matches || !(el instanceof Element) || el.closest("header")) return;
+      const y = el.scrollTop, a = ultimo.get(el) ?? y;
+      ultimo.set(el, y);
+      if (performance.now() - toque > 1200) return;      // solo desplazamientos del usuario, no la cámara automática
+      if (y - a > 8 && y > 48) setCabOculta(true);
+      else if (a - y > 8 || y <= 0) setCabOculta(false);
+    };
+    document.addEventListener("scroll", h, true);
+    document.addEventListener("touchmove", marca, { passive: true, capture: true });
+    document.addEventListener("wheel", marca, { passive: true, capture: true });
+    return () => { document.removeEventListener("scroll", h, true); document.removeEventListener("touchmove", marca, true); document.removeEventListener("wheel", marca, true); };
+  }, [lectura]);
+
   return (
     <div className="flex h-full flex-col bg-slate-50 text-slate-900 dark:bg-ink dark:text-slate-100">
       <Carga />
       {/* ===== cabecera única ===== */}
-      <header className="pad-seguro-x flex h-12 min-w-0 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-3 dark:border-ink-line dark:bg-ink-2">
+      <header className={`cabecera pad-seguro-x ${lectura && cabOculta ? "cabecera-oculta" : ""} flex h-12 min-w-0 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-3 dark:border-ink-line dark:bg-ink-2`}>
         <div className="flex shrink-0 items-center gap-2 pr-1">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-teal text-xs font-bold text-white">AE</span>
           <span className="hidden text-sm font-semibold 2xl:inline">Análisis Estructural</span>
@@ -683,7 +708,7 @@ export default function App() {
       </div>
 
       {/* ===== barra de estado ===== */}
-      <footer className="flex h-7 shrink-0 items-center gap-4 overflow-hidden whitespace-nowrap border-t border-slate-200 bg-white px-3 text-[11px] tabular-nums text-slate-600 dark:border-ink-line dark:bg-ink-2 dark:text-slate-300">
+      <footer className={`${lectura ? "ocultar-compacto" : ""} pie-seguro-min flex h-7 shrink-0 items-center gap-4 overflow-hidden whitespace-nowrap border-t border-slate-200 bg-white px-3 text-[11px] tabular-nums text-slate-600 dark:border-ink-line dark:bg-ink-2 dark:text-slate-300`}>
         <span className="hidden sm:inline">{herramienta?.icon} {herramienta?.label}</span>
         <span className={tridim ? "hidden" : "hidden md:inline"}>{cursor ? `x = ${cursor.x.toFixed(2)}  y = ${cursor.y.toFixed(2)} ${modelo.unidad_longitud}` : "—"}</span>
         <span className={tridim ? "hidden" : "hidden md:inline"}>Zoom {zoom.toFixed(0)} px/{modelo.unidad_longitud}</span>
