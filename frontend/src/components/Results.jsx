@@ -266,7 +266,7 @@ function Tabla({ titulo, cols, filas }) {
   return (
     <section className={caja}>
       <h2 className="mb-3 font-semibold">{titulo}</h2>
-      <div className="max-h-[420px] overflow-auto">
+      <div className="tabla-scroll max-h-[420px] overflow-auto">
         <table className="min-w-full text-sm">
           <thead className="sticky top-0 bg-white dark:bg-ink-2">
             <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-600 dark:border-ink-line dark:text-slate-300">
@@ -336,7 +336,7 @@ function Diseno2D({ resultado, modelo }) {
       </div>
       {error && <p className="text-sm text-rose-600">{error}</p>}
       {data && (
-        <div className="max-h-96 overflow-auto">
+        <div className="tabla-scroll max-h-96 overflow-auto">
           <table className="min-w-full text-xs">
             <thead className="sticky top-0 bg-white dark:bg-ink-2"><tr className="border-b border-slate-200 text-left uppercase text-slate-500 dark:border-ink-line">{["Barra", "b × h", "Estado", "Flexión", "Cortante", "Observación"].map((c) => <th key={c} className="px-2 py-1.5">{c}</th>)}</tr></thead>
             <tbody>{data.map((x) => (

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { propsSeccion } from "../model.js";
 import { estaSel } from "../model3d.js";
+import { crearPinch } from "../pinch.js";
 
 const PALETA = ["#508C9B", "#C1666B", "#6E9B54", "#B0894E", "#7E6C9B", "#3F7C8C", "#C98A3B", "#5E7BA6"];
 const PASOS_GRILLA = [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100];
@@ -27,6 +28,9 @@ export default function Canvas({
   const espacio = useRef(false);
   const modeloRef = useRef(modelo);
   modeloRef.current = modelo;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const pinch = useMemo(() => crearPinch(() => viewRef.current, setView), []);
 
   // tamaño real del contenedor: 1 unidad del viewBox = 1 px
   useEffect(() => {
@@ -99,6 +103,7 @@ export default function Canvas({
   });
 
   const onDown = (e) => {
+    if (pinch.down(e, svgRef.current)) { accion.current = null; svgRef.current.setPointerCapture(e.pointerId); return; }
     const { sx, sy } = local(e);
     const nudoId = e.target.closest?.("[data-nudo]")?.dataset.nudo;
     const elemId = e.target.closest?.("[data-elem]")?.dataset.elem;
@@ -135,10 +140,14 @@ export default function Canvas({
   };
 
   const onMove = (e) => {
+    if (pinch.move(e, svgRef.current)) return;
     const { sx, sy } = local(e);
     const p = aModelo(sx, sy);
-    setCursor(p);
-    onCursor?.({ x: redondear(p.x), y: redondear(p.y) });
+    // con el dedo no hay «cursor» que seguir: evitar re-dibujar todo el lienzo en cada movimiento
+    if (e.pointerType === "mouse" || tool === "nudo") {
+      setCursor(p);
+      onCursor?.({ x: redondear(p.x), y: redondear(p.y) });
+    }
     const a = accion.current;
     if (!a) return;
     if (a.tipo === "pan") setView({ ...a.v, tx: a.v.tx + (sx - a.sx), ty: a.v.ty + (sy - a.sy) });
@@ -146,6 +155,7 @@ export default function Canvas({
   };
 
   const onUp = (e) => {
+    pinch.up(e);
     accion.current = null;
     try { svgRef.current.releasePointerCapture(e.pointerId); } catch { /* ya liberado */ }
   };
@@ -193,6 +203,7 @@ export default function Canvas({
         onPointerDown={onDown}
         onPointerMove={onMove}
         onPointerUp={onUp}
+        onPointerCancel={onUp}
         onPointerLeave={() => onCursor?.(null)}
         onContextMenu={(e) => e.preventDefault()}
       >
@@ -280,7 +291,7 @@ export default function Canvas({
 }
 
 function BotonVista({ children, ...p }) {
-  return <button {...p} className="grid h-9 w-9 place-items-center text-base text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-ink-3">{children}</button>;
+  return <button {...p} className="grid h-11 w-11 place-items-center text-base text-slate-700 hover:bg-slate-100 md:h-9 md:w-9 dark:text-slate-200 dark:hover:bg-ink-3">{children}</button>;
 }
 
 function Apoyo({ tipo, x, y }) {

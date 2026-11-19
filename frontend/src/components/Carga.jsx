@@ -17,7 +17,7 @@ export default function Carga() {
   const visibles = lista.filter((t) => Date.now() - t.inicio > 300);
   if (!visibles.length) return null;
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-14 z-50 flex flex-col items-center gap-2 px-4" role="status" aria-live="polite">
+    <div className="pointer-events-none fixed inset-x-0 top-[calc(3.25rem+env(safe-area-inset-top))] z-50 flex flex-col items-center gap-2 px-4" role="status" aria-live="polite">
       {visibles.map((t) => {
         const e = estimar(t);
         const pct = e.fraccion != null ? Math.round(100 * Math.min(1, Math.max(0, e.fraccion))) : null;

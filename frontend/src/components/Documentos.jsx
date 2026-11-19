@@ -16,14 +16,14 @@ export default function Documentos({ docs, activo, onCambiar, onCerrar, onNuevo2
   return (
     <div ref={ref} className="relative">
       <button onClick={() => setAbierto((a) => !a)} aria-haspopup="menu" aria-expanded={abierto} title="Documentos abiertos del proyecto"
-        className="flex h-8 max-w-[9rem] items-center sm:max-w-[10rem] 2xl:max-w-[14rem] gap-1.5 rounded-md border border-slate-200 px-2 text-[13px] hover:bg-slate-100 dark:border-ink-line dark:hover:bg-ink-3">
+        className="flex h-11 max-w-[9rem] items-center xl:h-8 sm:max-w-[10rem] 2xl:max-w-[14rem] gap-1.5 rounded-md border border-slate-200 px-2 text-[13px] hover:bg-slate-100 dark:border-ink-line dark:hover:bg-ink-3">
         <span className={`rounded px-1 text-[10px] font-bold ${act && es3(act) ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300" : "bg-teal/15 text-teal-dark dark:text-teal-soft"}`}>{act && es3(act) ? "3D" : "2D"}</span>
         <span className="truncate font-medium">{act?.modelo?.nombre || "Sin título"}</span>
         <span className="text-slate-400">▾</span>
         {docs.length > 1 && <span className="rounded-full bg-slate-200 px-1.5 text-[10px] tabular-nums dark:bg-ink-3">{docs.length}</span>}
       </button>
       {abierto && (
-        <div role="menu" className="absolute left-0 top-full z-50 mt-1 w-80 max-w-[calc(100vw-1.5rem)] rounded-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-ink-line dark:bg-ink-2">
+        <div role="menu" className="fixed inset-x-3 top-12 z-50 mt-1 max-h-[70dvh] overflow-y-auto rounded-lg md:absolute md:inset-x-auto md:left-0 md:top-full md:w-80 md:max-h-none md:overflow-visible border border-slate-200 bg-white py-1 shadow-xl dark:border-ink-line dark:bg-ink-2">
           <div className="px-3 py-1 text-[11px] font-semibold uppercase text-slate-500">Documentos abiertos</div>
           {docs.map((d) => (
             <div key={d.id} className={`group flex items-center gap-2 px-3 py-1.5 text-[13px] ${d.id === activo ? "bg-teal/10" : "hover:bg-slate-100 dark:hover:bg-ink-3"}`}>
@@ -32,7 +32,7 @@ export default function Documentos({ docs, activo, onCambiar, onCerrar, onNuevo2
                 <span className="truncate">{d.modelo?.nombre || "Sin título"}</span>
                 <span className="ml-auto shrink-0 text-[11px] text-slate-500">{d.modelo?.nudos?.length} nudos</span>
               </button>
-              {docs.length > 1 && <button onClick={() => onCerrar(d.id)} className="text-slate-400 opacity-0 hover:text-rose-600 group-hover:opacity-100" aria-label={`Cerrar ${d.modelo?.nombre}`}>✕</button>}
+              {docs.length > 1 && <button onClick={() => onCerrar(d.id)} className="grid h-11 w-11 shrink-0 place-items-center text-slate-500 hover:text-rose-600 md:h-auto md:w-auto md:text-slate-400 md:opacity-0 md:group-hover:opacity-100" aria-label={`Cerrar ${d.modelo?.nombre}`}>✕</button>}
             </div>
           ))}
           <div className="my-1 border-t border-slate-200 dark:border-ink-line" />

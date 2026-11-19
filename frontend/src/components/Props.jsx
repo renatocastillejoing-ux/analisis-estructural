@@ -11,9 +11,9 @@ export default function Props({ modelo, sel, setSel, commit, abrirPanel }) {
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-l lg:w-80 border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" aria-label="Propiedades">
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-ink-line">
+      <div className="flex min-h-[44px] shrink-0 items-center md:h-10 md:min-h-0 gap-2 border-b border-slate-200 px-4 dark:border-ink-line">
         <h2 className="text-sm font-semibold">{nudo ? `Nudo ${nudo.nombre}` : elem ? `Elemento ${elem.nombre}` : varios ? "Selección" : "Propiedades"}</h2>
-        {(nudo || elem || varios) && <button className="ml-auto text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" onClick={() => setSel(null)}>Deseleccionar (Esc)</button>}
+        {(nudo || elem || varios) && <button className="ml-auto text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" onClick={() => setSel(null)}>Deseleccionar</button>}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {nudo ? <PropsNudo modelo={modelo} n={nudo} commit={commit} setSel={setSel} />

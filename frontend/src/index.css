@@ -28,3 +28,36 @@ kbd { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) { .celda-in, .aparece, .trazo, .flash, .paso-in > * { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; } }
 
 @keyframes carga { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+
+/* ===== móvil (teléfonos en vertical y horizontal) =====
+   «Compacto» = ancho < 768 px o alto < 500 px (teléfono en horizontal). */
+html { -webkit-text-size-adjust: 100%; }
+body { overflow: hidden; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+button, summary, [role="tab"], select, label { touch-action: manipulation; }
+#root { height: 100vh; height: 100dvh; }
+.pie-seguro { padding-bottom: max(.75rem, env(safe-area-inset-bottom)); }
+.pad-seguro-x { padding-left: max(.75rem, env(safe-area-inset-left)); padding-right: max(.75rem, env(safe-area-inset-right)); }
+.tabla-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+.tabla-scroll table th:first-child, .tabla-scroll table td:first-child { position: sticky; left: 0; z-index: 1; }
+.tabla-scroll table thead th:first-child { background: #f1f5f9; }
+.dark .tabla-scroll table thead th:first-child { background: #1F2B40; }
+.tabla-scroll table tbody td:first-child { background: #fff; }
+.dark .tabla-scroll table tbody td:first-child { background: #161D2D; }
+@media (max-width: 767px), (max-height: 500px) {
+  button, summary, [role="tab"], select,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]) { min-height: 44px; }
+  button { min-width: 36px; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select { font-size: 16px; }
+  input[type="checkbox"], input[type="radio"] { width: 20px; height: 20px; }
+  input[type="range"] { min-height: 32px; }
+  label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) { min-height: 36px; align-items: center; }
+  .text-xs, .text-\[10px\], .text-\[11px\], .text-\[12px\], .text-\[13px\] { font-size: 14px; line-height: 1.35; }
+  footer, footer * { font-size: 12px !important; }
+  svg .text-xs { font-size: 12px; } svg .text-\[10px\] { font-size: 10px; } svg .text-\[11px\] { font-size: 11px; }
+  svg .text-\[12px\] { font-size: 12px; } svg .text-\[13px\] { font-size: 13px; }
+  .modal-caja { max-width: none !important; }
+  .pie-seguro > button, .pie-seguro > label { flex: 1 1 auto; }
+  .barra-scroll { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .barra-scroll > * { flex-shrink: 0; white-space: nowrap; }
+  .barra-scroll::-webkit-scrollbar { display: none; }
+}

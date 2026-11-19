@@ -45,7 +45,7 @@ export default function Pseudo3D() {
         <div className={caja}><div className="text-xs text-slate-500">Deriva máx. (×0.75R = {f(der, 2)})</div>
           <div className={`text-lg font-semibold ${v.deriva_max_inelastica > v.limite ? "text-rose-600" : "text-teal-dark dark:text-teal-soft"}`}>{e(v.deriva_max_inelastica)} {v.deriva_max_inelastica > v.limite ? "> 0.007" : "≤ 0.007"}</div></div>
       </div>
-      <div className={`${caja} overflow-x-auto`}>
+      <div className={`${caja} overflow-x-auto tabla-scroll`}>
         <h4 className="mb-2 text-sm font-semibold">Cortante que toma cada pórtico en {dir}</h4>
         <table className="w-full text-sm">
           <thead><tr className="text-left text-xs text-slate-500"><th className="py-1">Pórtico</th><th>V (tonf)</th><th>%</th><th>Deriva máx. ×0.75R</th></tr></thead>
@@ -62,7 +62,7 @@ export default function Pseudo3D() {
           </tbody>
         </table>
       </div>
-      <div className={`${caja} overflow-x-auto`}>
+      <div className={`${caja} overflow-x-auto tabla-scroll`}>
         <h4 className="mb-2 text-sm font-semibold">Desplazamientos del diafragma {"{D}"} (centro de cada piso)</h4>
         <table className="w-full text-sm">
           <thead><tr className="text-left text-xs text-slate-500"><th className="py-1">z (m)</th><th>Bloque</th><th>Dx (m)</th><th>Dy (m)</th><th>θ (rad)</th></tr></thead>

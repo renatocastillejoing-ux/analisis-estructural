@@ -26,7 +26,7 @@ export default function Historial({ onAbrir, confirmar }) {
   return (
     <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-3 sm:p-6">
       <div className="mx-auto max-w-5xl space-y-4">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h1 className="text-lg font-semibold">Historial de cálculos</h1>
             <p className="text-sm text-slate-600 dark:text-slate-300">Cada vez que calculas, el servidor guarda el modelo y sus resultados.</p>
@@ -37,7 +37,7 @@ export default function Historial({ onAbrir, confirmar }) {
         {!items ? <p className="text-sm text-slate-500">Cargando…</p> : !items.length ? (
           <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-ink-line">Aún no hay cálculos guardados.</p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2">
+          <div className="tabla-scroll overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2">
             <table className="min-w-full text-sm">
               <thead><tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-600 dark:border-ink-line dark:text-slate-300">
                 {["#", "Fecha", "Modelo", "Nudos", "Elem.", "M máx.", "V máx.", "Desplaz. máx.", ""].map((c) => <th key={c} className="px-3 py-2 font-semibold">{c}</th>)}
