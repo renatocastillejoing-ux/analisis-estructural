@@ -518,7 +518,7 @@ export default function App() {
     <div className="flex h-full flex-col bg-slate-50 text-slate-900 dark:bg-ink dark:text-slate-100">
       <Carga />
       {/* ===== cabecera única ===== */}
-      <header className="flex h-12 min-w-0 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-3 dark:border-ink-line dark:bg-ink-2">
+      <header className="pad-seguro-x flex h-12 min-w-0 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-3 dark:border-ink-line dark:bg-ink-2">
         <div className="flex shrink-0 items-center gap-2 pr-1">
           <span className="grid h-7 w-7 place-items-center rounded-md bg-teal text-xs font-bold text-white">AE</span>
           <span className="hidden text-sm font-semibold 2xl:inline">Análisis Estructural</span>
@@ -528,7 +528,7 @@ export default function App() {
         <div className="flex-1" />
         <div className="hidden xl:block"><BuscadorComandos ref={buscador} comandos={comandos} /></div>
         <button onClick={ejecutarCalculo} disabled={calculando} title={validacion.errores[0] || "Calcular estructura (Ctrl+Enter)"}
-          className="flex h-8 shrink-0 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white hover:bg-teal-dark disabled:opacity-60">
+          className="flex h-11 shrink-0 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white hover:bg-teal-dark disabled:opacity-60 xl:h-8">
           {calculando ? (calculando === true ? "…" : `… ${calculando} s`) : <>▶ <span className="hidden 2xl:inline">Calcular estructura</span><span className="hidden sm:inline 2xl:hidden">Calcular</span></>}
         </button>
         <div className="mx-0.5 hidden h-6 w-px bg-slate-200 xl:block dark:bg-ink-line" />
@@ -542,18 +542,18 @@ export default function App() {
         </div>
         <button onClick={() => setTema((t) => (t === "dark" ? "light" : "dark"))} title={tema === "dark" ? "Tema claro" : "Tema oscuro"} aria-label="Cambiar tema"
           className="hidden h-8 w-8 shrink-0 place-items-center rounded-md hover:bg-slate-100 xl:grid dark:hover:bg-ink-3">{tema === "dark" ? "☀" : "☾"}</button>
-        <button onClick={() => setMenuMovil(true)} aria-label="Abrir menú" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-200 xl:hidden dark:border-ink-line">☰</button>
+        <button onClick={() => setMenuMovil(true)} aria-label="Abrir menú" className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-slate-200 xl:hidden dark:border-ink-line">☰</button>
       </header>
       <MenuMovil abierto={menuMovil} onCerrar={() => setMenuMovil(false)} menus={menus} comandos={comandos} vistas={VISTAS} vista={vista} setVista={setVista} tema={tema} setTema={setTema} />
       <input ref={importar} type="file" accept=".json,application/json" className="hidden" onChange={onImportar} />
 
       {/* ===== cuerpo ===== */}
-      <div className="flex min-h-0 flex-1">
+      <div className={`flex min-h-0 flex-1 ${vista === "modelo" ? "flex-col md:flex-row land:flex-row" : ""}`}>
         {vista === "modelo" && tridim && (
           <>
-            <aside className={`${arbolMovil ? "fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-sm shadow-2xl" : "hidden"} shrink-0 flex-col border-r border-slate-200 bg-white md:static md:z-auto md:flex md:w-80 md:max-w-none md:shadow-none dark:border-ink-line dark:bg-ink-2`}>
-              <button onClick={() => setArbolMovil(false)} className="absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-slate-200 bg-white md:hidden dark:border-ink-line dark:bg-ink-2" aria-label="Cerrar panel">✕</button>
-              <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-3 dark:border-ink-line">
+            <aside className={`${arbolMovil ? "fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-sm shadow-2xl" : "hidden"} shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:static md:z-auto md:flex md:w-80 md:max-w-none md:shadow-none dark:border-ink-line dark:bg-ink-2`}>
+              <button onClick={() => setArbolMovil(false)} className="absolute right-1 top-0 z-10 grid h-11 w-11 place-items-center rounded-md bg-white md:hidden dark:bg-ink-2" aria-label="Cerrar panel">✕</button>
+              <div className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-200 px-3 pr-12 md:h-10 md:pr-3 dark:border-ink-line">
                 {panel ? (<>
                   <button onClick={() => setPanel(null)} className="rounded-md px-1.5 py-0.5 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Volver al árbol del modelo">←</button>
                   <h2 className="truncate text-sm font-semibold">{PANELES3D[panel]}</h2>
@@ -564,20 +564,20 @@ export default function App() {
                 ? <PanelEditor3D key={panel} panel={panel} modelo={modelo} commit={commit} sel={sel} setSel={setSel} />
                 : <Arbol3D modelo={modelo} sel={sel} setSel={setSel} abrirPanel={abrirPanel} irA={(v) => setVista3d((x) => ({ ...x, ...v }))} />}
             </aside>
-            <main className="relative min-w-0 flex-1 overflow-hidden bg-slate-50 dark:bg-ink">
+            <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50 dark:bg-ink">
               <Lienzo3D modelo={modelo} commit={commit} sel={sel} setSel={setSel} tool={tool} setTool={setTool} vista={vista3d} setVista={setVista3d} avisar={avisar} ajusteKey={fitKey} />
-              <BarraHerramientas3D tool={tool} setTool={setTool} deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} modo3d={vista3d.modo === "3d"} pasado={hist.pl || []} futuro={hist.fl || []} />
+              <BarraHerramientas3D abrirArbol={() => setArbolMovil(true)} tool={tool} setTool={setTool} deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} modo3d={vista3d.modo === "3d"} pasado={hist.pl || []} futuro={hist.fl || []} />
             </main>
-            <div className={`${sel ? "fixed inset-x-0 bottom-0 z-30 flex max-h-[55vh] shadow-2xl" : "hidden"} lg:static lg:z-auto lg:flex lg:max-h-none lg:shadow-none`}>
+            <HojaProps sel={sel}>
               <Props3D modelo={modelo} sel={sel} setSel={setSel} commit={commit} abrirPanel={abrirPanel} />
-            </div>
+            </HojaProps>
           </>
         )}
         {vista === "modelo" && !tridim && (
           <>
-            <aside className={`${arbolMovil ? "fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-sm shadow-2xl" : "hidden"} shrink-0 flex-col border-r border-slate-200 bg-white md:static md:z-auto md:flex md:w-80 md:max-w-none md:shadow-none dark:border-ink-line dark:bg-ink-2`}>
-              <button onClick={() => setArbolMovil(false)} className="absolute right-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-md border border-slate-200 bg-white md:hidden dark:border-ink-line dark:bg-ink-2" aria-label="Cerrar panel">✕</button>
-              <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-3 dark:border-ink-line">
+            <aside className={`${arbolMovil ? "fixed inset-y-0 left-0 z-40 flex w-[86vw] max-w-sm shadow-2xl" : "hidden"} shrink-0 flex-col overflow-hidden border-r border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] md:static md:z-auto md:flex md:w-80 md:max-w-none md:shadow-none dark:border-ink-line dark:bg-ink-2`}>
+              <button onClick={() => setArbolMovil(false)} className="absolute right-1 top-0 z-10 grid h-11 w-11 place-items-center rounded-md bg-white md:hidden dark:bg-ink-2" aria-label="Cerrar panel">✕</button>
+              <div className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-200 px-3 pr-12 md:h-10 md:pr-3 dark:border-ink-line">
                 {panel ? (
                   <>
                     <button onClick={() => setPanel(null)} className="rounded-md px-1.5 py-0.5 text-sm text-slate-500 hover:bg-slate-100 dark:hover:bg-ink-3" title="Volver al árbol del modelo" aria-label="Volver al árbol del modelo">←</button>
@@ -591,7 +591,7 @@ export default function App() {
                 : <Arbol modelo={modelo} sel={sel} setSel={setSel} abrirPanel={abrirPanel} />}
             </aside>
 
-            <main className="relative min-w-0 flex-1 overflow-hidden bg-slate-50 dark:bg-ink">
+            <main className="relative min-h-0 min-w-0 flex-1 overflow-hidden bg-slate-50 dark:bg-ink">
               {ver3d ? (
                 <Suspense fallback={<div className="p-6 text-sm text-slate-500">Cargando el visor 3D…</div>}>
                   <Visor2D3D modelo={modelo} sel={sel} setSel={setSel} />
@@ -601,21 +601,21 @@ export default function App() {
                   fitKey={fitKey} capas={capas} snap={snap} onCursor={setCursor} onAgregarNudo={onAgregarNudo} onConectar={onConectar}
                   onEliminar={onEliminar} onZoom={setZoom} />
               )}
-              {!ver3d && <BarraHerramientas tool={tool} setTool={setTool} capas={capas} setCapas={setCapas} snap={snap} setSnap={setSnap}
+              {!ver3d && <BarraHerramientas abrirArbol={() => setArbolMovil(true)} tool={tool} setTool={setTool} capas={capas} setCapas={setCapas} snap={snap} setSnap={setSnap}
                 deshacer={deshacer} rehacer={rehacer} puedeDeshacer={!!hist.past.length} puedeRehacer={!!hist.future.length} />}
               <button onClick={pasarA3d} title="Convierte este pórtico en un modelo 3D para dibujar fuera del plano (vigas en planta, otros pórticos…). Ctrl+Z vuelve al 2D."
-                className="absolute right-32 top-3 rounded-lg bg-teal px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-teal-dark">✎ Dibujar en 3D</button>
-              <div className="absolute right-3 top-3 flex rounded-lg border border-slate-200 bg-white/95 p-0.5 text-xs shadow dark:border-ink-line dark:bg-ink-2/95" role="tablist" aria-label="Dibujo 2D o vista 3D">
+                className="absolute left-2 top-[3.75rem] rounded-lg bg-teal px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-teal-dark md:left-auto md:right-32 md:top-3">✎ Dibujar en 3D</button>
+              <div className="absolute right-2 top-[3.75rem] flex rounded-lg border border-slate-200 bg-white/95 p-0.5 text-xs shadow md:right-3 md:top-3 dark:border-ink-line dark:bg-ink-2/95" role="tablist" aria-label="Dibujo 2D o vista 3D">
                 {[[false, "2D"], [true, "3D"]].map(([v, l]) => (
-                  <button key={l} role="tab" aria-selected={ver3d === v} onClick={() => setVer3d(v)} className={`rounded-md px-3 py-1 ${ver3d === v ? "bg-teal font-semibold text-white" : ""}`}>{l}</button>
+                  <button key={l} role="tab" aria-selected={ver3d === v} onClick={() => setVer3d(v)} className={`rounded-md px-4 py-1 md:px-3 ${ver3d === v ? "bg-teal font-semibold text-white" : ""}`}>{l}</button>
                 ))}
               </div>
-              {ver3d && <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-white/90 px-2 py-1 text-[11px] text-slate-600 shadow dark:bg-ink-2/90 dark:text-slate-300">Arrastrar: girar · clic derecho: desplazar · rueda: zoom · para dibujar fuera del plano pulsa «Dibujar en 3D»</div>}
+              {ver3d && <div className="pointer-events-none absolute bottom-3 left-3 right-3 rounded-md bg-white/90 px-2 py-1 text-[11px] text-slate-600 shadow md:right-auto dark:bg-ink-2/90 dark:text-slate-300"><span className="md:hidden">Un dedo: girar · dos dedos: acercar y mover</span><span className="hidden md:inline">Arrastrar: girar · clic derecho: desplazar · rueda: zoom · para dibujar fuera del plano pulsa «Dibujar en 3D»</span></div>}
             </main>
 
-            <div className={`${sel ? "fixed inset-x-0 bottom-0 z-30 flex max-h-[55vh] shadow-2xl" : "hidden"} lg:static lg:z-auto lg:flex lg:max-h-none lg:shadow-none`}>
+            <HojaProps sel={sel}>
               <Props modelo={modelo} sel={sel} setSel={setSel} commit={commit} abrirPanel={abrirPanel} />
-            </div>
+            </HojaProps>
           </>
         )}
         {vista === "resultados" && tridim && (
@@ -665,9 +665,6 @@ export default function App() {
         )}
       </div>
 
-      {vista === "modelo" && !arbolMovil && (
-        <button onClick={() => setArbolMovil(true)} className="fixed bottom-10 left-3 z-20 rounded-full bg-teal px-4 py-2 text-sm font-semibold text-white shadow-lg md:hidden">☰ Árbol y paneles</button>
-      )}
       {/* ===== barra de estado ===== */}
       <footer className="flex h-7 shrink-0 items-center gap-4 overflow-hidden whitespace-nowrap border-t border-slate-200 bg-white px-3 text-[11px] tabular-nums text-slate-600 dark:border-ink-line dark:bg-ink-2 dark:text-slate-300">
         <span className="hidden sm:inline">{herramienta?.icon} {herramienta?.label}</span>
@@ -716,22 +713,53 @@ export default function App() {
   );
 }
 
-// Barra flotante del lienzo: herramientas, capas, ajuste y deshacer.
-function BarraHerramientas({ tool, setTool, capas, setCapas, snap, setSnap, deshacer, rehacer, puedeDeshacer, puedeRehacer }) {
-  const b = (activo) => `grid h-9 w-9 place-items-center rounded-md text-base ${activo ? "bg-teal text-white" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-ink-3"}`;
+// Hoja inferior de Propiedades (móvil/tablet): el asa sube o baja la hoja (toque o arrastre vertical).
+// En móvil queda en el flujo bajo el lienzo, así el lienzo se reduce en vez de quedar tapado.
+const ALTURAS_HOJA = ["0px", "34dvh", "78dvh"];
+function HojaProps({ sel, children }) {
+  const [nivel, setNivel] = useState(1);
+  const arrastre = useRef(null);
+  const clave = sel ? `${sel.tipo}:${sel.id ?? ""}` : "";
+  useEffect(() => { setNivel(1); }, [clave]);
+  const alSoltar = (e) => {
+    const a = arrastre.current; arrastre.current = null;
+    if (!a) return;
+    const dy = e.clientY - a.y;
+    if (Math.abs(dy) < 8) setNivel((n) => (n === 1 ? 2 : n === 2 ? 0 : 1));
+    else setNivel((n) => Math.max(0, Math.min(2, n + (dy < 0 ? 1 : -1))));
+  };
   return (
-    <div className="absolute left-3 top-3 flex flex-col gap-1 rounded-lg border border-slate-200 bg-white/95 p-1 shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Herramientas del lienzo">
+    <div className={`${sel ? "flex" : "hidden"} max-h-[var(--hoja)] shrink-0 flex-col border-t border-slate-200 bg-white shadow-[0_-4px_16px_rgba(0,0,0,.18)] land:max-h-none land:w-80 land:border-l land:border-t-0 land:shadow-none md:fixed md:inset-x-0 md:bottom-0 md:z-30 lg:static lg:z-auto lg:flex lg:max-h-none lg:border-t-0 lg:shadow-none dark:border-ink-line dark:bg-ink-2`}
+      style={{ "--hoja": `calc(${ALTURAS_HOJA[nivel]} + 5rem + env(safe-area-inset-bottom))` }}>
+      <button type="button" aria-label="Subir o bajar el panel de propiedades" title="Tocar o arrastrar para subir o bajar"
+        onPointerDown={(e) => { arrastre.current = { y: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId); }}
+        onPointerUp={alSoltar} onPointerCancel={() => { arrastre.current = null; }}
+        className="grid h-9 w-full shrink-0 touch-none place-items-center land:hidden lg:hidden" style={{ minHeight: 36 }}>
+        <span className="h-1.5 w-12 rounded-full bg-slate-300 dark:bg-ink-line" />
+      </button>
+      <div className="flex min-h-0 flex-1 overflow-hidden pb-[env(safe-area-inset-bottom)] lg:overflow-visible lg:pb-0">{children}</div>
+    </div>
+  );
+}
+
+// Barra flotante del lienzo: herramientas, capas, ajuste y deshacer.
+function BarraHerramientas({ abrirArbol, tool, setTool, capas, setCapas, snap, setSnap, deshacer, rehacer, puedeDeshacer, puedeRehacer }) {
+  const b = (activo) => `grid h-11 w-11 shrink-0 place-items-center rounded-md text-base md:h-9 md:w-9 ${activo ? "bg-teal text-white" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-ink-3"}`;
+  return (
+    <div className="barra-scroll absolute left-2 top-2 flex w-max max-w-[calc(100%-1rem)] flex-row items-center gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white/95 p-1 shadow md:left-3 md:top-3 md:max-w-none md:flex-col md:items-stretch md:overflow-visible dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Herramientas del lienzo">
+      <button className="flex h-11 shrink-0 items-center gap-1.5 rounded-md bg-teal px-3 text-sm font-semibold text-white md:hidden" aria-label="Abrir árbol del modelo y paneles" onClick={abrirArbol}>☰ Árbol</button>
+      <div className="mx-0.5 h-7 shrink-0 border-l border-slate-200 md:hidden dark:border-ink-line" />
       {HERRAMIENTAS.map((h) => (
         <button key={h.id} className={b(tool === h.id)} title={`${h.label} (${h.kbd})`} aria-label={h.label} aria-pressed={tool === h.id} onClick={() => setTool(h.id)}>{h.icon}</button>
       ))}
-      <div className="my-0.5 border-t border-slate-200 dark:border-ink-line" />
+      <div className="mx-0.5 h-7 shrink-0 border-l border-slate-200 md:mx-0 md:my-0.5 md:h-auto md:border-l-0 md:border-t dark:border-ink-line" />
       <button className={b(capas.grilla)} title="Grilla (G)" aria-label="Grilla" aria-pressed={capas.grilla} onClick={() => setCapas((c) => ({ ...c, grilla: !c.grilla }))}>#</button>
       <button className={b(capas.etiquetas)} title="Etiquetas (L)" aria-label="Etiquetas" aria-pressed={capas.etiquetas} onClick={() => setCapas((c) => ({ ...c, etiquetas: !c.etiquetas }))}>A</button>
       <button className={b(capas.cargas)} title="Cargas" aria-label="Cargas" aria-pressed={capas.cargas} onClick={() => setCapas((c) => ({ ...c, cargas: !c.cargas }))}>↓</button>
-      <select value={snap} onChange={(e) => setSnap(+e.target.value)} title="Ajuste a la grilla" aria-label="Ajuste a la grilla" className="!h-9 !w-9 cursor-pointer appearance-none !border-0 !bg-transparent !p-0 text-center text-[10px]">
+      <select value={snap} onChange={(e) => setSnap(+e.target.value)} title="Ajuste a la grilla" aria-label="Ajuste a la grilla" className="!h-11 !w-11 shrink-0 cursor-pointer appearance-none !border-0 !bg-transparent !p-0 text-center text-[10px] md:!h-9 md:!w-9">
         {SNAPS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
       </select>
-      <div className="my-0.5 border-t border-slate-200 dark:border-ink-line" />
+      <div className="mx-0.5 h-7 shrink-0 border-l border-slate-200 md:mx-0 md:my-0.5 md:h-auto md:border-l-0 md:border-t dark:border-ink-line" />
       <button className={b(false) + " disabled:opacity-30"} disabled={!puedeDeshacer} title="Deshacer (Ctrl+Z)" aria-label="Deshacer" onClick={deshacer}>↶</button>
       <button className={b(false) + " disabled:opacity-30"} disabled={!puedeRehacer} title="Rehacer (Ctrl+Y)" aria-label="Rehacer" onClick={rehacer}>↷</button>
     </div>
@@ -739,12 +767,13 @@ function BarraHerramientas({ tool, setTool, capas, setCapas, snap, setSnap, desh
 }
 
 // Barra del lienzo en planta / elevación del modelo 3D.
-function BarraHerramientas3D({ tool, setTool, deshacer, rehacer, puedeDeshacer, puedeRehacer, modo3d, pasado = [], futuro = [] }) {
-  const b = (activo) => `grid h-9 w-9 place-items-center rounded-md text-base ${activo ? "bg-teal text-white" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-ink-3"}`;
+function BarraHerramientas3D({ abrirArbol, tool, setTool, deshacer, rehacer, puedeDeshacer, puedeRehacer, modo3d, pasado = [], futuro = [] }) {
+  const b = (activo) => `grid h-11 w-11 shrink-0 place-items-center rounded-md text-base md:h-9 md:w-9 ${activo ? "bg-teal text-white" : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-ink-3"}`;
   const [verHist, setVerHist] = useState(false);
   const herr = modo3d ? HERR3D.filter((h) => ["select", "recuadro", "barra", "eliminar"].includes(h.id)) : HERR3D.filter((h) => h.id !== "recuadro");
   return (
-    <div className="absolute bottom-36 left-3 flex flex-row flex-wrap gap-1 rounded-lg md:bottom-auto md:top-14 md:flex-col border border-slate-200 bg-white/95 p-1 shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Herramientas de dibujo 3D">
+    <div className="barra-scroll absolute bottom-2 left-2 flex w-max max-w-[calc(100%-4rem)] flex-row items-center gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white/95 p-1 shadow md:bottom-auto md:left-3 md:top-14 md:max-w-none md:flex-col md:items-stretch md:overflow-visible dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Herramientas de dibujo 3D">
+      <button className="flex h-11 shrink-0 items-center gap-1.5 rounded-md bg-teal px-3 text-sm font-semibold text-white md:hidden" aria-label="Abrir árbol del modelo y paneles" onClick={abrirArbol}>☰ Árbol</button>
       {verHist && (
         <div className="absolute bottom-full left-0 z-20 mb-1 max-h-60 w-60 md:bottom-auto md:left-12 md:top-0 md:mb-0 md:max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 text-xs shadow-lg dark:border-ink-line dark:bg-ink-2" role="list" aria-label="Historial de cambios">
           <div className="px-2 py-1 font-semibold">Historial de cambios</div>

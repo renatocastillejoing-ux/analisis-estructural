@@ -54,7 +54,7 @@ export default function PorticoDe3D({ modelo, res, caso, onPaso, onAbrir2d }) {
           </section>
           <section className={caja}>
             <h3 className="mb-2 text-sm font-semibold">Extremos de las barras</h3>
-            <div className="max-h-80 overflow-auto">
+            <div className="tabla-scroll max-h-80 overflow-auto">
               <table className="min-w-full text-xs">
                 <thead className="sticky top-0 bg-white dark:bg-ink-2"><tr className="border-b border-slate-200 text-left uppercase text-slate-500 dark:border-ink-line">{["Barra", "N i", "V i", "M i", "M j", "|M| máx."].map((c) => <th key={c} className="px-2 py-1">{c}</th>)}</tr></thead>
                 <tbody>{els.map((e) => (

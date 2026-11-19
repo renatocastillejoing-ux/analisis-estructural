@@ -80,7 +80,8 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
   useEffect(() => {
     const el = host.current;
     const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });   // permite exportar la imagen
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    // en móviles (puntero táctil) se baja la resolución: menos píxeles = fluidez y menos batería
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, window.matchMedia?.("(pointer: coarse)").matches ? 1.5 : 2));
     el.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
     const persp = new THREE.PerspectiveCamera(40, 1, 0.1, 5000);
@@ -496,7 +497,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
               </g>
             ))}
           </svg>
-          <div className="absolute bottom-20 right-3 z-10 flex flex-wrap justify-end overflow-hidden md:bottom-3 rounded-lg border border-slate-200 bg-white/95 text-xs shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Cámara">
+          <div className="barra-scroll absolute bottom-20 right-2 z-10 flex max-w-[calc(100%-1rem)] flex-wrap justify-end overflow-hidden md:bottom-3 md:right-3 md:max-w-none rounded-lg border border-slate-200 bg-white/95 text-xs shadow dark:border-ink-line dark:bg-ink-2/95" role="toolbar" aria-label="Cámara">
             {[["iso", "Iso", "0"], ["planta", "Planta", "7"], ["frente", "Frente", "1"], ["lado", "Lado", "3"]].map(([k, l, t]) => (
               <button key={k} onClick={() => vista(k)} className="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-ink-3" title={`Vista ${l.toLowerCase()} (tecla ${t})`}>{l}</button>
             ))}
@@ -509,7 +510,7 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
             <button onClick={() => setAyuda((a) => !a)} aria-pressed={ayuda} title="Atajos del visor" className="px-2.5 py-1.5 hover:bg-slate-100 dark:hover:bg-ink-3">?</button>
           </div>
           {ayuda && (
-            <div className="absolute bottom-36 right-3 z-10 w-64 md:bottom-12 rounded-lg border border-slate-200 bg-white/95 p-3 text-xs leading-relaxed shadow dark:border-ink-line dark:bg-ink-2/95">
+            <div className="absolute bottom-36 right-2 z-10 w-64 max-w-[calc(100%-1rem)] md:right-3 md:bottom-12 rounded-lg border border-slate-200 bg-white/95 p-3 text-xs leading-relaxed shadow dark:border-ink-line dark:bg-ink-2/95">
               <b>Ratón</b> · izquierdo o central: orbitar · derecho o Shift+central: desplazar · rueda: zoom hacia el cursor<br />
               <b>Teclado</b> (puntero sobre el visor) · 1 frente · 3 lado · 7 planta (Ctrl: lado opuesto) · 0 iso · 5 orto/persp · 2 4 6 8 girar 15° · F o . encuadrar selección · Inicio encuadrar todo<br />
               <b>Gizmo</b> · clic en X, Y o Z para mirar desde ese eje<br />

@@ -16,7 +16,7 @@ function Bloque({ b }) {
     case "nota": return <div className="rounded-lg border-l-4 border-teal bg-teal/10 px-4 py-3 text-slate-800 dark:text-slate-100">{negritas(b.x)}</div>;
     case "aviso": return <div className="rounded-lg border-l-4 border-amber-500 bg-amber-50 px-4 py-3 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">{negritas(b.x)}</div>;
     case "t": return (
-      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-ink-line">
+      <div className="tabla-scroll overflow-x-auto rounded-lg border border-slate-200 dark:border-ink-line">
         <table className="min-w-full text-sm">
           <thead className="bg-slate-50 dark:bg-ink-3"><tr>{b.cols.map((c) => <th key={c} className="px-3 py-2 text-left text-xs font-semibold uppercase text-slate-600 dark:text-slate-300">{c}</th>)}</tr></thead>
           <tbody>{b.filas.map((f, i) => <tr key={i} className="border-t border-slate-100 dark:border-ink-line">{f.map((c, j) => <td key={j} className="px-3 py-2 align-top text-slate-700 dark:text-slate-200">{negritas(c)}</td>)}</tr>)}</tbody>

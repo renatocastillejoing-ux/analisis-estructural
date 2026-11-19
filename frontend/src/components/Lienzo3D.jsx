@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pedir } from "../pedir.js";
+import { crearPinch } from "../pinch.js";
 import { cargarPlanta, esTorre, plantaDeNivel, validarFondo } from "../plano.js";
 import { agregarBarra, agregarNudo3d, borrarBarra, borrarNudo3d, buscarNudo, escena3d, idsSel, moverCopiar, sumarSel, tipoBarra } from "../model3d.js";
 
@@ -174,7 +175,7 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
 
   return (
     <div className="absolute inset-0 flex flex-col">
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-ink-line dark:bg-ink-2">
+      <div className="barra-scroll flex shrink-0 flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-1.5 text-xs dark:border-ink-line dark:bg-ink-2">
         <div className="flex rounded-md bg-slate-100 p-0.5 dark:bg-ink-3" role="tablist" aria-label="Vista 2D o 3D">
           <button role="tab" aria-selected={vista.modo !== "3d"} onClick={() => irPlano(ultimo2d)} title="Trabajar un eje o un nivel en 2D"
             className={`rounded px-3 py-1 ${vista.modo !== "3d" ? "bg-white font-semibold shadow dark:bg-ink-line" : ""}`}>2D</button>
@@ -244,7 +245,7 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
           <button onClick={() => agregar("y")} className="rounded border border-slate-200 px-1.5 py-0.5 dark:border-ink-line" title="Agregar un eje en Y">+ Eje Y</button>
           <button onClick={() => agregar("nivel")} className="rounded border border-slate-200 px-1.5 py-0.5 dark:border-ink-line" title="Agregar un nivel">+ Nivel</button>
         </>)}
-        <span className="ml-auto text-slate-500 dark:text-slate-400">
+        <span className="ml-auto hidden text-slate-500 md:inline dark:text-slate-400">
           {vista.modo === "3d" ? "Shift+clic suma · Ctrl+arrastre: recuadro · H ocultar · G mover · Shift+D copiar · ? atajos" : "Rueda: zoom · arrastrar fondo o Espacio: desplazar · Esc: terminar"}
         </span>
       </div>
@@ -293,6 +294,8 @@ function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisa
   const [cursor, setCursor] = useState(null);
   const [pend, setPend] = useState(null);           // punto inicial de la barra [u, v]
   const accion = useRef(null);
+  const viewRef = useRef(view); viewRef.current = view;
+  const pinch = useMemo(() => crearPinch(() => viewRef.current, setView, { min: 1, max: 3000 }), []);
   const espacio = useRef(false);
 
   // proyección: planta → (x, y); elevación eje x (y = c) → (x, z); eje y (x = c) → (y, z)
@@ -372,6 +375,7 @@ function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisa
   };
 
   const onDown = (e) => {
+    if (pinch.down(e, svg.current)) { accion.current = null; svg.current.setPointerCapture(e.pointerId); return; }
     const r = svg.current.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
     svg.current.setPointerCapture(e.pointerId);
     const elemId = e.target.closest?.("[data-elem]")?.dataset.elem, nudoId = e.target.closest?.("[data-nudo]")?.dataset.nudo;
@@ -394,9 +398,10 @@ function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisa
     else { setSel(null); accion.current = { sx, sy, v: view }; }
   };
   const onMove = (e) => {
+    if (pinch.move(e, svg.current)) return;
     const r = svg.current.getBoundingClientRect(), sx = e.clientX - r.left, sy = e.clientY - r.top;
     const [u, v] = aModelo(sx, sy);
-    setCursor(snap(u, v) || [u, v]);
+    if (e.pointerType === "mouse" || tool === "barra" || tool === "columna") setCursor(snap(u, v) || [u, v]);   // con el dedo no se redibuja en cada movimiento
     const a = accion.current;
     if (a) setView({ ...a.v, tx: a.v.tx + sx - a.sx, ty: a.v.ty + sy - a.sy });
   };
@@ -414,7 +419,7 @@ function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisa
   return (
     <div ref={wrap} className="absolute inset-0 bg-slate-50 dark:bg-ink">
       <svg ref={svg} width={size.w} height={size.h} className="block touch-none select-none" style={{ cursor: cursorCss }}
-        onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => { accion.current = null; }} onContextMenu={(e) => e.preventDefault()}>
+        onPointerDown={onDown} onPointerMove={onMove} onPointerUp={(e) => { pinch.up(e); accion.current = null; }} onPointerCancel={(e) => { pinch.up(e); accion.current = null; }} onContextMenu={(e) => e.preventDefault()}>
         {/* plano DXF de fondo (solo planta) */}
         {fondo && vista.modo === "planta" && <FondoSvg fondo={fondo} X={X} Y={Y} s={view.s} />}
         {/* grilla de ejes */}
@@ -474,7 +479,7 @@ function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisa
         {cursor && ` · ${cursor[0].toFixed(2)}, ${cursor[1].toFixed(2)}`}
         {tool === "barra" && (pend ? " · clic en el punto final (Esc termina)" : " · clic en el punto inicial")}
       </div>
-      <button onClick={ajustar} title="Ajustar vista" className="absolute bottom-3 right-3 grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white shadow dark:border-ink-line dark:bg-ink-2">⤢</button>
+      <button onClick={ajustar} title="Ajustar vista" className="absolute bottom-3 right-3 grid h-11 w-11 place-items-center rounded-lg md:h-9 md:w-9 border border-slate-200 bg-white shadow dark:border-ink-line dark:bg-ink-2">⤢</button>
     </div>
   );
 }

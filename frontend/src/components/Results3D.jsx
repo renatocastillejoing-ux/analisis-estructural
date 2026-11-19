@@ -162,7 +162,7 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
           </Suspense>
         </div>
         <div className="flex-[2] overflow-y-auto border-t border-slate-200 bg-slate-50 p-4 dark:border-ink-line dark:bg-ink">
-          <div className="mb-3 flex gap-1" role="tablist">
+          <div className="barra-scroll mb-3 flex gap-1 overflow-x-auto" role="tablist">
             {[["resumen", "Resumen"], ["derivas", "Derivas"], ["modal", "Modos"], ["diseno", "Diseño E.060"], ["reacciones", "Reacciones"], ["porticos", "Pórtico por eje"], ["pseudo", "Pseudo-3D (profesor)"]].map(([k, l]) => (
               <button key={k} role="tab" aria-selected={pestaña === k} onClick={() => setPestaña(k)} className={`rounded-full px-3 py-1 text-sm ${pestaña === k ? "bg-teal font-semibold text-white" : "bg-white dark:bg-ink-2"}`}>{l}</button>
             ))}
@@ -278,7 +278,7 @@ function Diseno({ res, setElegido }) {
         <span className="text-xs text-slate-500">{lista.length} barras · clic en una fila para ubicarla en el 3D</span>
       </div>
       <section className={caja}>
-        <div className="max-h-80 overflow-auto">
+        <div className="tabla-scroll max-h-80 overflow-auto">
           <table className="min-w-full text-xs">
             <thead className="sticky top-0 bg-white dark:bg-ink-2"><tr className="border-b border-slate-200 text-left uppercase text-slate-500 dark:border-ink-line">
               {["Barra", "Sección", "Estado", "Flexión", "Cortante / estribos", "Observación"].map((c) => <th key={c} className="px-2 py-1.5">{c}</th>)}
@@ -326,7 +326,7 @@ function Reacciones({ res, caso }) {
 
 function Tabla({ cols, filas }) {
   return (
-    <div className="max-h-72 overflow-auto">
+    <div className="tabla-scroll max-h-72 overflow-auto">
       <table className="min-w-full text-xs">
         <thead className="sticky top-0 bg-white dark:bg-ink-2"><tr className="border-b border-slate-200 text-left uppercase text-slate-500 dark:border-ink-line">{cols.map((c) => <th key={c} className="px-2 py-1.5 font-semibold">{c}</th>)}</tr></thead>
         <tbody>{filas.map((fl, i) => <tr key={i} className="border-b border-slate-100 last:border-0 dark:border-ink-line">{fl.map((c, j) => <td key={j} className="px-2 py-1 tabular-nums">{c}</td>)}</tr>)}</tbody>

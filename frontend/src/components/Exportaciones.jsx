@@ -98,7 +98,7 @@ export function DialogoEtabs({ modelo, onCerrar }) {
               {" "}<span className={`rounded px-1.5 ${COLOR.ok}`}>≤ 5 %</span> <span className={`rounded px-1.5 ${COLOR.medio}`}>≤ 15 %</span> <span className={`rounded px-1.5 ${COLOR.alto}`}>&gt; 15 %</span>
               {res.sin_pareja_modelo.length > 0 && <> Sin pareja en ETABS: {res.sin_pareja_modelo.join(", ")}.</>}
             </p>
-            <div className="max-h-[50vh] overflow-auto rounded-lg border border-slate-200 dark:border-ink-line">
+            <div className="tabla-scroll max-h-[50vh] overflow-auto rounded-lg border border-slate-200 dark:border-ink-line">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-slate-100 text-xs dark:bg-ink-3">
                   <tr><th className="px-2 py-1 text-left" rowSpan={2}>Barra</th><th className="px-2 py-1" rowSpan={2}>Ext.</th>

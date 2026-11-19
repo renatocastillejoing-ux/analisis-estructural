@@ -384,9 +384,9 @@ export function Props3D({ modelo, sel, setSel, commit, abrirPanel }) {
   const casos = modelo.casos || [];
   return (
     <aside className="flex w-full shrink-0 flex-col border-l lg:w-80 border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" aria-label="Propiedades">
-      <div className="flex h-10 shrink-0 items-center border-b border-slate-200 px-4 dark:border-ink-line">
+      <div className="flex min-h-[44px] shrink-0 items-center md:h-10 md:min-h-0 border-b border-slate-200 px-4 dark:border-ink-line">
         <h2 className="text-sm font-semibold">{nudo ? `Nudo ${nudo.nombre}` : el ? `Barra ${el.nombre}` : "Propiedades"}</h2>
-        {(nudo || el) && <button className="ml-auto text-xs text-slate-500" onClick={() => setSel(null)}>Deseleccionar (Esc)</button>}
+        {(nudo || el) && <button className="ml-auto text-xs text-slate-500" onClick={() => setSel(null)}>Deseleccionar</button>}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 text-sm">
         {nudo && (<>
@@ -516,9 +516,9 @@ function PropsVarios3D({ modelo, sel, setSel, commit }) {
   const nCargas = (modelo.cargas_barras || []).filter((c) => sel.elems.includes(c.elem)).length;
   return (
     <aside className="flex w-full shrink-0 flex-col border-l lg:w-80 border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" aria-label="Propiedades de la selección">
-      <div className="flex h-10 shrink-0 items-center border-b border-slate-200 px-4 dark:border-ink-line">
+      <div className="flex min-h-[44px] shrink-0 items-center md:h-10 md:min-h-0 border-b border-slate-200 px-4 dark:border-ink-line">
         <h2 className="text-sm font-semibold">{elems.length + nudos.length} seleccionados</h2>
-        <button className="ml-auto text-xs text-slate-500" onClick={() => setSel(null)}>Deseleccionar (Esc)</button>
+        <button className="ml-auto text-xs text-slate-500" onClick={() => setSel(null)}>Deseleccionar</button>
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 text-sm">
         <div className="rounded-md bg-slate-100 px-3 py-2 text-xs dark:bg-ink-3">

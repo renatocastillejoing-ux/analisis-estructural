@@ -53,8 +53,18 @@ const nombreDeCabecera = (r, otro) => /filename="?([^";]+)"?/.exec(r.headers.get
 const errorDe = async (r) => { try { return (await r.json()).error || `Error ${r.status}`; } catch { return `Error ${r.status}`; } };
 
 export const excelProfesor = (modelo) => conCarga("excel", "Generando el Excel del profesor", () => _excelProfesor(modelo), "Hojas, matrices y fórmulas");
+// «Failed to fetch» = el servidor no respondió (apagado, reiniciándose o sin red): se reintenta
+// una vez y, si sigue sin responder, se explica en español.
+const SIN_SERVIDOR = "No hay conexión con el servidor de cálculo (está apagado, reiniciándose o sin red). Espera unos segundos y vuelve a intentarlo.";
+async function fetchConReintento(url, opciones) {
+  try { return await fetch(url, opciones); }
+  catch {
+    await new Promise((r) => setTimeout(r, 2500));
+    try { return await fetch(url, opciones); } catch { throw new Error(SIN_SERVIDOR); }
+  }
+}
 async function _excelProfesor(modelo) {
-  const r = await fetch("/api/exportar/excel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(modelo) });
+  const r = await fetchConReintento("/api/exportar/excel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(modelo) });
   if (!r.ok) throw new Error(await errorDe(r));
   guardarBlob(await r.blob(), nombreDeCabecera(r, "portico_profesor.xlsx"));
 }
@@ -70,7 +80,7 @@ async function _pdfTorre({ onProgreso, forzar = false, cada = 1000 } = {}) {
   const falla = (msg, reintentar) => Object.assign(new Error(msg), { reintentar });
   let p;
   try { p = await pdfJson("/api/torre/pdf/iniciar" + (forzar ? "?forzar=1" : ""), { method: "POST" }); }
-  catch { throw falla("No hay conexión con el servidor.", true); }
+  catch { throw falla(SIN_SERVIDOR, true); }
   const arranque = p.arranque;
   let cortes = 0;
   while (p.estado !== "listo") {
@@ -96,6 +106,6 @@ async function _compararEtabs(modelo, archivo, opciones = {}) {
   fd.append("modelo", JSON.stringify(modelo));
   fd.append("archivo", archivo);
   Object.entries(opciones).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== "") fd.append(k, v); });
-  const r = await fetch("/api/comparar_etabs", { method: "POST", body: fd });
+  const r = await fetchConReintento("/api/comparar_etabs", { method: "POST", body: fd });
   return r.json();
 }
