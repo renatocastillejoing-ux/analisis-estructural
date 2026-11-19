@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { propsSeccion } from "../model.js";
+import { estaSel } from "../model3d.js";
 
 const PALETA = ["#508C9B", "#C1666B", "#6E9B54", "#B0894E", "#7E6C9B", "#3F7C8C", "#C98A3B", "#5E7BA6"];
 const PASOS_GRILLA = [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100];
@@ -219,7 +220,7 @@ export default function Canvas({
           const a = porId[e.i], b = porId[e.j];
           if (!a || !b) return null;
           const est = estilos[e.seccion] || { color: "#888", ancho: 4 };
-          const activo = sel?.tipo === "elemento" && sel.id === e.id;
+          const activo = estaSel(sel, "elemento", e.id);
           return (
             <g key={e.id} data-elem={e.id} className={tool === "nudo" ? "" : "cursor-pointer"}>
               {activo && <line x1={X(a.x)} y1={Y(a.y)} x2={X(b.x)} y2={Y(b.y)} stroke="#F59E0B" strokeOpacity={0.45} strokeWidth={est.ancho + 10} strokeLinecap="round" />}

@@ -177,3 +177,116 @@ export function modeloDesdeCasos(d) {
     combinaciones,
   };
 }
+
+/* ------------------------- mover columnas (2D) ------------------------- */
+const TOL = 1e-6;
+const r6 = (v) => Math.round(+v * 1e6) / 1e6;
+
+// Una columna es una barra vertical (mismo x en sus dos nudos, distinta y).
+export function esColumna2d(m, e) {
+  const a = m.nudos.find((n) => n.id === e.i), b = m.nudos.find((n) => n.id === e.j);
+  return !!a && !!b && Math.abs(a.x - b.x) < TOL && Math.abs(a.y - b.y) > TOL;
+}
+
+// Ids de todas las barras verticales que están en la misma x que la columna dada (la columna entera, de piso a piso).
+export function columnaEntera2d(m, elemId) {
+  const e = m.elementos.find((q) => q.id === elemId);
+  if (!e || !esColumna2d(m, e)) return [];
+  const x = m.nudos.find((n) => n.id === e.i).x;
+  return m.elementos.filter((q) => esColumna2d(m, q) && Math.abs(m.nudos.find((n) => n.id === q.i).x - x) < TOL).map((q) => q.id);
+}
+
+// Parte la lista de tramos (barra no prismática) en el punto s medido desde i; L = longitud de la barra.
+function partirTramos(tramos, s, L) {
+  const suma = tramos.reduce((t, q) => t + (+q.L || 0), 0) || L;
+  const k = L / suma;                                    // el cálculo ya los escala si no suman L
+  const a = [], b = [];
+  let acum = 0;
+  tramos.forEach((t) => {
+    const l = (+t.L || 0) * k, ini = acum, fin = acum + l;
+    acum = fin;
+    if (ini < s - TOL) a.push({ ...t, L: r6(Math.min(fin, s) - ini) });
+    if (fin > s + TOL) b.push({ ...t, L: r6(fin - Math.max(ini, s)) });
+  });
+  return [a, b];
+}
+
+// Devuelve el nudo en (x, y): el que ya existe o uno nuevo, cortando la barra no vertical que pase por ahí
+// (crea el nudo, parte la barra en dos y reparte sus cargas). cuenta.cortes suma las barras partidas.
+function nudoEnBarras2d(m, x, y, apoyo, cuenta) {
+  const ya = m.nudos.find((n) => Math.abs(n.x - x) < TOL && Math.abs(n.y - y) < TOL);
+  if (ya) return ya.id;
+  const id = nextId(m.nudos);
+  m.nudos.push({ id, nombre: `N${id}`, x: r6(x), y: r6(y), apoyo: apoyo || "libre" });
+  const porId = Object.fromEntries(m.nudos.map((n) => [n.id, n]));
+  const pasa = m.elementos.find((e) => {
+    const a = porId[e.i], b = porId[e.j];
+    if (!a || !b || esColumna2d(m, e)) return false;
+    const L = Math.hypot(b.x - a.x, b.y - a.y);
+    if (L < TOL) return false;
+    const t = ((x - a.x) * (b.x - a.x) + (y - a.y) * (b.y - a.y)) / (L * L);
+    const dist = Math.abs((x - a.x) * (b.y - a.y) - (y - a.y) * (b.x - a.x)) / L;
+    return t > 1e-6 && t < 1 - 1e-6 && dist < 1e-4;
+  });
+  if (!pasa) return id;
+  const a = porId[pasa.i], b = porId[pasa.j];
+  const L = Math.hypot(b.x - a.x, b.y - a.y), s = Math.hypot(x - a.x, y - a.y);
+  const jOrig = pasa.j, relJ = pasa.release_j;
+  const nid = nextId(m.elementos);
+  const copia = { ...structuredClone(pasa), id: nid, nombre: `${pasa.nombre}b`, i: id, j: jOrig, release_i: undefined, release_j: relJ };
+  pasa.j = id; pasa.release_j = undefined;
+  const tr = pasa.segmentos || pasa.tramos;
+  if (tr && tr.length) {
+    const [t1, t2] = partirTramos(tr, s, L);
+    delete pasa.tramos; delete pasa.segmentos; delete copia.tramos; delete copia.segmentos;
+    if (t1.length) pasa.segmentos = t1;
+    if (t2.length) copia.segmentos = t2;
+  }
+  m.elementos.push(copia);
+  const nuevas = [];
+  m.cargas_elementos.filter((c) => c.elem === pasa.id).forEach((c) => {
+    if (c.tipo === "puntual" || c.tipo === "momento") {
+      const p = c.a === undefined || c.a === null || c.a === "" ? L / 2 : +c.a;
+      if (p > s) { c.elem = nid; c.a = r6(p - s); } else c.a = r6(p);   // «a» explícito: el centro cambia al partir
+    } else if (c.tipo === "distribuida" && c.subtipo === "trapezoidal") {
+      const k = (v1, v2) => (+v1 || 0) + ((+v2 || 0) - (+v1 || 0)) * s / L;
+      const wy = k(c.wy1, c.wy2), wx = k(c.wx1, c.wx2);
+      nuevas.push({ ...structuredClone(c), elem: nid, wy1: wy, wx1: wx });
+      c.wy2 = wy; c.wx2 = wx;
+    } else {
+      nuevas.push({ ...structuredClone(c), elem: nid });
+    }
+  });
+  m.cargas_elementos.push(...nuevas);
+  cuenta.cortes++;
+  return id;
+}
+
+// Traslada columnas (todas sus barras) dx en X. Las vigas NO se arrastran: quedan donde estaban; en el destino la
+// columna se conecta a un nudo existente o corta la viga que pase por ahí. Los apoyos viajan con la columna y las
+// cargas en nudos que quedan sueltos también. Devuelve { movidas, cortes, omitidas }.
+export function trasladarColumnas2d(m, elemIds, dx) {
+  const cuenta = { movidas: 0, cortes: 0, omitidas: 0 };
+  if (Math.abs(dx) < TOL) return cuenta;
+  const origenes = new Map();                              // nudo viejo → nudo nuevo (para cargas y limpieza)
+  elemIds.forEach((id) => {
+    const e = m.elementos.find((q) => q.id === id);
+    if (!e || !esColumna2d(m, e)) return;
+    const P = Object.fromEntries(m.nudos.map((n) => [n.id, n]));
+    const nuevos = ["i", "j"].map((k) => {
+      const n = P[e[k]];
+      return [k, n.id, nudoEnBarras2d(m, n.x + dx, n.y, n.apoyo !== "libre" ? n.apoyo : undefined, cuenta)];
+    });
+    const ni = nuevos[0][2], nj = nuevos[1][2];
+    if (m.elementos.some((q) => q.id !== e.id && ((q.i === ni && q.j === nj) || (q.i === nj && q.j === ni)))) { cuenta.omitidas++; return; }
+    nuevos.forEach(([k, viejo, d]) => { e[k] = d; origenes.set(viejo, d); });
+    cuenta.movidas++;
+  });
+  const usados = new Set(m.elementos.flatMap((e) => [e.i, e.j]));
+  origenes.forEach((d, viejo) => {
+    if (usados.has(viejo)) return;
+    m.cargas_nodales.forEach((c) => { if (c.nudo === viejo) c.nudo = d; });
+    m.nudos = m.nudos.filter((n) => n.id !== viejo);
+  });
+  return cuenta;
+}

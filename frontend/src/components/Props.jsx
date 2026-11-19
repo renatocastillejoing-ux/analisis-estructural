@@ -1,4 +1,5 @@
-import { APOYOS, borrarElemento, borrarNudo, propsSeccion } from "../model.js";
+import { useState } from "react";
+import { APOYOS, borrarElemento, borrarNudo, columnaEntera2d, esColumna2d, propsSeccion, trasladarColumnas2d } from "../model.js";
 import { FilaCargaElem, FilaCargaNudo, Interruptor, NudoSelect } from "./Editor.jsx";
 import { BtnAgregar, BtnIcon, Campo, NumIn } from "./ui.jsx";
 
@@ -6,16 +7,18 @@ import { BtnAgregar, BtnIcon, Campo, NumIn } from "./ui.jsx";
 export default function Props({ modelo, sel, setSel, commit, abrirPanel }) {
   const nudo = sel?.tipo === "nudo" ? modelo.nudos.find((n) => n.id === sel.id) : null;
   const elem = sel?.tipo === "elemento" ? modelo.elementos.find((e) => e.id === sel.id) : null;
+  const varios = sel?.tipo === "varios";
 
   return (
     <aside className="flex w-full shrink-0 flex-col border-l lg:w-80 border-slate-200 bg-white dark:border-ink-line dark:bg-ink-2" aria-label="Propiedades">
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-ink-line">
-        <h2 className="text-sm font-semibold">{nudo ? `Nudo ${nudo.nombre}` : elem ? `Elemento ${elem.nombre}` : "Propiedades"}</h2>
-        {(nudo || elem) && <button className="ml-auto text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" onClick={() => setSel(null)}>Deseleccionar (Esc)</button>}
+        <h2 className="text-sm font-semibold">{nudo ? `Nudo ${nudo.nombre}` : elem ? `Elemento ${elem.nombre}` : varios ? "Selección" : "Propiedades"}</h2>
+        {(nudo || elem || varios) && <button className="ml-auto text-xs text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" onClick={() => setSel(null)}>Deseleccionar (Esc)</button>}
       </div>
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
         {nudo ? <PropsNudo modelo={modelo} n={nudo} commit={commit} setSel={setSel} />
           : elem ? <PropsElem modelo={modelo} e={elem} commit={commit} setSel={setSel} />
+          : varios ? <PropsColumnas modelo={modelo} sel={sel} setSel={setSel} commit={commit} />
           : <Resumen modelo={modelo} abrirPanel={abrirPanel} />}
       </div>
     </aside>
@@ -130,6 +133,15 @@ function PropsElem({ modelo, e, commit, setSel }) {
       <div className="rounded-md bg-slate-100 px-3 py-2 text-xs tabular-nums text-slate-600 dark:bg-ink-3 dark:text-slate-300">
         L = {L.toFixed(3)} {modelo.unidad_longitud}{p && <> · A = {p.A.toFixed(4)} · I = {p.I.toExponential(3)}</>}
       </div>
+      {esColumna2d(modelo, e) && (() => {
+        const ids = columnaEntera2d(modelo, e.id);
+        return (
+          <button type="button" className="w-full rounded-md border border-teal/50 bg-teal/10 px-2 py-1.5 text-xs font-medium text-teal-dark hover:bg-teal/20 dark:text-teal-soft"
+            onClick={() => setSel({ tipo: "varios", elems: ids, nudos: [] })}>
+            Seleccionar la columna entera ({ids.length} {ids.length === 1 ? "piso" : "pisos"})
+          </button>
+        );
+      })()}
       <div className="flex gap-4">
         <Interruptor label="Rótula en i" valor={!!e.release_i} onChange={(v) => set("release_i", v)} />
         <Interruptor label="Rótula en j" valor={!!e.release_j} onChange={(v) => set("release_j", v)} />
@@ -177,6 +189,51 @@ function PropsElem({ modelo, e, commit, setSel }) {
         <BtnAgregar onClick={() => commit((m) => { m.cargas_elementos.push({ elem: e.id, tipo: "distribuida", subtipo: "uniforme", wy: -1, wx: 0 }); })}>+ Carga en este elemento</BtnAgregar>
       </Seccion>
       <Eliminar onClick={() => { commit((m) => borrarElemento(m, e.id)); setSel(null); }}>Eliminar elemento</Eliminar>
+    </>
+  );
+}
+
+// Selección de varias barras: si son columnas, se pueden trasladar a otra posición (las vigas se quedan).
+function PropsColumnas({ modelo, sel, setSel, commit }) {
+  const elems = (sel.elems || []).map((id) => modelo.elementos.find((e) => e.id === id)).filter(Boolean);
+  const cols = elems.filter((e) => esColumna2d(modelo, e));
+  const x0 = cols.length ? modelo.nudos.find((n) => n.id === cols[0].i).x : 0;
+  const xs = new Set(cols.map((e) => modelo.nudos.find((n) => n.id === e.i).x.toFixed(6)));
+  const [dx, setDx] = useState(0);
+  const destinos = [...new Set(modelo.nudos.map((n) => +n.x.toFixed(4)))].sort((a, b) => a - b);
+  const quieto = Math.abs(+dx || 0) < 1e-9;
+  const u = modelo.unidad_longitud;
+  const mover = () => {
+    if (quieto || !cols.length) return;
+    const d = +dx;
+    commit((m) => { trasladarColumnas2d(m, cols.map((e) => e.id), d); }, `Mover ${xs.size === 1 ? "columna" : "columnas"} ${d > 0 ? "+" : ""}${d} ${u} en X`);
+    setSel(null);
+  };
+  return (
+    <>
+      <div className="rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-ink-3 dark:text-slate-300">
+        {elems.length} {elems.length === 1 ? "barra seleccionada" : "barras seleccionadas"}{cols.length !== elems.length && ` (${cols.length} columnas)`}.
+      </div>
+      {cols.length > 0 && (
+        <section className="space-y-2 rounded-lg border border-slate-200 p-2 dark:border-ink-line">
+          <h3 className="text-xs font-semibold">Mover a otra posición</h3>
+          <div className="grid grid-cols-2 gap-2">
+            <Campo label={`Δx (${u})`}><NumIn value={dx} onChange={setDx} /></Campo>
+            <Campo label="O ir a la posición x de…">
+              <select className="inp" value="" onChange={(ev) => { if (ev.target.value !== "") setDx(+(+ev.target.value - x0).toFixed(4)); }}>
+                <option value="">elegir…</option>
+                {destinos.filter((x) => Math.abs(x - x0) > 1e-9).map((x) => <option key={x} value={x}>x = {x} {u}</option>)}
+              </select>
+            </Campo>
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            {quieto ? "Escribe cuánto se desplaza." : `Pasa de x = ${xs.size === 1 ? +x0.toFixed(4) : "varias"} a ${xs.size === 1 ? +(x0 + +dx).toFixed(4) : `+${+dx}`} ${u}. `}
+            Las vigas se quedan donde están; en el destino, la viga que pase por ahí se corta (nuevo nudo y cargas repartidas) y los apoyos viajan con la columna. Se deshace con Ctrl+Z.
+          </p>
+          <BtnAgregar onClick={mover}>Mover las columnas</BtnAgregar>
+        </section>
+      )}
+      <Eliminar onClick={() => { commit((m) => { (sel.elems || []).forEach((id) => borrarElemento(m, id)); }, `Eliminar ${elems.length} elementos`); setSel(null); }}>Eliminar {elems.length} elementos</Eliminar>
     </>
   );
 }

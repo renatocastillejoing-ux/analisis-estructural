@@ -501,3 +501,14 @@ export function trasladarColumnas(m, elemIds, dx, dy) {
   m.nudos = m.nudos.filter((n) => usados.has(n.id) || (m.cargas_nudos || []).some((c) => c.nudo === n.id));
   return { movidas };
 }
+
+// Cambia una coordenada de la grilla (eje "x" | "y" o nivel "z") arrastrando todos los nudos que estaban
+// sobre ella; si alguno cae sobre otro nudo se fusiona (mismo imán que Mover). Devuelve cuántos nudos movió.
+export function moverNudosDeEje(m, eje, viejo, nuevo) {
+  const d = +nuevo - +viejo;
+  if (!Number.isFinite(d) || Math.abs(d) < TOL) return 0;
+  const ids = m.nudos.filter((n) => Math.abs(n[eje] - viejo) < TOL).map((n) => n.id);
+  if (!ids.length) return 0;
+  moverCopiar(m, { tipo: "varios", elems: [], nudos: ids }, [eje === "x" ? d : 0, eje === "y" ? d : 0, eje === "z" ? d : 0]);
+  return ids.length;
+}
