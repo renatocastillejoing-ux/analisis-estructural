@@ -69,7 +69,7 @@ export function escenaTorre(g) {
 }
 
 /* ----------------------------- componente ----------------------------- */
-export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor = "tipo", verLosas = true, verEtiquetas = true, onElegir, vistaKey, ajusteKey, controles = true, pendiente, recuadro = false, onRecuadro, nombreImagen = "vista-3d" }) {
+export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor = "tipo", verLosas = true, verEtiquetas = true, onElegir, vistaKey, ajusteKey, controles = true, pendiente, recuadro = false, onRecuadro, nombreImagen = "vista-3d", fondo = null }) {
   const host = useRef(null);
   const st = useRef({});
   const [hover, setHover] = useState(null);
@@ -176,6 +176,24 @@ export default function Visor3D({ escena, resaltar, pisoMax = Infinity, colorPor
   }, []);
 
   const visibles = useMemo(() => escena.miembros.map((m, k) => ({ m, k })).filter(({ m }) => m.piso == null || m.piso <= pisoMax), [escena, pisoMax]);
+
+  // plano DXF de fondo: segmentos grises tenues a la altura del nivel elegido, bajo el modelo
+  useEffect(() => {
+    const { scene } = st.current;
+    if (!scene || !fondo?.datos?.capas) return;
+    const pos = [];
+    const z = fondo.z - 0.03;
+    Object.values(fondo.datos.capas).forEach((ls) => ls.forEach((p) => {
+      for (let i = 0; i + 3 < p.length; i += 2) pos.push(p[i], z, -p[i + 1], p[i + 2], z, -p[i + 3]);
+    }));
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    const mat = new THREE.LineBasicMaterial({ color: st.current.oscuro ? 0x94a3b8 : 0x64748b, transparent: true, opacity: fondo.opac, depthWrite: false });
+    const lineas = new THREE.LineSegments(geo, mat);
+    lineas.renderOrder = -1;
+    scene.add(lineas);
+    return () => { scene.remove(lineas); geo.dispose(); mat.dispose(); };
+  }, [fondo?.datos, fondo?.z, fondo?.opac]);
 
   // geometría de la escena
   useEffect(() => {

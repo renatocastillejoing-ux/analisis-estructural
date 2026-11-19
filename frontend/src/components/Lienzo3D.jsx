@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { pedir } from "../pedir.js";
+import { cargarPlanta, esTorre, plantaDeNivel, validarFondo } from "../plano.js";
 import { agregarBarra, agregarNudo3d, borrarBarra, borrarNudo3d, buscarNudo, escena3d, idsSel, moverCopiar, sumarSel, tipoBarra } from "../model3d.js";
 
 const Visor3D = lazy(() => import("./Visor3D.jsx"));
@@ -81,6 +82,32 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
   };
   const [todos, setTodos] = useState(false);
   const [ajuste, setAjuste] = useState(0.25);
+  // ---- fondo «Plano DXF»: solo con la torre del plano o con un JSON de fondo cargado por el usuario ----
+  const [fondo, setFondo] = useState({ on: false, opac: 0.4, custom: null, nz: null });
+  const [fondoDatos, setFondoDatos] = useState(null);
+  const ofreceFondo = esTorre(modelo) || !!fondo.custom;
+  const zFondo = vista.modo === "planta" ? vista.z : (fondo.nz != null && niveles.some((n) => n.z === fondo.nz) ? fondo.nz : (niveles[1] || niveles[0])?.z ?? 0);
+  const plantaFondo = plantaDeNivel(niveles, zFondo);
+  const fondoOn = fondo.on && ofreceFondo && vista.modo !== "elevacion";
+  useEffect(() => {
+    if (!fondoOn) { setFondoDatos(null); return; }
+    if (fondo.custom) { setFondoDatos(fondo.custom.datos); return; }
+    let vivo = true;
+    cargarPlanta(plantaFondo).then((d) => { if (vivo) setFondoDatos(d); })
+      .catch(() => { if (vivo) { setFondo((f) => ({ ...f, on: false })); avisar("No se pudo cargar el plano DXF.", "err"); } });
+    return () => { vivo = false; };
+  }, [fondoOn, fondo.custom, plantaFondo]); // eslint-disable-line react-hooks/exhaustive-deps
+  const fondoProp = fondoOn && fondoDatos ? { datos: fondoDatos, z: zFondo, opac: fondo.opac } : null;
+  const cargarFondo = (ev) => {
+    const f = ev.target.files?.[0]; ev.target.value = "";
+    if (!f) return;
+    f.text().then((t) => {
+      let d = null; try { d = JSON.parse(t); } catch { /* se avisa abajo */ }
+      if (!validarFondo(d)) { avisar("Ese archivo no es un fondo válido (se espera { capas: { CAPA: [[x1, y1, x2, y2, …]] } }).", "err"); return; }
+      setFondo((x) => ({ ...x, on: true, custom: { nombre: f.name, datos: d } }));
+      avisar(`Fondo «${f.name}» cargado.`);
+    });
+  };
   const agregar = async (tipo) => {
     const t = tipo === "nivel" ? "Altura z del nuevo nivel (m)" : `Posición ${tipo === "x" ? "x" : "y"} del nuevo eje (m)`;
     const r = await pedir(tipo === "nivel" ? "Agregar nivel" : `Agregar eje en ${tipo.toUpperCase()}`, [{ clave: "v", label: t, valor: 5 }]);
@@ -154,6 +181,27 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
           <button role="tab" aria-selected={vista.modo === "3d"} onClick={() => setVista((v) => ({ ...v, modo: "3d", ultimo: v.modo !== "3d" ? planos[idxPlano] : v.ultimo }))} title="Ver toda la estructura en 3D"
             className={`rounded px-3 py-1 ${vista.modo === "3d" ? "bg-white font-semibold shadow dark:bg-ink-line" : ""}`}>3D</button>
         </div>
+        {(ofreceFondo && vista.modo !== "elevacion") && (
+          <div className="flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-0.5 dark:border-ink-line">
+            <label className="flex items-center gap-1" title="Dibuja el plano DXF en gris tenue bajo el modelo, para comprobar que coinciden">
+              <input type="checkbox" checked={fondo.on} onChange={(e) => setFondo((f) => ({ ...f, on: e.target.checked }))} className="accent-teal-600" /> Plano DXF
+            </label>
+            {fondo.on && (<>
+              <input type="range" min={5} max={100} step={5} value={Math.round(fondo.opac * 100)} onChange={(e) => setFondo((f) => ({ ...f, opac: +e.target.value / 100 }))}
+                className="w-20 accent-teal-600" aria-label="Opacidad del plano DXF" title={`Opacidad ${Math.round(fondo.opac * 100)} %`} />
+              {vista.modo === "3d" && (
+                <select className="inp !py-0.5 text-xs" value={zFondo} onChange={(e) => setFondo((f) => ({ ...f, nz: +e.target.value }))} aria-label="Nivel del plano DXF" title="Nivel donde se dibuja el plano (1–3 → planta 1; 4–10 → planta 2)">
+                  {niveles.map((n) => <option key={n.z} value={n.z}>{n.nombre}</option>)}
+                </select>
+              )}
+              {!fondo.custom && <span className="text-slate-500 dark:text-slate-400">planta {plantaFondo}</span>}
+            </>)}
+          </div>
+        )}
+        <label className="cursor-pointer rounded border border-slate-200 px-1.5 py-0.5 hover:bg-slate-100 dark:border-ink-line dark:hover:bg-ink-3" title="Carga un JSON de fondo (capas con polilíneas x, y, x, y… en metros) para dibujarlo bajo el modelo">
+          Fondo…<input type="file" accept=".json,application/json" className="hidden" onChange={cargarFondo} />
+        </label>
+        {fondo.custom && <button onClick={() => setFondo((f) => ({ ...f, custom: null, on: f.on && esTorre(modelo) }))} className="rounded border border-slate-200 px-1.5 py-0.5 dark:border-ink-line" title="Quitar el fondo cargado">✕ {fondo.custom.nombre}</button>}
         {vista.modo !== "3d" ? (<>
           <button onClick={() => mover(-1)} disabled={!vecino(-1)} className="rounded border border-slate-200 px-1.5 py-0.5 disabled:opacity-30 dark:border-ink-line" title="Eje o nivel anterior (RePág)" aria-label="Anterior">◀</button>
           <select className="inp !py-0.5 text-xs font-semibold" value={idxPlano} onChange={(e) => irPlano(planos[+e.target.value])} aria-label="Eje o nivel en 2D">
@@ -205,7 +253,7 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
           <Suspense fallback={<div className="p-6 text-sm text-slate-500">Cargando el visor 3D…</div>}>
             <Visor3D escena={resaltarPlano && ultimo2d ? { ...escena, miembros: escena.miembros.map((m) => ({ ...m, grupos: enPlanoUlt(m, ultimo2d) ? ["plano"] : [] })) } : escena}
               resaltar={resaltarPlano && ultimo2d ? "plano" : null} ajusteKey={ajusteKey} onElegir={elegir3d} pendiente={pend3}
-              recuadro={tool === "recuadro"} onRecuadro={recuadro3d} />
+              recuadro={tool === "recuadro"} onRecuadro={recuadro3d} fondo={fondoProp} />
             {tool === "barra" && (
               <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-full bg-teal px-3 py-1 text-xs font-semibold text-white shadow">
                 {pend3 == null ? "Clic en el nudo inicial" : "Clic en el nudo final · Esc para terminar"}
@@ -213,15 +261,32 @@ export default function Lienzo3D({ modelo, commit, sel, setSel, tool, setTool, v
             )}
           </Suspense>
         ) : (
-          <Plano modelo={modelo} commit={commit} sel={sel} setSel={setSel} tool={tool} setTool={setTool} vista={vista} niveles={niveles} todos={todos} avisar={avisar} ajuste={ajuste} />
+          <Plano modelo={modelo} commit={commit} sel={sel} setSel={setSel} tool={tool} setTool={setTool} vista={vista} niveles={niveles} todos={todos} avisar={avisar} ajuste={ajuste} fondo={fondoProp} />
         )}
       </div>
     </div>
   );
 }
 
+/* fondo del plano DXF en SVG: polilíneas en gris tenue y rótulos si el zoom los hace legibles */
+function FondoSvg({ fondo, X, Y, s }) {
+  const trazos = useMemo(() => Object.entries(fondo.datos.capas).map(([capa, ls]) => [capa, ls.map((p) => {
+    let d = ""; for (let i = 0; i + 1 < p.length; i += 2) d += `${i ? "L" : "M"}${p[i]} ${p[i + 1]}`; return d;
+  }).join("")]), [fondo.datos]);
+  return (
+    <g opacity={fondo.opac} className="pointer-events-none">
+      <g transform={`translate(${X(0)} ${Y(0)}) scale(${s} ${-s})`}>
+        {trazos.map(([capa, d]) => <path key={capa} d={d} fill="none" vectorEffect="non-scaling-stroke" strokeWidth={capa === "EJES" ? 0.6 : 1} strokeDasharray={capa === "EJES" ? "6 4" : undefined} className="stroke-slate-500 dark:stroke-slate-400" />)}
+      </g>
+      {(fondo.datos.textos || []).map((t, i) => t.h * s >= 5 && (
+        <text key={i} x={X(t.x)} y={Y(t.y)} fontSize={Math.min(40, t.h * s)} transform={t.r ? `rotate(${-t.r} ${X(t.x)} ${Y(t.y)})` : undefined} className="fill-slate-500 dark:fill-slate-400">{t.t}</text>
+      ))}
+    </g>
+  );
+}
+
 /* ----------------------------- planta / elevación ----------------------------- */
-function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisar, ajuste = 0.25 }) {
+function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisar, ajuste = 0.25, fondo = null }) {
   const wrap = useRef(null), svg = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [view, setView] = useState({ s: 20, tx: 60, ty: 500 });
@@ -350,6 +415,8 @@ function Plano({ modelo, commit, sel, setSel, tool, vista, niveles, todos, avisa
     <div ref={wrap} className="absolute inset-0 bg-slate-50 dark:bg-ink">
       <svg ref={svg} width={size.w} height={size.h} className="block touch-none select-none" style={{ cursor: cursorCss }}
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => { accion.current = null; }} onContextMenu={(e) => e.preventDefault()}>
+        {/* plano DXF de fondo (solo planta) */}
+        {fondo && vista.modo === "planta" && <FondoSvg fondo={fondo} X={X} Y={Y} s={view.s} />}
         {/* grilla de ejes */}
         {P.us.map((a) => (
           <g key={`u${a.c}`}>
