@@ -81,6 +81,7 @@ export const MANUAL = [
       { t: "h", x: "Archivo" },
       { t: "t", cols: ["Comando", "Qué hace"], filas: [
         ["Nuevo pórtico 2D", "Documento 2D vacío."],
+        ["📷 Ejercicio desde foto…", "Toma una foto (o elige una imagen) de un ejercicio de pórtico: la IA lo lee, lo revisas, y se resuelve con el método del profesor."],
         ["Plantillas (EJ 1, EJ 2, …)", "Ejemplos listos: EJ 1 (pórtico de 2 vanos del curso), EJ 2 (viga continua de 5 tramos), FIJA PC3 (placa + columna con brazo rígido), voladizo, viga simple y pórtico simple."],
         ["Generar pórtico regular", "Pórtico de varios pisos y vanos en un paso: número de pisos y vanos, luces, alturas, secciones y carga en vigas."],
         ["Torre de Arequipa (pórtico 2D)", "Elige uno de los 35 pórticos de la torre (por eje y tramo), con cargas combinadas 1.4CM+1.7CV o con CM y CV separados. Desde aquí también se descarga el **PDF de todos los pórticos** (sección 18)."],
@@ -141,6 +142,15 @@ export const MANUAL = [
         "**Cómo se obtuvo**: **Paso a paso** (tecla 4) › modo **«Como el profesor (hoja continua)»** › **Ver todo**: aparece la resolución entera, de los datos a los diagramas (sección 11).",
         "**Entregar**: en Resultados, **Excel del profesor** (el cálculo con fórmulas), **Memoria .txt**, **CSV** o **Imprimir**. Respalda el modelo con Ctrl+S.",
       ] },
+      { t: "h", x: "Ejercicio desde foto (IA)" },
+      { t: "n", x: [
+        "**Archivo › 📷 Ejercicio desde foto** (en el teléfono, el botón grande del menú ☰).",
+        "**Tomar foto** abre la cámara; **Elegir de la galería** usa una imagen guardada. Foto de frente, con buena luz y todas las cotas, apoyos y cargas visibles. La imagen se reduce en el teléfono antes de enviarse.",
+        "**Leer con IA**: en unos segundos aparece el pórtico dibujado, con **lo que asumió la IA** (alturas no acotadas, unidades, EA = ∞, material…) y las **dudas** que debes revisar.",
+        "**Corregir datos** (opcional): apoyos con botones, coordenadas, secciones y cargas. Lo demás se ajusta luego en el editor.",
+        "**Usar este modelo y resolver**: un aviso dice qué se reemplaza; el modelo entra como un cambio (**Ctrl+Z** lo deshace), se calcula y se abre el **paso a paso** del profesor.",
+      ] },
+      { t: "aviso", x: "La IA **propone**; tú respondes por el modelo. Revisa siempre luces, alturas, signos de las cargas y apoyos contra el enunciado. Si el servidor no tiene la IA configurada, la ventana lo dice y puedes armar el modelo a mano." },
       { t: "nota", x: "Atajo: **Archivo › Plantillas › EJ 1** abre el pórtico del curso ya armado; **FIJA PC3** trae una placa con brazo rígido para comparar con la hoja de práctica." },
       { t: "h", x: "Editar lo que ya dibujaste" },
       { t: "l", x: [

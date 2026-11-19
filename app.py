@@ -619,6 +619,22 @@ def api_tipos_seccion():
 
 
 # ----------------------------------------------------------------------------
+#  API: ejercicio desde foto (IA con visión; AE_IA_URL / AE_IA_LLAVE)
+# ----------------------------------------------------------------------------
+@app.route("/api/ia/leer_ejercicio", methods=["POST"])
+def api_ia_leer_ejercicio():
+    from core.ia_ejercicio import leer_ejercicio, ErrorIA
+    datos = request.get_json(force=True, silent=True) or {}
+    try:
+        r = leer_ejercicio(datos.get("imagen"))
+    except ErrorIA as e:
+        return jsonify({"ok": False, "error": str(e)}), e.estado
+    except Exception:
+        return jsonify({"ok": False, "error": "No se pudo leer el ejercicio desde la foto."}), 500
+    return jsonify({"ok": True, **r})
+
+
+# ----------------------------------------------------------------------------
 #  API: modelo de ejemplo (portico de 2 tramos del enunciado)
 # ----------------------------------------------------------------------------
 @app.route("/api/ejemplo", methods=["GET"])

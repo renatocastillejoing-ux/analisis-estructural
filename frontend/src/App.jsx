@@ -16,6 +16,7 @@ import { a3d, borrarBarra, borrarNudo3d, borrarSeleccion, sumarSel, copiarPlano,
 import Documentos from "./components/Documentos.jsx";
 import { registrarPedir } from "./pedir.js";
 import MenuMovil from "./components/MenuMovil.jsx";
+import FotoEjercicio from "./components/FotoEjercicio.jsx";
 import Carga from "./components/Carga.jsx";
 import { PasoPortico3D } from "./components/PorticoDe3D.jsx";
 import { PLANTILLAS } from "./model.js";
@@ -328,6 +329,21 @@ export default function App() {
   };
   const nuevoModelo = () => abrirDoc(modeloVacio(), "Pórtico 2D nuevo (documento aparte; los demás siguen abiertos).");
   const cargarModelo = (m, msg) => abrirDoc(m, msg);
+  // Ejercicio desde foto: entra como cambio con deshacer (o documento nuevo si el activo es 3D), se calcula y se abre el paso a paso.
+  async function usarModeloFoto(m0) {
+    const m = { ...modeloVacio(), ...structuredClone(m0) };
+    setDialogo(null);
+    if (tridim) abrirDoc(m, `«${m.nombre}» abierto como documento 2D nuevo.`);
+    else { reemplazar(m); avisar(`«${m.nombre}» cargado desde la foto. Ctrl+Z lo deshace.`); }
+    setCalculando(true); setError(null);
+    try {
+      const { ok, data } = await calcular(m);
+      if (!ok || !data.ok) { setError(data.error || "No se pudo calcular"); setResultado(null); setVista("resultados"); return; }
+      setResultado({ ...data, ...data.resultados }); setModeloCalculado(m);
+      setVista("paso");
+    } catch (e) { setError("No hay conexión con el servidor de cálculo: " + e); setVista("resultados"); }
+    finally { setCalculando(false); }
+  }
   const docs2d = proyecto.docs.filter((d) => !es3d(d.modelo));
   const docs3d = proyecto.docs.filter((d) => es3d(d.modelo));
   const fuentesPortico = [
@@ -370,6 +386,7 @@ export default function App() {
     { id: "archivo", label: "Archivo", items: [
       { id: "nuevo", label: "Nuevo pórtico 2D", accion: nuevoModelo, claves: "modelo documento" },
       ...proyecto.docs.filter((d) => d.id !== proyecto.activo).map((d) => ({ id: `doc-${d.id}`, label: `Ir a: ${d.modelo.nombre} (${es3d(d.modelo) ? "3D" : "2D"})`, accion: () => cambiarDoc(d.id), claves: "documento cambiar abrir" })),
+      { id: "foto", label: "📷 Ejercicio desde foto…", accion: () => setDialogo("foto"), claves: "camara imagen ia leer ejercicio fotografia" },
       { id: "plantillas", label: "Plantillas (EJ 1, EJ 2, …)…", accion: () => setDialogo("plantillas"), claves: "ejemplo ejercicio" },
       { id: "generar", label: "Generar pórtico regular…", accion: () => setDialogo("generador"), claves: "pisos vanos" },
       { id: "torre", label: "Torre de Arequipa (pórtico 2D)…", accion: () => setDialogo("torre"), claves: "edificio portico eje" },
@@ -544,7 +561,7 @@ export default function App() {
           className="hidden h-8 w-8 shrink-0 place-items-center rounded-md hover:bg-slate-100 xl:grid dark:hover:bg-ink-3">{tema === "dark" ? "☀" : "☾"}</button>
         <button onClick={() => setMenuMovil(true)} aria-label="Abrir menú" className="grid h-11 w-11 shrink-0 place-items-center rounded-md border border-slate-200 xl:hidden dark:border-ink-line">☰</button>
       </header>
-      <MenuMovil abierto={menuMovil} onCerrar={() => setMenuMovil(false)} menus={menus} comandos={comandos} vistas={VISTAS} vista={vista} setVista={setVista} tema={tema} setTema={setTema} />
+      <MenuMovil abierto={menuMovil} onCerrar={() => setMenuMovil(false)} menus={menus} comandos={comandos} vistas={VISTAS} vista={vista} setVista={setVista} tema={tema} setTema={setTema} onFoto={() => setDialogo("foto")} />
       <input ref={importar} type="file" accept=".json,application/json" className="hidden" onChange={onImportar} />
 
       {/* ===== cuerpo ===== */}
@@ -683,6 +700,14 @@ export default function App() {
       {dialogo === "plantillas" && <DialogoPlantillas onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo(m)} />}
       {dialogo === "generador" && <DialogoGenerador onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo(m)} />}
       {dialogo === "torre" && <DialogoTorre onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo({ ...modeloVacio(), ...m })} />}
+      {dialogo === "foto" && <FotoEjercicio onCerrar={() => setDialogo(null)} onAceptar={(m) => confirmar({
+        titulo: "Usar el modelo leído de la foto",
+        texto: tridim
+          ? `El documento activo es un modelo 3D: «${m.nombre}» se abrirá como documento 2D nuevo (no se reemplaza nada). Luego se calcula y se abre el paso a paso del profesor.`
+          : `Se reemplaza el modelo actual «${modelo.nombre}» (${modelo.nudos.length} nudos, ${modelo.elementos.length} elementos, ${modelo.cargas_nodales.length + modelo.cargas_elementos.length} cargas) por «${m.nombre}» (${m.nudos.length} nudos, ${m.elementos.length} elementos). Se puede deshacer con Ctrl+Z. Luego se calcula y se abre el paso a paso del profesor.`,
+        accion: "Reemplazar y resolver",
+        onAceptar: () => usarModeloFoto(m),
+      })} />}
       {dialogo === "atajos" && <DialogoAtajos onCerrar={() => setDialogo(null)} />}
       {dialogo === "edificio" && <DialogoEdificio onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo(m, `Modelo 3D «${m.nombre}» creado: ${m.nudos.length} nudos, ${m.elementos.length} barras.`)} />}
       {dialogo === "extruir" && !tridim && <DialogoExtruir modelo={modelo} onCerrar={() => setDialogo(null)} onElegir={(m) => cargarModelo(m, `«${m.nombre}» creado: ${m.nudos.length} nudos, ${m.elementos.length} barras.`)} />}

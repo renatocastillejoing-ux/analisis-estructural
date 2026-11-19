@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { BuscadorComandos } from "./MenuBar.jsx";
 
 // Menú de pantallas chicas: vistas, buscador, todos los menús y el tema en un panel lateral.
-export default function MenuMovil({ abierto, onCerrar, menus, comandos, vistas, vista, setVista, tema, setTema }) {
+export default function MenuMovil({ abierto, onCerrar, menus, comandos, vistas, vista, setVista, tema, setTema, onFoto }) {
   useEffect(() => {
     if (!abierto) return;
     const h = (e) => { if (e.key === "Escape") onCerrar(); };
@@ -19,6 +19,9 @@ export default function MenuMovil({ abierto, onCerrar, menus, comandos, vistas, 
         </div>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm">
           <BuscadorComandos comandos={comandos.map((c) => ({ ...c, accion: () => { onCerrar(); c.accion(); } }))} ancho="w-full" />
+          {onFoto && (
+            <button onClick={() => { onCerrar(); onFoto(); }} className="flex min-h-[3.25rem] w-full items-center justify-center gap-2 rounded-xl bg-teal px-4 text-base font-semibold text-white hover:bg-teal-dark">📷 Ejercicio desde foto</button>
+          )}
           <div>
             <div className="mb-1 text-xs font-semibold uppercase text-slate-500">Vistas</div>
             <div className="grid grid-cols-2 gap-1">
