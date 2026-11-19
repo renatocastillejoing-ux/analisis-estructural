@@ -325,35 +325,57 @@ def api_exportar_excel():
 
 _PDF = {"bytes": None, "info": None, "progreso": {"estado": "libre", "i": 0, "n": 0, "nombre": ""}}
 _PDF_LOCK = threading.Lock()
+_ARRANQUE = f"{os.getpid()}-{int(time.time())}"        # cambia si el servidor se reinicia
+
+
+def _generar_pdf_en_hilo():
+    """Hilo de fondo: genera el PDF de la torre y lo deja en memoria. El avance se consulta
+    en /api/torre/pdf/progreso; la petición que lo inicia vuelve de inmediato."""
+    from core import pdf_porticos
+    pr = _PDF["progreso"]
+    try:
+        def avance(i, n, nombre):
+            pr.update(i=i, n=n, nombre=nombre)
+        _PDF["bytes"], _PDF["info"] = pdf_porticos.generar_pdf(avance)
+        pr.update(estado="listo", fin=time.time())
+    except Exception as e:
+        traceback.print_exc()
+        pr.update(estado="error", error=str(e), fin=time.time())
+    finally:
+        _PDF_LOCK.release()
 
 
 @app.route("/api/torre/pdf/progreso", methods=["GET"])
 def api_torre_pdf_progreso():
-    return jsonify({"ok": True, **_PDF["progreso"]})
+    pr = dict(_PDF["progreso"])
+    pr["segundos"] = round((pr.get("fin") or time.time()) - pr["inicio"], 1) if pr.get("inicio") else 0
+    pr["arranque"] = _ARRANQUE
+    pr["en_memoria"] = _PDF["bytes"] is not None
+    return jsonify({"ok": True, **pr})
+
+
+@app.route("/api/torre/pdf/iniciar", methods=["POST", "GET"])
+def api_torre_pdf_iniciar():
+    """Pone a generar el PDF de todos los pórticos en segundo plano y responde al instante.
+    Si ya está en memoria no regenera (salvo ?forzar=1); si ya se está generando, no lanza otro."""
+    pr = _PDF["progreso"]
+    if _PDF["bytes"] is not None and request.args.get("forzar") != "1":
+        pr.update(estado="listo")
+    elif _PDF_LOCK.acquire(blocking=False):
+        pr.clear()
+        pr.update(estado="generando", i=0, n=0, nombre="", inicio=time.time())
+        threading.Thread(target=_generar_pdf_en_hilo, name="pdf-torre", daemon=True).start()
+    return api_torre_pdf_progreso()
 
 
 @app.route("/api/torre/pdf", methods=["GET"])
 def api_torre_pdf():
-    """PDF con DFN, DFC y DMF de todos los pórticos de la torre (1.4CM + 1.7CV).
-    La primera vez tarda (se resuelven y dibujan los 34 pórticos); el resultado queda
-    en memoria. El avance se consulta en /api/torre/pdf/progreso."""
-    from core.pdf_porticos import generar_pdf
-    pr = _PDF["progreso"]
-    if _PDF["bytes"] is None or request.args.get("forzar") == "1":
-        if not _PDF_LOCK.acquire(blocking=False):
-            return jsonify({"ok": False, "error": "El PDF ya se está generando; espera a que termine."}), 409
-        try:
-            pr.update(estado="generando", i=0, n=0, nombre="", inicio=time.time())
-
-            def avance(i, n, nombre):
-                pr.update(i=i, n=n, nombre=nombre)
-            _PDF["bytes"], _PDF["info"] = generar_pdf(avance)
-            pr.update(estado="listo")
-        except Exception as e:
-            pr.update(estado="error")
-            return error_json(f"No se pudo generar el PDF: {e}", 500)
-        finally:
-            _PDF_LOCK.release()
+    """Descarga el PDF de todos los pórticos (DFN, DFC y DMF, 1.4CM + 1.7CV) ya generado en
+    memoria. Si aún no existe responde 409 con el estado: se inicia con /api/torre/pdf/iniciar
+    y se espera consultando /api/torre/pdf/progreso (ninguna petición dura más que unos ms)."""
+    if _PDF["bytes"] is None:
+        return jsonify({"ok": False, "estado": _PDF["progreso"].get("estado", "libre"),
+                        "error": "El PDF aún no está generado: pídelo con /api/torre/pdf/iniciar."}), 409
     r = send_file(io.BytesIO(_PDF["bytes"]), mimetype="application/pdf", as_attachment=True,
                   download_name="torre_arequipa_porticos.pdf")
     r.headers["X-Segundos"] = str((_PDF["info"] or {}).get("segundos", ""))

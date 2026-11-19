@@ -30,12 +30,36 @@ export async function excelProfesor(modelo) {
   if (!r.ok) throw new Error(await errorDe(r));
   guardarBlob(await r.blob(), nombreDeCabecera(r, "portico_profesor.xlsx"));
 }
-export async function pdfTorre() {
-  const r = await fetch("/api/torre/pdf");
-  if (!r.ok) throw new Error(await errorDe(r));
+// PDF de todos los pórticos: se genera en segundo plano en el servidor (puede tardar más que el
+// tiempo máximo de una petición). Se pide el inicio, se consulta el avance cada segundo y, al
+// terminar, se descarga. Si el servidor se reinicia (pierde el trabajo) o se corta la conexión
+// varias veces seguidas, falla con error.reintentar = true para ofrecer «Reintentar».
+const pdfJson = (url, opciones) => fetch(url, opciones).then((r) => r.json());
+export const pdfTorreProgreso = () => pdfJson("/api/torre/pdf/progreso");
+export async function pdfTorre({ onProgreso, forzar = false, cada = 1000 } = {}) {
+  const falla = (msg, reintentar) => Object.assign(new Error(msg), { reintentar });
+  let p;
+  try { p = await pdfJson("/api/torre/pdf/iniciar" + (forzar ? "?forzar=1" : ""), { method: "POST" }); }
+  catch { throw falla("No hay conexión con el servidor.", true); }
+  const arranque = p.arranque;
+  let cortes = 0;
+  while (p.estado !== "listo") {
+    if (p.estado === "error") throw falla(p.error || "El servidor no pudo generar el PDF.", true);
+    if (p.estado === "libre") throw falla("El servidor se reinició y perdió el PDF en curso.", true);
+    onProgreso?.(p);
+    await new Promise((r) => setTimeout(r, cada));
+    try { p = await pdfTorreProgreso(); cortes = 0; }
+    catch { if (++cortes >= 5) throw falla("Se perdió la conexión con el servidor.", true); continue; }
+    if (p.arranque && arranque && p.arranque !== arranque) throw falla("El servidor se reinició mientras se generaba el PDF.", true);
+  }
+  onProgreso?.(p);
+  let r;
+  try { r = await fetch("/api/torre/pdf"); } catch { throw falla("No se pudo descargar el PDF: sin conexión.", true); }
+  if (r.status === 409) throw falla("El servidor se reinició y ya no tiene el PDF.", true);
+  if (!r.ok) throw falla(await errorDe(r), true);
   guardarBlob(await r.blob(), nombreDeCabecera(r, "torre_arequipa_porticos.pdf"));
+  return p;
 }
-export const pdfTorreProgreso = () => fetch("/api/torre/pdf/progreso").then((r) => r.json());
 export async function compararEtabs(modelo, archivo, opciones = {}) {
   const fd = new FormData();
   fd.append("modelo", JSON.stringify(modelo));

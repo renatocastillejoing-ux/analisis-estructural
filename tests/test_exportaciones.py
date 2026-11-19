@@ -131,13 +131,34 @@ def test_pdf_pocos_porticos():
     assert pdf[:5] == b"%PDF-" and info["porticos"] == 2 and info["paginas"] >= 5
 
 
+def test_pdf_tablas_crudas_y_union():
+    """Las tablas se escriben como PDF crudo y se unen con las páginas de matplotlib."""
+    import core.pdf_porticos as pp
+    p = pp.resolver_portico("Eje A", "letra", ("A", 0))
+    n, crudo = pp._pdf_crudo_tablas(p)
+    assert crudo[:5] == b"%PDF-" and n == max(1, -(-len(p["barras"]) // pp.FILAS_TABLA))
+    if pp._hay_unir():
+        pdf, info = pp.generar_pdf(limite=3, procesos=0)
+        assert pdf[:5] == b"%PDF-" and info["porticos"] == 3 and info["procesos"] == 0
+
+
 def test_pdf_endpoint(cli, monkeypatch):
+    """Generación en segundo plano: iniciar -> consultar el avance -> descargar."""
+    import time
     import core.pdf_porticos as pp
     orig = pp.generar_pdf
     monkeypatch.setattr(pp, "generar_pdf", lambda progreso=None: orig(progreso, limite=1))
     modapp._PDF["bytes"] = None
+    r = cli.get("/api/torre/pdf")                       # aún no existe: 409, no genera en la petición
+    assert r.status_code == 409
+    p = cli.post("/api/torre/pdf/iniciar").get_json()
+    assert p["estado"] in ("generando", "listo") and p["arranque"]
+    for _ in range(200):
+        p = cli.get("/api/torre/pdf/progreso").get_json()
+        if p["estado"] != "generando":
+            break
+        time.sleep(0.1)
+    assert p["estado"] == "listo" and p["i"] == p["n"] == 1 and p["en_memoria"]
     r = cli.get("/api/torre/pdf")
     assert r.status_code == 200 and r.mimetype == "application/pdf" and r.data[:5] == b"%PDF-"
-    p = cli.get("/api/torre/pdf/progreso").get_json()
-    assert p["estado"] == "listo" and p["i"] == p["n"] == 1
     modapp._PDF["bytes"] = None
