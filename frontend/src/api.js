@@ -12,3 +12,5 @@ export const combinaciones = (modelo) => post("/api/combinaciones", modelo);
 export const calcular3d = (modelo) => post("/api/calcular3d", modelo);
 export const extraerPortico = (modelo, eje, valor, factores) => post("/api/modelo3d/portico", { modelo, eje, valor, factores });
 export const torre3dModelo = () => fetch("/api/torre/modelo3d").then((r) => r.json());
+// Memoria de cálculo (texto): el servidor la genera solo cuando se pide.
+export const memoria = (modelo) => post("/api/memoria", modelo);
