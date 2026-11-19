@@ -29,15 +29,13 @@
 import json, os
 from collections import defaultdict
 
-H_PISO = 3.0
-N_PISOS = 10
-CM_AREA = 0.40
-CV_AREA = 0.25
-GAMMA_HA = 2.4
 COMBO = {"nombre": "1.4CM+1.7CV", "factores": {"CM": 1.4, "CV": 1.7}}
-# vacío central (sin losa), en nombres de ejes: x desde/hasta, y desde/hasta
-VACIOS = [("8", "14", "H", "F")]
 _RUTA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "torre_plano.json")
+# supuestos que el plano no trae (alturas, f'c, cargas, vacío, sismo): archivo editable
+_RUTA_SUP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "torre_supuestos.json")
+_SUP, _SUP_MTIME = None, None
+H_PISO = 3.0; N_PISOS = 10; CM_AREA = 0.40; CV_AREA = 0.25; GAMMA_HA = 2.4
+VACIOS = [("8", "14", "H", "F")]
 _GEO = None
 _TOL = 1e-6
 BORDE = 0.30          # un cruce a menos de esto del extremo de una placa es parte de la placa
@@ -51,8 +49,37 @@ def geo():
     return _GEO
 
 
+def supuestos():
+    """Lee core/torre_supuestos.json; si cambió desde la última lectura, vacía los modelos
+    guardados para que todo se recalcule con los datos nuevos."""
+    global _SUP, _SUP_MTIME, H_PISO, N_PISOS, CM_AREA, CV_AREA, GAMMA_HA, VACIOS, _BASE, _PORTICOS
+    mt = os.path.getmtime(_RUTA_SUP) if os.path.exists(_RUTA_SUP) else None
+    if _SUP is None or mt != _SUP_MTIME:
+        d = {}
+        if mt is not None:
+            with open(_RUTA_SUP, encoding="utf-8") as f:
+                d = json.load(f)
+        alt = [float(a) for a in d.get("alturas", [3.0] * 10)]
+        fc = [float(v) for v in d.get("fc", [280] * 3 + [210] * 7)]
+        if len(fc) != len(alt) or any(a <= 0 for a in alt):
+            raise ValueError("torre_supuestos.json: «alturas» y «fc» deben tener un valor por piso (alturas > 0)")
+        _SUP = {"alturas": alt, "fc": fc, "cm": float(d.get("cm", 0.40)), "cv": float(d.get("cv", 0.25)),
+                "peso": float(d.get("peso_concreto", 2.4)), "vacios": [tuple(v) for v in d.get("vacios", [])],
+                "sismo": {"Z": 0.35, "U": 1.0, "S": 1.15, "TP": 0.6, "TL": 2.0, "R": 6.0, "CT": 60.0, **d.get("sismo", {})}}
+        _SUP_MTIME = mt
+        N_PISOS = len(alt); H_PISO = alt[0]; CM_AREA = _SUP["cm"]; CV_AREA = _SUP["cv"]
+        GAMMA_HA = _SUP["peso"]; VACIOS = _SUP["vacios"]
+        _BASE = None; _PORTICOS = None
+    return _SUP
+
+
+def _z(lv):
+    """Cota del nivel lv (0 = base)."""
+    return round(sum(supuestos()["alturas"][:lv]), 6)
+
+
 def _mat(piso):
-    return "H280" if piso <= 3 else "H210"
+    return f"H{supuestos()['fc'][piso - 1]:g}"
 
 
 def _zona(piso):
@@ -104,6 +131,8 @@ def planta(z):
         k = punto(ex[nx], ey[ny], f"{ny}{nx}")
         verticales.append((k, {"b": c["bx"], "h": c["by"]}, "C", 0, f"{ny}{nx}"))
     huerfanas = []
+    nudo_placa = {}                # id(tramo de placa) → su nudo
+    enlaces = []                   # (punto donde llega una viga perpendicular, nudo de la placa, espesor)
     # 2) placas: nudo en el centro del tramo. Si ninguna viga de su propio eje llega a
     #    la placa (p. ej. las del borde en el eje 15), el nudo va en el cruce donde
     #    llega la viga perpendicular más cercana al centro.
@@ -126,6 +155,7 @@ def planta(z):
                     continue
             x, y = (s, ey[eje]) if dir_ == "x" else (ex[eje], s)
             k = punto(x, y, f"{p['nombre']}·{eje}")
+            nudo_placa[id(p)] = k
             verticales.append((k, {"b": round(b - a, 3), "h": p["t"]}, "PL", 0 if dir_ == "x" else 90,
                                f"{p['nombre']}({eje} {a:.1f}–{b:.1f})"))
     # 2b) tramo de placa sin ninguna viga (p. ej. el ala de una placa en L en el borde):
@@ -134,6 +164,7 @@ def planta(z):
         socio = next((v for v in verticales if v[2] == "PL" and v[4].startswith(p["nombre"] + "(")), None)
         if socio is None:
             continue
+        nudo_placa[id(p)] = socio[0]
         verticales.append((socio[0], {"b": round(b - a, 3), "h": p["t"]}, "PL", 0 if dir_ == "x" else 90,
                            f"{p['nombre']}({eje} {a:.1f}–{b:.1f}, ala)"))
     # 3) cruces de vigas del otro sentido (y bordes de placa con viga perpendicular)
@@ -142,13 +173,17 @@ def planta(z):
             for nombre_eje, s in ((v["desde"], s0), (v["hasta"], s1)):
                 x, y = (s, ey[eje]) if dir_ == "x" else (ex[eje], s)
                 k = punto(x, y, f"{eje}{nombre_eje}" if dir_ == "x" else f"{nombre_eje}{eje}")
-                # ¿el extremo cae dentro de una placa del otro sentido? → columna de borde
+                # ¿el extremo cae dentro de una placa del otro sentido? → enlace rígido hasta el
+                # nudo de la placa (antes, una columna de borde suelta que no tocaba la placa)
                 otro = "y" if dir_ == "x" else "x"
                 eje_otro = nombre_eje
                 pl = en_muro(otro, eje_otro, ey[eje] if dir_ == "x" else ex[eje])
                 if pl and not any(vv[0] == k for vv in verticales):
                     centro = (pl["desde"] + pl["hasta"]) / 2
-                    if abs(centro - (ey[eje] if dir_ == "x" else ex[eje])) > 0.3:
+                    kp = nudo_placa.get(id(pl))
+                    if kp is not None and kp != k:
+                        enlaces.append((k, kp, pl["t"]))
+                    elif abs(centro - (ey[eje] if dir_ == "x" else ex[eje])) > 0.3:
                         verticales.append((k, {"b": pl["t"], "h": pl["t"]}, "BP", 0, f"borde {pl['nombre']} {pts[k]}"))
     # 4) vigas por eje: entre puntos consecutivos de la línea. Los cruces que quedan
     #    dentro de una placa no cortan la línea: la viga llega al centro de la placa y
@@ -178,8 +213,24 @@ def planta(z):
                 v = next((vv for a, b, vv in vig.get((dir_, eje), []) if a - 0.05 <= mid <= b + 0.05), None)
                 if v:
                     horizontales.append((k1, k2, {"b": v["b"], "h": v["h"]}, f"V{eje}"))
+    # 5) tramos de placa fuera de ejes (p. ej. un lado del núcleo del ascensor): columna
+    #    ancha en su centro, unida con un enlace rígido al nudo más cercano con vigas.
+    usados = {k for h in horizontales for k in h[:2]}
+    for f in z.get("placas_fuera_de_ejes", []):
+        m_ = (f["desde"] + f["hasta"]) / 2
+        x, y = (m_, f["c"]) if f["dir"] == "x" else (f["c"], m_)
+        if not usados:
+            break
+        k = punto(x, y, f"{f['nombre']}·fuera")
+        verticales.append((k, {"b": round(f["hasta"] - f["desde"], 3), "h": f["t"]}, "PL", 0 if f["dir"] == "x" else 90,
+                           f"{f['nombre']}(fuera de ejes {f['desde']:.1f}–{f['hasta']:.1f})"))
+        # primero, otro tramo de la misma placa (así no salta una junta entre bloques)
+        propios = [v[0] for v in verticales if v[2] == "PL" and v[4].startswith(f["nombre"] + "(") and v[0] in usados]
+        cerca = min(propios or usados, key=lambda q: (q[0] - x) ** 2 + (q[1] - y) ** 2)
+        enlaces.append((k, cerca, f["t"]))
     lineas_muro = [(d_, (ey[e_] if d_ == "x" else ex[e_]), a, b) for (d_, e_), l in muros.items() for a, b, _ in l]
-    return {"pts": pts, "verticales": verticales, "horizontales": horizontales, "muros": lineas_muro}
+    return {"pts": pts, "verticales": verticales, "horizontales": horizontales, "muros": lineas_muro,
+            "enlaces": sorted(set(enlaces))}
 
 
 def _sec_nombre(pref, d, piso=None):
@@ -188,7 +239,9 @@ def _sec_nombre(pref, d, piso=None):
 
 def modelo3d_torre(dinamico=True):
     """La torre real en el formato del editor 3D (core/analisis_3d.py)."""
-    from core.torre_sismo import Z, S, TP, TL, U, R, CT
+    supuestos()
+    sis = supuestos()["sismo"]
+    Z, S, TP, TL, U, R, CT = (sis[k] for k in ("Z", "S", "TP", "TL", "U", "R", "CT"))
     G = geo(); ex, ey = G["ejes_x"], G["ejes_y"]
     plantas = {z["nombre"]: planta(z) for z in G["zonas"]}
     pl_piso = {p: plantas[_zona(p)["nombre"]] for p in range(1, N_PISOS + 1)}
@@ -199,7 +252,7 @@ def modelo3d_torre(dinamico=True):
         key = (k, lv)
         if key not in nid:
             nid[key] = len(nudos) + 1
-            nudos.append({"id": nid[key], "nombre": f"{nombre}-{lv}", "x": k[0], "y": k[1], "z": lv * H_PISO,
+            nudos.append({"id": nid[key], "nombre": f"{nombre}-{lv}", "x": k[0], "y": k[1], "z": _z(lv),
                           "apoyo": "empotrado" if lv == 0 else "libre"})
         return nid[key]
 
@@ -241,16 +294,26 @@ def modelo3d_torre(dinamico=True):
             nuevo[nombre] = k
         ubic = nuevo
 
-    muros_z = {round(lv * H_PISO, 6): pl_piso[lv]["muros"] for lv in range(1, N_PISOS + 1)}
+    # enlaces rígidos: la viga que llega de costado a una placa se une a la placa (parte de su
+    # sección, que no se deforma). Sin brazos automáticos y sin peso propio.
+    for lv in range(1, N_PISOS + 1):
+        for k1, k2, t in pl_piso[lv]["enlaces"]:
+            if (k1, lv) in nid and (k2, lv) in nid:
+                secs.setdefault("ENLACE", {"nombre": "ENLACE", "b": max(t, 0.25), "h": 1.0})
+                els.append({"id": len(els) + 1, "nombre": f"enlace {pl_piso[lv]['pts'][k1]}-{lv}", "i": nid[(k1, lv)],
+                            "j": nid[(k2, lv)], "seccion": "ENLACE", "material": "RIGIDO", "enlace": True,
+                            "brazo_i": 0.0, "brazo_j": 0.0})
+    muros_z = {round(_z(lv), 6): pl_piso[lv]["muros"] for lv in range(1, N_PISOS + 1)}
     cb, cn = cargas_losa(nudos, els, muros_z)
     m = {
         "tipo": "3d", "nombre": "Torre de Arequipa (plano)", "unidad_fuerza": "tonf", "unidad_longitud": "m",
         "ejes": {"x": [{"nombre": n, "c": c} for n, c in ex.items()],
                  "y": [{"nombre": n, "c": c} for n, c in sorted(ey.items(), key=lambda t: t[1])]},
-        "niveles": [{"nombre": "Base" if lv == 0 else f"Piso {lv}", "z": lv * H_PISO} for lv in range(N_PISOS + 1)],
-        "materiales": [{"nombre": "H280", "modo": "fc", "fc": 280, "densidad": GAMMA_HA, "nu": 0.2},
-                       {"nombre": "H210", "modo": "fc", "fc": 210, "densidad": GAMMA_HA, "nu": 0.2}],
-        "material": "H280", "secciones": list(secs.values()), "nudos": nudos, "elementos": els,
+        "niveles": [{"nombre": "Base" if lv == 0 else f"Piso {lv}", "z": _z(lv)} for lv in range(N_PISOS + 1)],
+        "materiales": [{"nombre": f"H{fc:g}", "modo": "fc", "fc": fc, "densidad": GAMMA_HA, "nu": 0.2}
+                       for fc in sorted(set(supuestos()["fc"]), reverse=True)] + [
+                       {"nombre": "RIGIDO", "modo": "fc", "fc": 280, "densidad": 0.0, "nu": 0.2}],
+        "material": _mat(1), "secciones": list(secs.values()), "nudos": nudos, "elementos": els,
         "casos": [{"nombre": "CM"}, {"nombre": "CV"}],
         "cargas_area": [], "cargas_barras": cb, "cargas_nudos": cn,
         "peso_propio": True, "caso_peso_propio": "CM", "diafragma": True,
@@ -376,6 +439,7 @@ _PORTICOS = None
 
 
 def todos_los_pórticos():
+    supuestos()
     """[(nombre, tipo, idx)]: un pórtico por eje y por tramo conexo (el eje 9, por
     ejemplo, sale en dos partes: A–E y H–I)."""
     global _PORTICOS
@@ -393,8 +457,9 @@ def todos_los_pórticos():
                 for k, ids in enumerate(comps):
                     g = set(ids)
                     y_de = {n["id"]: n["y"] for n in d["nudos"]}
-                    if not any(e["i"] in g and abs(y_de[e["i"]] - y_de[e["j"]]) < _TOL for e in d["elementos"]):
-                        continue                    # columna suelta (sus vigas van en el otro sentido)
+                    eg = [e for e in d["elementos"] if e["i"] in g]
+                    if not any(abs(y_de[e["i"]] - y_de[e["j"]]) < _TOL and not e.get("enlace") for e in eg)                             or not any(abs(y_de[e["i"]] - y_de[e["j"]]) > _TOL for e in eg):
+                        continue                    # columna suelta o enlace suelto: no es un pórtico
                     xs = sorted(n["x"] for n in d["nudos"] if n["id"] in g)
                     tramo = (_eje_de(xs[0], otros, -1), _eje_de(xs[-1], otros, +1))
                     etq = f"Eje {nombre}" + (f" ({tramo[0]}–{tramo[1]})" if len(comps) > 1 else "")
@@ -419,6 +484,7 @@ _BASE = None
 
 def _modelo_base():
     global _BASE
+    supuestos()
     if _BASE is None:
         _BASE = modelo3d_torre()
     return _BASE
@@ -464,12 +530,12 @@ def geometria_3d():
         if abs(a["x"] - b["x"]) < _TOL and abs(a["y"] - b["y"]) < _TOL:
             giro = e.get("giro", 0)
             bx, by = (s["b"], s["h"]) if not giro else (s["h"], s["b"])
-            columnas.append({"x": a["x"], "y": a["y"], "z0": a["z"], "z1": b["z"], "piso": int(round(b["z"] / H_PISO)),
+            columnas.append({"x": a["x"], "y": a["y"], "z0": a["z"], "z1": b["z"], "piso": _piso_de(b["z"]),
                              "bx": bx, "by": by, "placa": e["seccion"].startswith("PL"), "seccion": e["seccion"],
                              "letra": None, "numero": None})
         else:
             vigas.append({"x0": a["x"], "y0": a["y"], "x1": b["x"], "y1": b["y"], "z": a["z"], "b": s["b"], "h": s["h"],
-                          "piso": int(round(a["z"] / H_PISO)), "dir": "x" if abs(a["y"] - b["y"]) < _TOL else "y",
+                          "piso": _piso_de(a["z"]), "dir": "x" if abs(a["y"] - b["y"]) < _TOL else "y",
                           "seccion": e["seccion"], "letra": None, "numero": None})
     G = geo()
     return {"xs": sorted(G["ejes_x"].values()), "ys": sorted(G["ejes_y"].values()), "n_pisos": N_PISOS, "h_piso": H_PISO,
@@ -477,3 +543,7 @@ def geometria_3d():
             "ejes_y": [n for n, _ in sorted(G["ejes_y"].items(), key=lambda t: t[1])],
             "columnas": columnas, "vigas": vigas,
             "supuestos": {"cm": CM_AREA, "cv": CV_AREA, "fuente": G.get("fuente")}}
+
+
+def _piso_de(z):
+    return min(range(N_PISOS + 1), key=lambda lv: abs(_z(lv) - z))

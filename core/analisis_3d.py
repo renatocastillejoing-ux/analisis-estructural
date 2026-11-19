@@ -177,7 +177,9 @@ def _mecanismo(Kred, Tm, libres, X, niveles):
     n_m = 3 * len(niveles)
     etq = [None] * Kred.shape[0]
     for k in range(n_m):
-        etq[k] = f"diafragma z = {niveles[k // 3]:g} m ({['X', 'Y', 'giro'][k % 3]})"
+        lv = niveles[k // 3]
+        z_, b_ = lv if isinstance(lv, tuple) else (lv, 0)
+        etq[k] = f"diafragma z = {z_:g} m" + (f" (bloque {b_ + 1})" if b_ else "") + f" ({['X', 'Y', 'giro'][k % 3]})"
     Tc = Tm.tocsc()
     for c in range(n_m, Kred.shape[0]):
         r = Tc.indices[Tc.indptr[c]:Tc.indptr[c + 1]]
@@ -563,6 +565,7 @@ def preparar_modelo3d(m):
         info.append({"id": e["id"], "nombre": e.get("nombre") or f"E{e['id']}", "tipo": tipo, "sec": e["seccion"],
                      "densidad": float(mat.get("densidad", 2.4) or 0), "fc": float(mat.get("fc", 210) or 210),
                      "b": float(sec.get("b", 0.3)), "h": float(sec.get("h", 0.3)), "segmentos": e.get("segmentos") or e.get("tramos") or [],
+                     "enlace": bool(e.get("enlace")),
                      "mat": mat})
         barra_de[(min(i, j), max(i, j))] = k
     existe = lambda p, q: (min(p, q), max(p, q)) in barra_de
@@ -628,6 +631,8 @@ def _brazos_auto(P, cfg):
             for extremo, n in (("bi", el["i"]), ("bj", el["j"])):
                 h = max([els[v]["w"] for v in viga_en.get(n, [])] or [0])
                 el[extremo] = max(el.get(extremo, 0), f * h / 2)
+            continue
+        if inf.get("enlace"):                          # enlace rígido placa–viga: sin brazos
             continue
         u = np.subtract(X[el["j"]], X[el["i"]]); u[2] = 0
         nu = np.linalg.norm(u)
@@ -714,18 +719,38 @@ def analizar_modelo3d(m):
     # ---- diafragmas por nivel (niveles con nudos libres) ----
     diaf = None
     niveles_libres = [z for z in niveles_z if any(restr[k] is None for k in por_nivel[z].values())]
+    # Bloques: partes de la estructura que no comparten ninguna barra (p. ej. separadas por
+    # una junta sísmica). Cada bloque tiene su propio diafragma en cada piso, su peso y su
+    # cortante sísmico; las claves de diafragma son (z, bloque). Con un solo bloque, todo
+    # queda como antes.
+    padre = list(range(len(X)))
+    def raiz(a):
+        while padre[a] != a:
+            padre[a] = padre[padre[a]]; a = padre[a]
+        return a
+    for el in P["elementos"]:
+        padre[raiz(el["i"])] = raiz(el["j"])
+    _r = {}
+    bloque = [_r.setdefault(raiz(k), len(_r)) for k in range(len(X))]
+    n_bloques = len(set(bloque[k] for el in P["elementos"] for k in (el["i"], el["j"])))
+    clave_de = {}
     if m.get("diafragma"):
         diaf = {}
         for z in niveles_libres:
-            ids = [k for k in por_nivel[z].values() if restr[k] is None]
-            if len(ids) < 2: continue
-            diaf[z] = {"nudos": ids, "xc": float(np.mean([X[k][0] for k in ids])), "yc": float(np.mean([X[k][1] for k in ids]))}
+            grupos = {}
+            for k in por_nivel[z].values():
+                if restr[k] is None:
+                    grupos.setdefault(bloque[k], []).append(k)
+            for b_, ids in grupos.items():
+                if len(ids) < 2: continue
+                diaf[(z, b_)] = {"nudos": ids, "xc": float(np.mean([X[k][0] for k in ids])), "yc": float(np.mean([X[k][1] for k in ids]))}
+                for k in ids: clave_de[k] = (z, b_)
         diaf = diaf or None
 
     # ---- pesos por nivel (para sismo y modal) ----
     sis_cfg = m.get("sismo") or {}
     fac_masa = sis_cfg.get("caso_masa") or {casos_n[0]: 1.0, **({casos_n[1]: 0.25} if len(casos_n) > 1 else {})}
-    P_niv = {z: 0.0 for z in niveles_libres}
+    P_niv = {c: 0.0 for c in (diaf or {})}
     for caso, f in fac_masa.items():
         for e, items in (P["cargas"].get(caso) or {}).get("barras", {}).items():
             W = 0.0
@@ -734,19 +759,24 @@ def analizar_modelo3d(m):
                 else: W += -(float(it["q1"][2]) + float(it.get("q2", it["q1"])[2])) / 2 * L[e]
             W *= f
             for k in (P["elementos"][e]["i"], P["elementos"][e]["j"]):
-                z = round(X[k][2], 6)
-                if z in P_niv: P_niv[z] += W / 2
+                c_ = clave_de.get(k)
+                if c_ in P_niv: P_niv[c_] += W / 2
         for k, F in (P["cargas"].get(caso) or {}).get("nudos", {}).items():
-            z = round(X[k][2], 6)
-            if z in P_niv: P_niv[z] += -F[2] * f
+            c_ = clave_de.get(k)
+            if c_ in P_niv: P_niv[c_] += -F[2] * f
     niv_d = sorted(diaf) if diaf else []
 
     # ---- tramos → sub-barras (con nudos internos) ----
     S = _subdividir(P)
     if diaf:
+        vecino = {}
+        for el in S["elementos"]:
+            for a_, b_ in ((el["i"], el["j"]), (el["j"], el["i"])):
+                if a_ >= len(X) and b_ < len(X): vecino.setdefault(a_, b_)
         for k in range(len(X), len(S["X"])):
             z = round(S["X"][k][2], 6)
-            if z in diaf: diaf[z]["nudos"].append(k)
+            c_ = (z, bloque[vecino[k]]) if k in vecino else None
+            if c_ in diaf: diaf[c_]["nudos"].append(k)
     modelo_s = {"nudos": S["X"], "restr": S["restr"], "elementos": S["elementos"]}
     origen = S["origen"]
 
@@ -755,8 +785,8 @@ def analizar_modelo3d(m):
     casos = {c: v for c, v in S["cargas"].items()}
     modos, T_modal = [], {}
     g = 9.81
-    def plan_dims(z):
-        ks = list(por_nivel[z].values()); xx = [X[k][0] for k in ks]; yy = [X[k][1] for k in ks]
+    def plan_dims(c_):
+        ks = [k for k in diaf[c_]["nudos"] if k < len(X)]; xx = [X[k][0] for k in ks]; yy = [X[k][1] for k in ks]
         return max(xx) - min(xx), max(yy) - min(yy)
     def masas():
         out = []
@@ -769,32 +799,36 @@ def analizar_modelo3d(m):
     TP = float(sis_cfg.get("TP", 0.6)); TL = float(sis_cfg.get("TL", 2.0)); CT = float(sis_cfg.get("CT", 60))
     R0 = float(sis_cfg.get("R", 8) or 8)
     if activo:
-        hn = max(niv_d) - min(niveles_z)
+        hn = max(c_[0] for c_ in niv_d) - min(niveles_z)
         T_n = hn / CT
         if sis_cfg.get("periodo") == "modal":
             r0 = resolver(modelo_s, {casos_n[0]: casos.get(casos_n[0], {})}, diaf)
             modos, aux = modal_condensado(r0["Kred"], r0["n_maestros"], masas(), con_formas=True)
             T_modal = {d: max(modos, key=lambda mm: mm[key])["T"] for d, key in (("X", "Mx"), ("Y", "My"))}
-        Pw = [P_niv[z] for z in niv_d]; h = [z - min(niveles_z) for z in niv_d]
         for d in ("X", "Y"):
             T = T_modal.get(d, T_n) if sis_cfg.get("periodo") == "modal" else T_n
             _, C = espectro_e030(T, Zs, Us, Ss, R0, TP, TL)
             k = 1.0 if T <= 0.5 else min(0.75 + 0.5 * T, 2.0)
-            V = Zs * Us * C * Ss / R0 * sum(Pw)
-            Ft = 0.0                                                    # E.030-2018: sin fuerza en el techo
-            den = sum(Pi * hi ** k for Pi, hi in zip(Pw, h)) or 1
-            F = [(V - Ft) * Pi * hi ** k / den for Pi, hi in zip(Pw, h)]
-            mae = {}
-            for z, fi in zip(niv_d, F):
-                lx, ly = plan_dims(z)
-                e_acc = 0.05 * (ly if d == "X" else lx)
-                mae[z] = [fi, 0, fi * e_acc] if d == "X" else [0, fi, fi * e_acc]
+            mae, V, Fz = {}, 0.0, {}
+            for b_ in sorted({c_[1] for c_ in niv_d}):              # cada bloque, su propio cortante
+                cl = [c_ for c_ in niv_d if c_[1] == b_]
+                Pw = [P_niv[c_] for c_ in cl]; h = [c_[0] - min(niveles_z) for c_ in cl]
+                Vb = Zs * Us * C * Ss / R0 * sum(Pw)
+                den = sum(Pi * hi ** k for Pi, hi in zip(Pw, h)) or 1
+                for c_, Pi, hi in zip(cl, Pw, h):
+                    fi = Vb * Pi * hi ** k / den                      # E.030-2018: sin fuerza en el techo
+                    lx, ly = plan_dims(c_)
+                    e_acc = 0.05 * (ly if d == "X" else lx)
+                    mae[c_] = [fi, 0, fi * e_acc] if d == "X" else [0, fi, fi * e_acc]
+                    Fz[c_[0]] = Fz.get(c_[0], 0.0) + fi
+                V += Vb
+            F = [Fz[z] for z in sorted(Fz)]
             casos["S" + d] = {"maestros": mae}
-            sismo_out[d] = {"T": float(T), "C": float(C), "k": float(k), "V": float(V), "F": [float(f) for f in F], "R": R0,
+            sismo_out[d] = {"T": float(T), "C": float(C), "k": float(k), "V": float(V), "F": [float(f) for f in F], "R": R0, "bloques": n_bloques,
                             "T_norma": float(T_n), "C_R": float(C / R0), "C_R_ok": bool(C / R0 >= 0.11)}
 
     res = resolver(modelo_s, casos, diaf)
-    if diaf and not modos and any(P_niv.get(z, 0) > 0 for z in niv_d):
+    if diaf and not modos and any(P_niv.get(c_, 0) > 0 for c_ in niv_d):
         modos, aux = modal_condensado(res["Kred"], res["n_maestros"], masas(), con_formas=True)
 
     nombres = res["nombres"]
@@ -928,7 +962,8 @@ def analizar_modelo3d(m):
         for d, comp in (("X", 0), ("Y", 1)):
             u = Ud["S" + d].reshape(nn_s, 6)[:, comp]
             dmax, dcm, ddin = [], [], []
-            for z in niv_d:
+            zs = sorted({c_[0] for c_ in niv_d})
+            for z in zs:                                   # por piso: el bloque más exigido
                 zb = niveles_z[niveles_z.index(z) - 1]
                 pares = [(k, por_nivel[zb].get(xy)) for xy, k in por_nivel[z].items() if por_nivel[zb].get(xy) is not None]
                 hz = z - zb
@@ -939,7 +974,7 @@ def analizar_modelo3d(m):
                     Um = dinamico[d]["U"].reshape(len(modos), nn_s, 6)[:, :, comp]
                     rel = np.array([[Um[mo, k] - Um[mo, kb] for k, kb in pares] for mo in range(len(modos))])
                     ddin.append(float(fac_d * _cqc(rel, w).max() / hz))
-            derivas[d] = {"max": dmax, "cm": dcm, "limite": lim, "z": niv_d, "factor": fac_d,
+            derivas[d] = {"max": dmax, "cm": dcm, "limite": lim, "z": zs, "factor": fac_d,
                           "cumple": bool(max(dmax or [0]) <= lim)}
             if ddin:
                 derivas[d].update({"dinamico": ddin, "cumple_dinamico": bool(max(ddin) <= lim)})
@@ -970,7 +1005,8 @@ def analizar_modelo3d(m):
         "ok": True, "id_calculo": id_calculo,
         "resumen": {"n_nudos": nn, "n_elementos": ne0, "n_gdl": res["n_gdl"], "n_libres": res["n_libres"],
                     "n_resuelto": res["n_red"], "diafragma": bool(diaf), "t_total": round(time.time() - t0, 2),
-                    "t_solucion": round(res["t_solucion"], 3), "pesos_nivel": [float(P_niv[z]) for z in niv_d], "niveles": niv_d,
+                    "t_solucion": round(res["t_solucion"], 3), "pesos_nivel": [float(sum(P_niv[c_] for c_ in niv_d if c_[0] == z)) for z in sorted({c_[0] for c_ in niv_d})],
+                    "niveles": sorted({c_[0] for c_ in niv_d}), "bloques": n_bloques,
                     "brazos": int(sum(1 for b in res["brazos"] if b[0] or b[1])), "tramos": int(len(S["elementos"]) - ne0),
                     "dinamico": bool(dinamico)},
         "sismo": sismo_out, "casos": list(barras.keys()), "casos_base": list(casos.keys()),
@@ -1063,6 +1099,7 @@ def portico_desde_3d(m, eje, valor, caso_factores=None):
             "elementos": [{"id": e["id"], "nombre": e.get("nombre") or f"E{e['id']}", "i": e["i"], "j": e["j"], "seccion": sec_de.get(e["id"], e["seccion"]),
                            **({"material": e["material"]} if e.get("material") else {}),
                            **({"release_i": True} if e.get("release_i") else {}), **({"release_j": True} if e.get("release_j") else {}),
+                           **({k: e[k] for k in ("enlace", "brazo_i", "brazo_j") if k in e}),
                            **({"segmentos": e["segmentos"]} if len(e.get("segmentos") or []) >= 2 else {})} for e in ex],
             "cargas_nodales": [], "cargas_elementos": ce}
 

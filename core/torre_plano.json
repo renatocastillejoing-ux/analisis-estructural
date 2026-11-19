@@ -538,6 +538,24 @@
      "t": 0.55
     }
    ],
+   "placas_fuera_de_ejes": [
+    {
+     "nombre": "PL-10",
+     "dir": "y",
+     "c": 24.69,
+     "desde": 13.19,
+     "hasta": 16.58,
+     "t": 0.38
+    },
+    {
+     "nombre": "PL-12",
+     "dir": "x",
+     "c": 10.68,
+     "desde": 58.56,
+     "hasta": 61.31,
+     "t": 0.4
+    }
+   ],
    "vigas": [
     {
      "dir": "x",
@@ -1313,7 +1331,7 @@
      "dir": "y",
      "eje": "14",
      "desde": "H",
-     "hasta": "F",
+     "hasta": "G",
      "codigo": "V01",
      "b": 0.4,
      "h": 0.4,
@@ -1323,7 +1341,7 @@
      "dir": "y",
      "eje": "14",
      "desde": "E",
-     "hasta": "C",
+     "hasta": "D",
      "codigo": "V01",
      "b": 0.4,
      "h": 0.4,
@@ -1347,6 +1365,26 @@
      "codigo": "V01",
      "b": 0.4,
      "h": 0.4,
+     "rotulo": true
+    },
+    {
+     "dir": "y",
+     "eje": "15",
+     "desde": "H",
+     "hasta": "E",
+     "codigo": "V01",
+     "b": 0.35,
+     "h": 0.5,
+     "rotulo": true
+    },
+    {
+     "dir": "y",
+     "eje": "15",
+     "desde": "C",
+     "hasta": "A",
+     "codigo": "V01",
+     "b": 0.35,
+     "h": 0.5,
      "rotulo": true
     },
     {
@@ -1551,6 +1589,16 @@
     },
     {
      "dir": "y",
+     "eje": "8",
+     "desde": "D",
+     "hasta": "A",
+     "codigo": "V01",
+     "b": 0.38,
+     "h": 0.5,
+     "rotulo": true
+    },
+    {
+     "dir": "y",
      "eje": "9",
      "desde": "I",
      "hasta": "H",
@@ -1563,7 +1611,7 @@
      "dir": "y",
      "eje": "9",
      "desde": "E",
-     "hasta": "C",
+     "hasta": "D",
      "codigo": "V01",
      "b": 0.4,
      "h": 0.4,
@@ -2017,6 +2065,24 @@
      "t": 0.55
     }
    ],
+   "placas_fuera_de_ejes": [
+    {
+     "nombre": "PL-10",
+     "dir": "y",
+     "c": 24.69,
+     "desde": 13.19,
+     "hasta": 16.58,
+     "t": 0.38
+    },
+    {
+     "nombre": "PL-12",
+     "dir": "x",
+     "c": 10.68,
+     "desde": 58.56,
+     "hasta": 61.31,
+     "t": 0.4
+    }
+   ],
    "vigas": [
     {
      "dir": "x",
@@ -2291,6 +2357,16 @@
     {
      "dir": "x",
      "eje": "H",
+     "desde": "2",
+     "hasta": "3",
+     "codigo": "V01",
+     "b": 0.4,
+     "h": 0.4,
+     "rotulo": false
+    },
+    {
+     "dir": "x",
+     "eje": "H",
      "desde": "3",
      "hasta": "4",
      "codigo": "V03",
@@ -2612,7 +2688,7 @@
      "dir": "y",
      "eje": "14",
      "desde": "H",
-     "hasta": "F",
+     "hasta": "G",
      "codigo": "V01",
      "b": 0.4,
      "h": 0.4,
@@ -2622,7 +2698,7 @@
      "dir": "y",
      "eje": "14",
      "desde": "E",
-     "hasta": "C",
+     "hasta": "D",
      "codigo": "V01",
      "b": 0.4,
      "h": 0.4,
@@ -2637,6 +2713,16 @@
      "b": 0.4,
      "h": 0.4,
      "rotulo": false
+    },
+    {
+     "dir": "y",
+     "eje": "15",
+     "desde": "H",
+     "hasta": "E",
+     "codigo": "V01",
+     "b": 0.35,
+     "h": 0.5,
+     "rotulo": true
     },
     {
      "dir": "y",
@@ -2862,7 +2948,7 @@
      "dir": "y",
      "eje": "9",
      "desde": "E",
-     "hasta": "C",
+     "hasta": "D",
      "codigo": "V01",
      "b": 0.4,
      "h": 0.4,
@@ -2883,10 +2969,6 @@
  ],
  "avisos": [
   "Pisos 1–3: columna fuera de ejes en (27.98, 14.69)",
-  "Pisos 1–3: PL-10 tiene 1.3 m² de muro fuera de los ejes (cerca de x = 24.7, y = 14.9 m); no entra al modelo de pórticos",
-  "Pisos 1–3: PL-12 tiene 1.1 m² de muro fuera de los ejes (cerca de x = 59.9, y = 10.7 m); no entra al modelo de pórticos",
-  "Pisos 4–10: columna fuera de ejes en (27.98, 14.69)",
-  "Pisos 4–10: PL-10 tiene 1.3 m² de muro fuera de los ejes (cerca de x = 24.7, y = 14.9 m); no entra al modelo de pórticos",
-  "Pisos 4–10: PL-12 tiene 1.1 m² de muro fuera de los ejes (cerca de x = 59.9, y = 10.7 m); no entra al modelo de pórticos"
+  "Pisos 4–10: columna fuera de ejes en (27.98, 14.69)"
  ]
 }

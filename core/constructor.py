@@ -443,6 +443,15 @@ def extraer_resultados(est):
     }
     _cw_lvl, _cw_msg = _cond_warning(getattr(est, "cond_Kff", 0.0),
                                      bool(est.despreciar_axial))
+    # κ alto es normal con placas y axial despreciada: solo se avisa si además el
+    # equilibrio global no cierra (es lo que de verdad indicaría pérdida de precisión)
+    try:
+        _ref = max(1.0, abs(equilibrio.get("sumFx_aplicado", 0)), abs(equilibrio.get("sumFy_aplicado", 0)))
+        _res = max(abs(equilibrio.get("residuo_Fx", 0)), abs(equilibrio.get("residuo_Fy", 0)))
+        if _cw_lvl and _res <= 1e-6 * _ref:
+            _cw_lvl, _cw_msg = None, None
+    except Exception:
+        pass
     resumen["cond_warning"] = _cw_lvl
     resumen["cond_msg"] = _cw_msg
 

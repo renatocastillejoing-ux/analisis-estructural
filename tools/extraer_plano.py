@@ -117,6 +117,7 @@ def extraer(ruta):
             if dentro(p.x, p.y):
                 rotulos.append((loc(p.x, p.y), _texto(e).strip()))
         placas = []
+        fuera = []
         polis = []
         for e in msp.query('LWPOLYLINE[layer=="PLACAS"]'):
             p = [loc(a, b) for a, b, *_ in e.get_points()]
@@ -160,6 +161,18 @@ def extraer(ruta):
                                        "hasta": round(d1 - base, 3), "t": round(t, 2)})
                         usadas.append(g)
             resto = pg.difference(unary_union(usadas)) if usadas else pg
+            # tramos rectos fuera de ejes: entran al 3D como placas con su posición real
+            for g in (resto.geoms if hasattr(resto, "geoms") else [resto]):
+                if g.is_empty: continue
+                a0, b0, a1, b1 = g.bounds
+                lx, ly = a1 - a0, b1 - b0
+                if max(lx, ly) >= 1.5 and min(lx, ly) <= 0.6 and g.area >= 0.7 * lx * ly:
+                    d_ = "x" if lx >= ly else "y"
+                    fuera.append({"nombre": nom, "dir": d_,
+                                  "c": round(((b0 + b1) / 2 - Y0) if d_ == "x" else ((a0 + a1) / 2 - X0), 3),
+                                  "desde": round((a0 - X0) if d_ == "x" else (b0 - Y0), 3),
+                                  "hasta": round((a1 - X0) if d_ == "x" else (b1 - Y0), 3), "t": round(min(lx, ly), 2)})
+                    resto = resto.difference(g)
             if resto.area > 0.8:
                 c = resto.centroid
                 salida["avisos"].append(f"{z['nombre']}: {nom} tiene {resto.area:.1f} m² de muro fuera de los ejes "
@@ -203,7 +216,7 @@ def extraer(ruta):
                 etiquetas.append((x, y, m.group(1), int(m.group(2)) / 100, int(m.group(3)) / 100))
 
         salida["zonas"].append({"nombre": z["nombre"], "pisos": z["pisos"], "columnas": columnas,
-                                "placas": placas, "_cubre": {f"{d}|{n}": v for (d, n), v in cubre.items()},
+                                "placas": placas, "placas_fuera_de_ejes": fuera, "_cubre": {f"{d}|{n}": v for (d, n), v in cubre.items()},
                                 "_etiquetas": etiquetas})
     return salida
 
@@ -238,9 +251,12 @@ def armar_vigas(geo):
         for (dir_, n), iv in sorted(cubre.items()):
             ejes_otro = ex if dir_ == "x" else ey
             # apoyos posibles: cruces con ejes del otro sentido cubiertos por la viga
+            base_ = X0 if dir_ == "x" else Y0
+            muros = [(p["desde"] + base_, p["hasta"] + base_) for p in z["placas"] if p["dir"] == dir_ and p["eje"] == n]
+            ivm = _union(iv + muros)                 # vigas y placas del eje: una placa también es apoyo
             pts = []
             for m, c in ejes_otro.items():
-                if _cobertura(iv, c - 0.3, c + 0.3) <= 0 and not any(a - 1.6 <= c <= b + 1.6 for a, b in iv):
+                if _cobertura(ivm, c - 0.3, c + 0.3) <= 0 and not any(a - 1.6 <= c <= b + 1.6 for a, b in ivm):
                     continue
                 nx, ny = (m, n) if dir_ == "x" else (n, m)
                 hay_col = (nx, ny) in cols
@@ -251,9 +267,7 @@ def armar_vigas(geo):
                     pts.append((c, m, hay_col or hay_placa))
             pts.sort()
             for (c0, m0, s0), (c1, m1, s1) in zip(pts, pts[1:]):
-                base_ = X0 if dir_ == "x" else Y0
-                muros = [(p["desde"] + base_, p["hasta"] + base_) for p in z["placas"] if p["dir"] == dir_ and p["eje"] == n]
-                if _cobertura(_union(iv + muros), c0 + 0.3, c1 - 0.3) < 0.5:
+                if _cobertura(ivm, c0 + 0.3, c1 - 0.3) < 0.5:
                     continue
                 if _dentro_de_placa(z, dir_, n, c0, c1, geo):
                     continue

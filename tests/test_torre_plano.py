@@ -48,3 +48,17 @@ def test_pórtico_desde_3d_gira_la_placa():
     sx = {s["nombre"]: s for s in en_x["secciones"]}[en_x["elementos"][0]["seccion"]]
     sy = {s["nombre"]: s for s in en_y["secciones"]}[en_y["elementos"][0]["seccion"]]
     assert sx["h"] == 4.0 and sy["h"] == 0.25
+
+
+def test_eje_15_es_portico():
+    assert "Eje 15" in [n for n, _, _ in todos_los_pórticos()]
+
+
+def test_diafragma_por_bloque():
+    """La junta entre los ejes 5 y 6 separa la torre en dos bloques con diafragma propio."""
+    from core.analisis_3d import analizar_modelo3d
+    m = modelo3d_torre(dinamico=False)
+    m["disenar"] = False
+    d = analizar_modelo3d(m)
+    assert d["resumen"]["bloques"] == 2
+    assert abs(d["equilibrio"]["SX"]["Rx"] + d["sismo"]["X"]["V"]) < 1e-6

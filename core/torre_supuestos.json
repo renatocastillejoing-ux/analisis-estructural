@@ -1,0 +1,11 @@
+{
+ "_ayuda": "Supuestos de la torre que el plano no trae. Se pueden cambiar aquí; la app los relee sola (no hace falta reiniciar). alturas: una por piso, de abajo arriba (m). fc: una por piso (kgf/cm²). cargas en tonf/m². vacios: zonas sin losa en nombres de ejes [x desde, x hasta, y desde, y hasta]. sismo: E.030.",
+ "alturas": [3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0],
+ "fc": [280, 280, 280, 210, 210, 210, 210, 210, 210, 210],
+ "cm": 0.40,
+ "cv": 0.25,
+ "peso_concreto": 2.4,
+ "vacios": [["8", "14", "H", "F"]],
+ "sismo": {"Z": 0.35, "U": 1.0, "S": 1.15, "TP": 0.6, "TL": 2.0, "R": 6.0, "CT": 60.0},
+ "pendiente_de_confirmar": "Alturas, f'c por piso, cargas y el vacío central: confirmar con el grupo (no salen del plano)."
+}

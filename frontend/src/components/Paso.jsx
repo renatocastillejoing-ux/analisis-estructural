@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { metodoA } from "../api.js";
+import Pizarra from "./Pizarra.jsx";
 
 // Reproductor del Método Sistematizado de Rigidez (matriz [A], K = AᵀkA):
 // cada paso trae su figura animada y sus matrices, cálculo a cálculo.
@@ -13,6 +14,7 @@ export default function Paso({ modelo, onVolver }) {
   const [i, setI] = useState(0);
   const [play, setPlay] = useState(false);
   const [vel, setVel] = useState(2600);
+  const [modo, setModo] = useState("pizarra");      // «pizarra» = como lo resuelve el profesor; «pasos» = reproductor animado
 
   useEffect(() => {
     let vivo = true;
@@ -66,9 +68,19 @@ export default function Paso({ modelo, onVolver }) {
   if (!data) return <div className="m-auto text-sm text-slate-600 dark:text-slate-300">Resolviendo con el método [A]…</div>;
 
   const ir = (k) => { setPlay(false); setI(Math.max(0, Math.min(n - 1, k))); };
+  const selector = (
+    <div className="flex items-center gap-1 border-b border-slate-200 bg-slate-50 px-3 py-1.5 text-xs sm:px-6 dark:border-ink-line dark:bg-ink-3">
+      <span className="mr-1 text-slate-500 dark:text-slate-400">Ver:</span>
+      {[["pizarra", "Como el profesor (hoja continua)"], ["pasos", "Pasos animados"]].map(([v, l]) => (
+        <button key={v} onClick={() => setModo(v)} className={`rounded-full border px-3 py-0.5 ${modo === v ? "border-teal bg-teal font-semibold text-white" : "border-slate-300 dark:border-ink-line"}`}>{l}</button>
+      ))}
+    </div>
+  );
+  if (modo === "pizarra") return <div className="flex min-h-0 min-w-0 flex-1 flex-col">{selector}<Pizarra data={data} /></div>;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {selector}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5 sm:px-6 dark:border-ink-line dark:bg-ink-2">
         <button onClick={() => ir(0)} className={btn} title="Primer paso" aria-label="Primer paso">⏮</button>
         <button onClick={() => ir(i - 1)} className={btn} title="Paso anterior (←)" aria-label="Paso anterior">◀</button>
@@ -259,7 +271,7 @@ function Figura({ data, W = 720, H = 400, pad = 70, foco, tenue, children, defor
           <g key={k}>
             <line x1={G.X(b.xi)} y1={G.Y(b.yi)} x2={G.X(b.xj)} y2={G.Y(b.yj)} strokeLinecap="round"
               className={`transition-all duration-500 ${on ? "stroke-teal" : "stroke-slate-300 dark:stroke-ink-line"}`} strokeWidth={on ? 6 : 4} />
-            {(barras.length <= 40 || foco === k) && <text x={(G.X(b.xi) + G.X(b.xj)) / 2 + (b.xi === b.xj ? 10 : 0)} y={(G.Y(b.yi) + G.Y(b.yj)) / 2 - (b.xi === b.xj ? 0 : 9)}
+            {(barras.length <= 20 || foco === k) && <text x={(G.X(b.xi) + G.X(b.xj)) / 2 + (b.xi === b.xj ? 10 : 0)} y={(G.Y(b.yi) + G.Y(b.yj)) / 2 - (b.xi === b.xj ? 0 : 9)}
               textAnchor={b.xi === b.xj ? "start" : "middle"} className={`text-[12px] font-semibold transition-opacity ${on ? "fill-slate-800 dark:fill-slate-100" : "fill-slate-400 opacity-60"}`}>{b.elem}</text>}
             {foco === k && <>
               <text x={G.X(b.xi)} y={G.Y(b.yi) + 18} textAnchor="middle" className="fill-amber-600 text-[11px] font-bold dark:fill-amber-400">i</text>
@@ -340,11 +352,11 @@ function Activar({ paso, data }) {
 }
 
 /* ---------- paso 1: sistemas Q–D y q–d ---------- */
-function Coordenadas({ data }) {
+export function Coordenadas({ data }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_340px]">
       <Figura data={data}>
-        {(G) => [...(data.barras.length <= 60 ? data.barras.flatMap((b, n) => {
+        {(G) => [...(data.barras.length <= 24 ? data.barras.flatMap((b, n) => {
           // GDL locales: (Δ, θ) en el extremo i y en el j, junto a cada extremo
           const L = Math.hypot(b.xj - b.xi, b.yj - b.yi) || 1, ux = (b.xj - b.xi) / L, uy = (b.yj - b.yi) / L;
           const vert = Math.abs(ux) < 1e-6;
@@ -568,7 +580,7 @@ export function Diagrama({ elementos, nudos = [], tipo, animado, W = 900, H = 44
 }
 
 /* ---------- piezas de matrices ---------- */
-function Matriz({ M: M0, filas: f0, columnas: c0, titulo, resaltarFilas, resaltarCols, resaltarCeldas, grande, max = 60 }) {
+export function Matriz({ M: M0, filas: f0, columnas: c0, titulo, resaltarFilas, resaltarCols, resaltarCeldas, grande, max = 60 }) {
   if (!M0 || !M0.length) return null;
   const nr = M0.length, nc = Array.isArray(M0[0]) ? M0[0].length : 1;
   const recorte = nr > max || nc > max;
@@ -608,7 +620,7 @@ function Matriz({ M: M0, filas: f0, columnas: c0, titulo, resaltarFilas, resalta
   );
 }
 
-function Vector({ v, labels, titulo, resaltado }) {
+export function Vector({ v, labels, titulo, resaltado }) {
   return (
     <div>
       {titulo && <div className="mb-2 text-sm font-semibold text-teal-dark dark:text-teal-soft">{titulo}</div>}
@@ -641,7 +653,7 @@ function Formulas({ b }) {
   );
 }
 
-function fmt(x) {
+export function fmt(x) {
   x = +x;
   if (!Number.isFinite(x)) return "—";
   const a = Math.abs(x);

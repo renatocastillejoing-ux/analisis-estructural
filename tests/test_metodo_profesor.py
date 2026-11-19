@@ -64,3 +64,23 @@ def test_coincide_con_metodo_directo():
 def test_memoria_es_la_del_profesor():
     txt = memoria_profesor(_res(), "Ej 7-1")
     assert "MÉTODO SISTEMATIZADO" in txt and "α = 12EI" in txt and "PASO 13" in txt
+
+
+FIJA = {"nombre": "FIJA PC3", "despreciar_axial": True, "material": {"modo": "fc", "fc": 280},
+        "secciones": [{"nombre": "placa", "b": 0.3, "h": 1.8}, {"nombre": "col", "b": 0.3, "h": 0.5},
+                      {"nombre": "viga", "b": 0.3, "h": 0.5}],
+        "nudos": [{"id": 1, "x": 0, "y": 0, "apoyo": "empotrado"}, {"id": 2, "x": 4, "y": 0, "apoyo": "empotrado"},
+                  {"id": 3, "x": 0, "y": 3.5}, {"id": 4, "x": 4, "y": 3.5}],
+        "elementos": [{"id": 1, "i": 1, "j": 3, "seccion": "placa"}, {"id": 2, "i": 2, "j": 4, "seccion": "col"},
+                      {"id": 3, "i": 3, "j": 4, "seccion": "viga"}],
+        "cargas_nodales": [{"nudo": 3, "Fx": 20}]}
+
+
+def test_fija_pc3():
+    """docs/VALIDACION_FIJA_PC3.md: la hoja redondeó {D} y usó L = 4.00 en la viga con brazo."""
+    pl, col, vg = resolver_profesor(construir(FIJA))["barras"]
+    assert abs(pl["alfa"] - 0.73) < 1e-3
+    np.testing.assert_allclose(pl["qT"], [18.4407, 58.8341, -18.4407, 5.7085], atol=5e-4)
+    np.testing.assert_allclose(col["qT"], [1.5593, 2.7873, -1.5593, 2.6701], atol=5e-4)
+    np.testing.assert_allclose(vg["qT"], [-2.0946, -3.8233, 2.0946, -2.6701], atol=5e-4)
+    assert abs(pl["qT"][0] + col["qT"][0] - 20) < 1e-6
