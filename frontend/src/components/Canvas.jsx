@@ -327,8 +327,8 @@ function Cargas({ modelo, porId, X, Y, valores }) {
     const ax = X(a.x), ay = Y(a.y), bx = X(b.x), by = Y(b.y);
     const L = Math.hypot(b.x - a.x, b.y - a.y) || 1;
     if (c.tipo === "distribuida") {
-      const w1 = c.subtipo === "trapezoidal" ? +c.wy1 || 0 : +c.wy || 0;
-      const w2 = c.subtipo === "trapezoidal" ? +c.wy2 || 0 : +c.wy || 0;
+      const w1 = c.subtipo === "trapezoidal" ? (+c.wy1 || +c.wx1 || 0) : (+c.wy || +c.wx || 0);
+      const w2 = c.subtipo === "trapezoidal" ? (+c.wy2 || +c.wx2 || 0) : (+c.wy || +c.wx || 0);
       const wm = Math.max(Math.abs(w1), Math.abs(w2), 1e-9);
       const pts = [];
       for (let t = 0; t <= 6; t++) {

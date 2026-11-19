@@ -63,3 +63,45 @@ button, summary, [role="tab"], select, label { touch-action: manipulation; }
   .barra-scroll > * { flex-shrink: 0; white-space: nowrap; }
   .barra-scroll::-webkit-scrollbar { display: none; }
 }
+
+/* ===== móvil · viewport primero ===== */
+.tabla-scroll table tbody th:first-child { position: sticky; left: 0; z-index: 1; background: #fff; }
+.dark .tabla-scroll table tbody th:first-child { background: #161D2D; }
+.matriz-amplia thead th { position: sticky; top: 0; z-index: 2; background: #f1f5f9; }
+.dark .matriz-amplia thead th { background: #1F2B40; }
+.matriz-amplia thead th:first-child { z-index: 3; }
+/* barra de tiempo: se ve fina (4 px) pero la zona táctil es alta */
+.tiempo { -webkit-appearance: none; appearance: none; background: transparent; height: 24px; min-height: 24px !important; margin: 0; cursor: pointer; }
+.tiempo::-webkit-slider-runnable-track { height: 4px; border-radius: 2px; background: linear-gradient(90deg, #508C9B var(--p, 0%), rgba(148,163,184,.35) var(--p, 0%)); }
+.tiempo::-moz-range-track { height: 4px; border-radius: 2px; background: rgba(148,163,184,.35); }
+.tiempo::-moz-range-progress { height: 4px; border-radius: 2px; background: #508C9B; }
+.tiempo::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%; background: #508C9B; border: 2px solid #fff; }
+.tiempo::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: #508C9B; border: 2px solid #fff; }
+/* silueta de carga */
+@keyframes silueta { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.silueta > * { animation: silueta 1.4s ease-in-out infinite; }
+/* letra de las figuras SVG escalada al ancho real (--k la pone useEscalaTexto) */
+svg.fig-k text { font-size: calc(12px * var(--k, 1)); }
+svg.fig-k text.text-\[9px\] { font-size: calc(9px * var(--k, 1)); }
+svg.fig-k text.text-\[10px\] { font-size: calc(10px * var(--k, 1)); }
+svg.fig-k text.text-\[11px\] { font-size: calc(11px * var(--k, 1)); }
+svg.fig-k text.text-\[13px\] { font-size: calc(13px * var(--k, 1)); }
+svg.fig-k text.text-\[15px\] { font-size: calc(15px * var(--k, 1)); }
+/* cabecera que se esconde al bajar (solo compacto, ver App.jsx) */
+.cabecera { transition: margin-top .25s ease; }
+@media (max-width: 767px), (max-height: 500px) {
+  /* matrices: densas a 12 px aunque el resto de .text-xs suba a 14 px; las celdas no son botones */
+  .matriz, .matriz .text-xs, .matriz th, .matriz td { font-size: 12px !important; line-height: 1.3; }
+  .matriz td { min-width: 2.75rem !important; padding-left: .25rem !important; padding-right: .25rem !important; }
+  .ficha { min-height: 32px !important; min-width: 32px !important; }
+  .ocultar-compacto { display: none !important; }
+  .cabecera-oculta { margin-top: -3rem; }
+  [data-renglon] { content-visibility: auto; contain-intrinsic-size: auto 340px auto 180px; }
+}
+/* modo inmersivo: solo la hoja; cabecera, pie y selector fuera */
+html.inmersivo header, html.inmersivo footer, html.inmersivo .selector-ver { display: none !important; }
+.capsula { padding-bottom: max(.5rem, env(safe-area-inset-bottom)); transition: opacity .25s ease, transform .25s ease; }
+.capsula-oculta { opacity: 0; transform: translateY(16px); pointer-events: none; }
+:root { --kb: 0px; }
+.hoja-inferior { padding-bottom: calc(var(--kb) + env(safe-area-inset-bottom)); }
+.pie-seguro-min { height: calc(1.75rem + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); }
