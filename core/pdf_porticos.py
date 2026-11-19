@@ -175,7 +175,9 @@ def portada(indice, segundos_estimados=None):
     ax.text(0.5, 0.905, "Envolvente de diseño por eje", ha="center", fontsize=14, color=GRIS)
     ax.text(0.5, 0.88, "Combinación 1.4 CM + 1.7 CV  ·  tonf, m  ·  DFN, DFC y DMF por pórtico",
             ha="center", fontsize=9, color="#555")
-    ax.text(0.5, 0.86, datetime.date.today().strftime("%d/%m/%Y"), ha="center", fontsize=9, color="#555")
+    ax.text(0.5, 0.87, "Método sistematizado del profesor: matriz [A], barras 4×4, EA = ∞; N y reacciones por equilibrio de nudos",
+            ha="center", fontsize=8, color="#555")
+    ax.text(0.5, 0.85, datetime.date.today().strftime("%d/%m/%Y"), ha="center", fontsize=9, color="#555")
     ax.text(0.08, 0.82, "Índice", fontsize=13, fontweight="bold", color=GRIS)
     y = 0.79
     paso = min(0.0215, 0.75 / max(1, len(indice)))

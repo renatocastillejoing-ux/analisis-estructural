@@ -48,6 +48,13 @@ export default function Results({ resultado, error, onVolver, combos, onExportar
                 <span title="Mide qué tan sensible es la solución a errores de redondeo; por debajo de 1e12 es confiable." className="cursor-help">ⓘ</span>
               </p>
             )}
+            {resultado && !verCombos && resultado.resumen?.metodo && (
+              <p className={`text-xs ${resultado.resumen.metodo === "profesor [A]" ? "text-teal-dark dark:text-teal-soft" : "text-amber-700 dark:text-amber-400"}`}>
+                {resultado.resumen.metodo === "profesor [A]"
+                  ? "Método del profesor: matriz [A], barras 4×4, EA = ∞; N y reacciones por equilibrio de nudos."
+                  : `Resuelto con el motor de verificación. ${resultado.resumen.aviso_metodo || ""}`}
+              </p>
+            )}
           </div>
           {resultado && combos && (
             <div className="flex rounded-lg bg-slate-100 p-0.5 text-sm dark:bg-ink-3">

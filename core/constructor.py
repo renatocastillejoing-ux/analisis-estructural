@@ -439,6 +439,7 @@ def extraer_resultados(est):
         "E": _rE(est._material.E),
         "fc": float(getattr(est._material, "fc", 0)) or None,
         "despreciar_axial": bool(est.despreciar_axial),
+        "metodo": getattr(est, "metodo", None), "aviso_metodo": getattr(est, "aviso_metodo", None),
         "timoshenko": bool(getattr(est, "timoshenko", False)),
         "pdelta": bool(getattr(est, "pdelta", False)),
         "pdelta_iters": int(getattr(est, "pdelta_iters", 0)),

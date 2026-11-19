@@ -490,6 +490,20 @@ def _modelo_base():
     return _BASE
 
 
+def _sujetar_con_diafragma(d):
+    """Tramo con una sola línea de columnas: por sí solo no resiste de costado (la gravedad
+    de la viga lo ladearía 15 cm, Eje 9 I–H). En el edificio lo sujeta la losa (diafragma
+    rígido), así que el nudo que apoya en la otra viga se fija también en horizontal."""
+    pos = {n["id"]: n for n in d["nudos"]}
+    lineas = {round(pos[e["i"]]["x"], 3) for e in d["elementos"]
+              if abs(pos[e["i"]]["y"] - pos[e["j"]]["y"]) > _TOL}
+    if len(lineas) < 2:
+        for n in d["nudos"]:
+            if n.get("apoyo") == "rodillo_y":
+                n["apoyo"] = "fijo"
+                n["nota"] = "apoyo en viga perpendicular + diafragma de la losa"
+
+
 def portico(tipo, idx):
     """Pórtico 2D (formato de constructor.construir) con casos CM y CV separados."""
     from core.analisis_3d import portico_desde_3d
@@ -506,6 +520,7 @@ def portico(tipo, idx):
         ids = set(_componentes(d)[parte]) if len(_componentes(d)) > parte else {n["id"] for n in d["nudos"]}
         d["nudos"] = [n for n in d["nudos"] if n["id"] in ids]
         d["elementos"] = [e for e in d["elementos"] if e["i"] in ids]
+        _sujetar_con_diafragma(d)
         eids = {e["id"] for e in d["elementos"]}
         ce = [x for x in d["cargas_elementos"] if x["elem"] in eids]
         casos.append({"nombre": caso, "cargas_nodales": [], "cargas_elementos": ce})

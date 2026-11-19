@@ -179,11 +179,15 @@ def excel_desde_resultado(res, est=None, nombre="Pórtico"):
                     titulo="[A_i]ᵀ[K_i][A_i]" + nota)
         # vectores: r, d, q, q total lado a lado
         w.cell(f, 1, "Vectores de la barra").font = TIT
-        _cab(w, f + 1, 2, ["{r}", "{d}", "{q} = [K]{d}", "{q}tot = {q} + {r}"])
+        brazo = bool(b["brazo_ini"] or b["brazo_fin"])
+        qn = np.array(b["qT"], float)
+        qn[1] += qn[0] * b["brazo_ini"]; qn[3] -= qn[2] * b["brazo_fin"]   # [T]ᵀ: de la cara al nudo
+        cab = ["{r}", "{d}", "{q} = [K]{d}", "{q}tot = {q} + {r}"] + (["{q} en el nudo (M + V·a)"] if brazo else [])
+        _cab(w, f + 1, 2, cab)
         w.cell(f + 1, 1, "").fill = CAB
         for r in range(4):
             c0 = w.cell(f + 2 + r, 1, dl[r]); c0.font = NEG; c0.fill = CAB
-            for k, v in enumerate((b["r"][r], b["d"][r], b["q"][r], b["qT"][r])):
+            for k, v in enumerate((b["r"][r], b["d"][r], b["q"][r], b["qT"][r]) + ((qn[r],) if brazo else ())):
                 c = w.cell(f + 2 + r, 2 + k, float(v))
                 c.number_format = FMT_D if k == 1 else FMT      # {d} sin redondear, 6 cifras
         _ancho(w, n=max(len(idx), 5) + 1, ancho=13, primero=18)

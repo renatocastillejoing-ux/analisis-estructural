@@ -236,6 +236,7 @@ def resolver_profesor(est):
         b["qT"] = b["q"] + b["r"]
 
     reac, residuo = _equilibrio_nudos(nudos, barras, tras, D)
+    desp = {n.id: [*(tras(n) @ D if nD else np.zeros(2)), float(D[rot[n.id]]) if n.id in rot else 0.0] for n in nudos}
 
     modos = []
     for k in range(nD):
@@ -249,7 +250,42 @@ def resolver_profesor(est):
         modos.append(u)
     return {"labels": labels, "nT": nT, "barras": barras, "K": K, "R": R,
             "Qn": Qn, "Q": Q, "D": D, "modos": modos, "nudos": nudos, "resortes": resortes,
-            "reacciones": reac, "residuo_equilibrio": residuo}
+            "reacciones": reac, "residuo_equilibrio": residuo, "desp": desp}
+
+
+S_INV4 = np.array([[0, 0, -1, 0], [0, 0, 0, 1], [-1, 0, 0, 0], [0, 1, 0, 0]], float)
+
+
+def aplicar_a_estructura(est):
+    """Resuelve con [A] y deja en `est` sus resultados: {D} de cada nudo, fuerzas de extremo
+    (al nudo, con N del equilibrio de nudos) y reacciones. Los diagramas N/V/M se trazan
+    luego por estática desde estas fuerzas y las cargas de tramo."""
+    res = resolver_profesor(est)
+    nl = est.n_libres
+    D = np.zeros(est.n_gdl)
+    for n in est.nudos:
+        u = res["desp"][n.id]
+        for k in range(3):
+            D[n.gdl[k]] = n.asentamiento[k] if n.restriccion[k] else u[k]
+    est.D = D; est.Df = D[:nl]
+    for b in res["barras"]:
+        e = b["e"]
+        Vi, Mi, Vj, Mj = b["qT"]
+        q = np.array([Vi, Mi + Vi * b["brazo_ini"], Vj, Mj - Vj * b["brazo_fin"]])   # al nudo
+        if _invertida(e, b["tipo"]):
+            q = S_INV4 @ q
+        ff = e._condensar(e.k_local_base(), e.ff_local_base())[1]
+        est.fuerzas_elem[e.id] = np.array([-b["N"] + ff[0], q[0], q[1], b["N"] + ff[3], q[2], q[3]])
+    R = np.zeros(est.n_gdl - nl)
+    por_nombre = {r["nudo"]: r for r in res["reacciones"]}
+    for n in est.nudos:
+        r = por_nombre.get(n.nombre)
+        for k, c in enumerate(("Rx", "Ry", "M")):
+            if n.restriccion[k] and r is not None:
+                R[n.gdl[k] - nl] = r[c]
+    est.R = R
+    est.resultado_profesor = res
+    return res
 
 
 def _equilibrio_nudos(nudos, barras, tras, D):

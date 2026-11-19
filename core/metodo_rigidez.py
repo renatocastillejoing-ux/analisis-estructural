@@ -719,6 +719,18 @@ class Estructura:
                 escala = 1.0 + float(np.max(np.abs(self.D)))
                 if np.max(np.abs(self.D - Dprev)) < 1e-9*escala:
                     break
+        # Resultados con el MÉTODO DEL PROFESOR ([A], barras 4×4, EA = ∞): desplazamientos,
+        # fuerzas de extremo y reacciones se reemplazan por los de [A]; el motor directo
+        # queda solo como verificación (y para P-Δ, modal y axial real, que [A] no cubre).
+        self.metodo = "directo (verificación)"
+        self.aviso_metodo = None
+        if self.despreciar_axial and not self.pdelta:
+            from core.metodo_profesor import aplicar_a_estructura
+            try:
+                aplicar_a_estructura(self)
+                self.metodo = "profesor [A]"
+            except Exception as ex:
+                self.aviso_metodo = f"No se pudo resolver con el método [A]: {ex}"
         return self.D
 
     def _diagnostico_inestabilidad(self, Kff):
