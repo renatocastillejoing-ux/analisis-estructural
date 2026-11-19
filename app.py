@@ -349,6 +349,19 @@ def api_torre_modelo3d():
     return jsonify(modelo3d_torre())
 
 
+@app.route("/api/torre/plano", methods=["GET"])
+def api_torre_plano():
+    """Fondo del plano DXF (static/plano/*.json): planta=1 (pisos 1-3) o planta=2 (pisos 4-10)."""
+    archivo = {"1": "planta_1a3.json", "2": "planta_4a10.json"}.get(request.args.get("planta", "1"))
+    if not archivo:
+        return jsonify({"ok": False, "error": "planta debe ser 1 (pisos 1-3) o 2 (pisos 4-10)"}), 400
+    ruta = os.path.join(BASE_DIR, "static", "plano", archivo)
+    if not os.path.exists(ruta):
+        return jsonify({"ok": False, "error": "Falta el fondo; genéralo con tools/plano_fondo.py"}), 404
+    with open(ruta, encoding="utf-8") as f:
+        return jsonify(json.load(f))
+
+
 @app.route("/api/torre/3d", methods=["GET"])
 def api_torre_3d():
     """Geometría completa de la torre para el visor 3D."""
