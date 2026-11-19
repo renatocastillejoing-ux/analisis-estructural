@@ -183,7 +183,7 @@ export default function App() {
     if (tridim) {
       setErr3d(null);
       try {
-        const { ok, data } = await calcular3d(modelo);
+        const { ok, data } = await calcular3d(modelo, { onProgreso: (seg) => setCalculando(Math.max(1, Math.round(seg))) });
         if (!ok || !data.ok) { setErr3d(data.error || "No se pudo calcular el modelo 3D"); setRes3d(null); }
         else { setRes3d(data); setModeloCalculado(modelo); avisar(`Modelo 3D resuelto: ${data.resumen.n_resuelto} GDL en ${data.resumen.t_total} s.`); }
         setVista("resultados");
@@ -527,7 +527,7 @@ export default function App() {
         <div className="hidden xl:block"><BuscadorComandos ref={buscador} comandos={comandos} /></div>
         <button onClick={ejecutarCalculo} disabled={calculando} title={validacion.errores[0] || "Calcular estructura (Ctrl+Enter)"}
           className="flex h-8 shrink-0 items-center gap-2 rounded-md bg-teal px-3 text-sm font-semibold text-white hover:bg-teal-dark disabled:opacity-60">
-          {calculando ? "…" : <>▶ <span className="hidden 2xl:inline">Calcular estructura</span><span className="hidden sm:inline 2xl:hidden">Calcular</span></>}
+          {calculando ? (calculando === true ? "…" : `… ${calculando} s`) : <>▶ <span className="hidden 2xl:inline">Calcular estructura</span><span className="hidden sm:inline 2xl:hidden">Calcular</span></>}
         </button>
         <div className="mx-0.5 hidden h-6 w-px bg-slate-200 xl:block dark:bg-ink-line" />
         <div className="hidden shrink-0 rounded-lg bg-slate-100 p-0.5 xl:flex dark:bg-ink-3" role="tablist" aria-label="Vistas">

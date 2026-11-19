@@ -10,7 +10,26 @@ export const torreLista = () => fetch("/api/torre/lista").then((r) => r.json());
 export const torreModelo = (tipo, idx, casos = false) =>
   fetch(`/api/torre?tipo=${tipo}&idx=${idx}${casos ? "&casos=1" : ""}`).then((r) => r.json());
 export const combinaciones = (modelo) => post("/api/combinaciones", modelo);
-export const calcular3d = (modelo) => post("/api/calcular3d", modelo);
+// Cálculo 3D en segundo plano: se inicia y se consulta cada segundo (la torre puede tardar
+// más que el límite de una petición en el servidor en línea). Devuelve { ok, data } como post().
+export async function calcular3d(modelo, { onProgreso } = {}) {
+  const ini = await post("/api/calcular3d/iniciar", modelo);
+  if (!ini.ok || !ini.data.ok) return ini;
+  for (let fallos = 0; ;) {
+    await new Promise((r) => setTimeout(r, 1000));
+    let r;
+    try { r = await fetch(`/api/calcular3d/estado/${ini.data.id}`); } catch (e) {
+      if (++fallos >= 5) return { ok: false, data: { error: `Se perdió la conexión con el servidor durante el cálculo (${e}). Vuelve a calcular.` } };
+      continue;
+    }
+    let d;
+    try { d = await r.json(); } catch { if (++fallos >= 5) return { ok: false, data: { error: `Respuesta inesperada del servidor (${r.status}). Vuelve a calcular.` } }; continue; }
+    fallos = 0;
+    if (d.estado === "listo") return { ok: true, data: d.resultado };
+    if (d.estado !== "calculando") return { ok: false, data: { error: d.error || "No se pudo calcular el modelo 3D." } };
+    onProgreso?.(d.segundos);
+  }
+}
 export const extraerPortico = (modelo, eje, valor, factores) => post("/api/modelo3d/portico", { modelo, eje, valor, factores });
 export const torre3dModelo = () => fetch("/api/torre/modelo3d").then((r) => r.json());
 // Memoria de cálculo (texto): el servidor la genera solo cuando se pide.

@@ -13,6 +13,7 @@ import json
 import sqlite3
 import datetime
 import traceback
+import uuid
 
 import io
 import threading
@@ -450,6 +451,56 @@ def api_calcular3d():
         return jsonify(analizar_modelo3d(datos))
     except Exception as e:
         return error_json(f"No se pudo resolver el modelo 3D: {e}")
+
+
+# ---- cálculo 3D en segundo plano: en el servidor en línea (CPU lenta) la torre puede tardar
+# más que el límite de una petición (gunicorn --timeout 180) y el navegador recibía un 500 en
+# HTML. Ahora se inicia, se consulta el estado cada segundo y se recoge el resultado.
+_TRABAJOS3D = {}
+_TRABAJOS3D_LOCK = threading.Lock()
+
+
+@app.route("/api/calcular3d/iniciar", methods=["POST"])
+def api_calcular3d_iniciar():
+    from core.analisis_3d import analizar_modelo3d
+    datos = request.get_json(force=True)
+    tid = uuid.uuid4().hex
+    with _TRABAJOS3D_LOCK:
+        for k in [k for k, v in _TRABAJOS3D.items() if time.time() - v["t0"] > 1800]:
+            _TRABAJOS3D.pop(k, None)                     # limpia trabajos de más de 30 min
+        _TRABAJOS3D[tid] = {"estado": "calculando", "t0": time.time()}
+
+    def correr():
+        try:
+            r = analizar_modelo3d(datos)
+            _TRABAJOS3D[tid].update(estado="listo", resultado=r)
+        except Exception as e:
+            _TRABAJOS3D[tid].update(estado="error", error=f"No se pudo resolver el modelo 3D: {e}")
+    threading.Thread(target=correr, daemon=True).start()
+    return jsonify({"ok": True, "id": tid})
+
+
+@app.route("/api/calcular3d/estado/<tid>", methods=["GET"])
+def api_calcular3d_estado(tid):
+    t = _TRABAJOS3D.get(tid)
+    if t is None:
+        return jsonify({"ok": False, "estado": "perdido",
+                        "error": "El servidor se reinició durante el cálculo. Vuelve a calcular."}), 404
+    seg = round(time.time() - t["t0"], 1)
+    if t["estado"] == "listo":
+        _TRABAJOS3D.pop(tid, None)
+        return jsonify({"ok": True, "estado": "listo", "segundos": seg, "resultado": t["resultado"]})
+    if t["estado"] == "error":
+        _TRABAJOS3D.pop(tid, None)
+        return jsonify({"ok": False, "estado": "error", "error": t["error"]}), 400
+    return jsonify({"ok": True, "estado": "calculando", "segundos": seg})
+
+
+@app.route("/favicon.ico")
+def favicon():
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#508C9B"/>'
+           '<path d="M7 25V9h18v16M7 15h18M16 9v16" stroke="#fff" stroke-width="2.4" fill="none"/></svg>')
+    return app.response_class(svg, mimetype="image/svg+xml", headers={"Cache-Control": "public, max-age=604800"})
 
 
 @app.route("/api/diseno", methods=["POST"])
