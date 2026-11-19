@@ -247,7 +247,7 @@ def excel_desde_resultado(res, est=None, nombre="Pórtico"):
     wa = wb.create_sheet("A")
     def_filas = [l for b in barras for l in b["def_labels"]]
     if barras:
-        A = np.vstack([b["A"] for b in barras])
+        A = np.vstack([b["A"][b["act"]] for b in barras])
     else:
         A = np.zeros((0, nD))
     wa["A1"] = "Matriz de compatibilidad [A]   {d} = [A]{D}"; wa["A1"].font = TIT
@@ -307,9 +307,12 @@ def excel_desde_resultado(res, est=None, nombre="Pórtico"):
         # [A_i]: referencias a la hoja «A»
         fA = f
         f = _matriz(w, f, 1, np.zeros((4, nidx)), dl, [D_L[c] for c in idx], titulo="[A_i]" + nota)
+        # la hoja «A» solo tiene las filas de los GDL locales activos; los inactivos valen 0
+        f_ini = 3 + sum(len(x["act"]) for x in barras[:nb_])
         for r in range(4):
             for k, c in enumerate(idx):
-                w.cell(fA + 2 + r, 2 + k).value = f"='A'!{get_column_letter(2 + c)}{3 + 4 * nb_ + r}"
+                w.cell(fA + 2 + r, 2 + k).value = (f"='A'!{get_column_letter(2 + c)}{f_ini + b['act'].index(r)}"
+                                                   if r in b["act"] else 0)
         A_rng = _rango(2, fA + 2, 1 + nidx, fA + 5)
         # [A_i]ᵀ: referencias a [A_i]
         fT = f

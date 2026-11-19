@@ -40,10 +40,11 @@ def test_excel_profesor(cli):
     assert wb.sheetnames[:2] == ["Datos", "A"] and "K total" in wb.sheetnames and "Q R D" in wb.sheetnames
     hojas_barra = [s for s in wb.sheetnames if s.startswith("Barra ")]
     assert len(hojas_barra) == nb
-    # [A]: 4·nb filas × nD columnas, con rótulos de GDL y de d
+    # [A]: una fila por GDL local activo × nD columnas, con rótulos de GDL y de d
     wa = wb["A"]
-    A = np.array([[wa.cell(3 + r_, 2 + c).value for c in range(nD)] for r_ in range(4 * nb)], float)
-    assert np.allclose(A, np.vstack([b["A"] for b in res["barras"]]))
+    na = sum(len(b["act"]) for b in res["barras"])
+    A = np.array([[wa.cell(3 + r_, 2 + c).value for c in range(nD)] for r_ in range(na)], float)
+    assert np.allclose(A, np.vstack([b["A"][b["act"]] for b in res["barras"]]))
     assert wa.cell(2, 2).value == res["labels"][0]
     assert wa.cell(3, 1).value == res["barras"][0]["def_labels"][0]
     # {D}: fórmula de matriz con formato de 6 cifras significativas

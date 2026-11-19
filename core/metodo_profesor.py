@@ -202,8 +202,14 @@ def resolver_profesor(est):
         K += AtKA
         rf = rf + Kf @ d0
         R += A4.T @ rf + Rax
-        dl = [f"d{numero + k + 1}" for k in range(4)]
-        numero += 4
+        # GDL locales activos: los que se mueven con algún D (fila de [A] no nula). Como en la
+        # hoja del profesor, solo esos se numeran (d1, d2, …) y entran a la [A] de la estructura;
+        # p. ej. una columna empotrada en la base solo tiene Δj y θj, y una viga con EA = ∞, θi y θj.
+        act = [k for k in range(4) if np.any(np.abs(A4[k]) > 1e-12)]
+        dl = ["—"] * 4
+        for k in act:
+            numero += 1
+            dl[k] = f"d{numero}"
         sec = e.sec
         barras.append({
             "e": e, "A": A4, "K": Kf, "r": rf, "d0": d0, "AtKA": AtKA,
@@ -214,8 +220,8 @@ def resolver_profesor(est):
             "E": float(E), "I": float(I), "Asec": float(A_), "EI": float(EI),
             "b": getattr(sec, "b", None), "h": getattr(sec, "h", None),
             "alfa": alfa, "G": G, "Ac": Ac, "nu": nu,
-            "exacta": exacta, "rotula": rotula, "def_labels": [f"{e.nombre}·{d} {LOC[k]}" for k, d in enumerate(dl)],
-            "dnum": dl,
+            "exacta": exacta, "rotula": rotula, "def_labels": [f"{e.nombre}·{dl[k]} {LOC[k]}" for k in act],
+            "dnum": dl, "act": act,
         })
 
     # apoyos elásticos (resortes): kx, ky sobre las traslaciones del nudo y kg sobre su giro
@@ -400,7 +406,7 @@ def a_api(res):
     for b in res["barras"]:
         idx = [c for c in range(nD) if np.any(np.abs(b["A"][:, c]) > 1e-12)]
         out.append({k: b[k] for k in ("elem", "tipo", "i", "j", "xi", "yi", "xj", "yj",
-                                       "def_labels", "dnum", "exacta")}
+                                       "def_labels", "dnum", "act", "exacta")}
                    | {k: _f(b[k]) for k in ("L", "Lf", "E", "I", "EI", "alfa", "G", "Ac", "brazo_ini", "brazo_fin")}
                    | {"b": _f(b["b"]), "h": _f(b["h"]), "formula": formula_k(b),
                       "Aidx": idx, "Asub": b["A"][:, idx].tolist(),
@@ -409,7 +415,7 @@ def a_api(res):
                       "q": b["q"].tolist(), "qT": b["qT"].tolist(), "N": b.get("N")})
     def_labels = [l for b in out for l in b["def_labels"]]
     # [A] completa solo en modelos pequeños (en los grandes se ve por barra)
-    A_full = np.vstack([b["A"] for b in res["barras"]]).tolist() if res["barras"] and nD <= 40 else None
+    A_full = np.vstack([b["A"][b["act"]] for b in res["barras"]]).tolist() if res["barras"] and nD <= 40 else None
     nudos = [{"nombre": n.nombre, "x": float(n.x), "y": float(n.y), "restr": list(n.restriccion)} for n in res["nudos"]]
     K, R, Qn, Q, D = (res[k].tolist() for k in ("K", "R", "Qn", "Q", "D"))
     return {"ok": True, "n_gdl": nD, "labels": labels, "def_labels": def_labels, "A": A_full,
@@ -432,7 +438,7 @@ def _pasos(labels, def_labels, barras, A, K, Qn, R, Q, D):
               "desc": "GDL globales {D}: desplazamientos laterales y giros de nudo. GDL locales: 4 por barra (Δ y θ en cada extremo), numerados primero en columnas y placas (de abajo hacia arriba, de izquierda a derecha) y luego en vigas.",
               "labels": labels, "def_labels": def_labels})
     P.append({"n": 2, "id": "A", "titulo": "Matriz de compatibilidad [A]",
-              "desc": "Para cada barra, {dᵢ} = [Aᵢ]{D}: 4 filas (Δi, θi, Δj, θj) y una columna por GDL global. Un brazo rígido de longitud a suma a·θ al desplazamiento del extremo.",
+              "desc": "Una sola [A] para la estructura: una fila por GDL local activo (los que se mueven con algún D) y una columna por GDL global; la [Aᵢ] de cada barra son sus filas de esa matriz. Un brazo rígido de longitud a suma a·θ al desplazamiento del extremo.",
               "rows": def_labels, "cols": labels, "A": A, "barras": sub(["elem", "tipo", "Aidx", "Asub", "def_labels"])})
     P.append({"n": 3, "id": "Ki", "titulo": "Rigidez de barra [kᵢ] (4×4)",
               "desc": "[k] = EI/(L(1+α))·[12/L², 6/L, −12/L², 6/L; 6/L, 4+α, −6/L, 2−α; …]. En vigas y columnas α = 0; en placas α = 12EI/(L²·G·Ac).",
@@ -505,8 +511,8 @@ def memoria_profesor(res, nombre="Pórtico", dec=4):
 
     tit("PASO 2. Matriz de compatibilidad [A]   {d} = [A]{D}")
     if nD <= 12:
-        filas = [f"{b['elem']}·{d}" for b in barras for d in b["dnum"]]
-        P(_mat_txt(np.vstack([b["A"] for b in barras]), filas, DL, w=9, dec=3))
+        filas = [f"{b['elem']}·{b['dnum'][k]}" for b in barras for k in b["act"]]
+        P(_mat_txt(np.vstack([b["A"][b["act"]] for b in barras]), filas, DL, w=9, dec=3))
     else:
         P(f"(Con {nD} GDL se muestra cada [Ai] solo con las columnas que no son cero.)")
         for b in barras:

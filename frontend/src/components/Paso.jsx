@@ -149,10 +149,10 @@ function PasoCuerpo({ paso, data }) {
   const DL = data.labels.map((_, k) => `D${k + 1}`);
   switch (paso.id) {
     case "activar": return <Activar paso={paso} data={data} />;
-    case "coords": return <Coordenadas data={data} />;
+    case "coords": return <div className="space-y-4"><Coordenadas data={data} /><div><h3 className="mb-2 text-sm font-semibold">GDL locales de cada barra (sistema q–d)</h3><LocalesGDL data={data} /></div></div>;
     case "A": return <PasoBarras data={data} render={(b) => <Matriz M={b.Asub} filas={locales(b)} columnas={b.Aidx.map((c) => DL[c])} />}
       arriba={(foco) => data.A && <Matriz M={data.A} filas={data.def_labels} columnas={DL} max={16} titulo={`[A] (${data.def_labels.length}×${DL.length}) · {d} = [A]{D}`} resaltarFilas={(r) => foco != null && data.def_labels[r].startsWith(data.barras[foco].elem + "·")} />}
-      pie="En cada barra solo se muestran las columnas de [A] distintas de cero: los GDL que la deforman." />;
+      pie="[A] tiene una fila por GDL local activo. En cada barra se muestran sus filas y solo las columnas distintas de cero: los GDL que la deforman." />;
     case "Ki": return <PasoBarras data={data} render={(b) => <><Formulas b={b} /><Matriz M={b.K} filas={b.dnum} columnas={b.dnum} /></>} />;
     case "AtKA": return <PasoBarras data={data} render={(b) => <Matriz M={b.AtKAsub} filas={b.Aidx.map((c) => DL[c])} columnas={b.Aidx.map((c) => DL[c])} resaltarCeldas />}
       pie="Se muestra la submatriz de los GDL de cada barra; el resto de [Aᵢ]ᵀ[Kᵢ][Aᵢ] es cero." />;
@@ -376,7 +376,7 @@ export function Coordenadas({ data }) {
           const vert = Math.abs(ux) < 1e-6;
           return [[0.2, 0], [0.8, 2]].map(([t, o]) => {
             const x = G.X(b.xi + (b.xj - b.xi) * t) + (vert ? 7 : 0), y = G.Y(b.yi + (b.yj - b.yi) * t) + (vert ? 4 : 15);
-            return b.dnum && <text key={`l${n}-${o}`} x={x} y={y} textAnchor={vert ? "start" : "middle"} className="celda-in fill-sky-700 text-[10px] font-semibold dark:fill-sky-300" style={{ animationDelay: `${400 + n * 60}ms` }}>{b.dnum[o].slice(1)},{b.dnum[o + 1].slice(1)}</text>;
+            return b.dnum && <text key={`l${n}-${o}`} x={x} y={y} textAnchor={vert ? "start" : "middle"} className="celda-in fill-sky-700 text-[10px] font-semibold dark:fill-sky-300" style={{ animationDelay: `${400 + n * 60}ms` }}>{[b.dnum[o], b.dnum[o + 1]].map((d) => (d === "—" ? "0" : d.slice(1))).join(",")}</text>;
           });
         }) : []), ...data.labels.map((l, k) => {
           const t = l.replace(/^D\d+\(/, "").replace(/\)$/, "");
@@ -395,10 +395,54 @@ export function Coordenadas({ data }) {
         </div>
         <div>
           <h3 className="mb-1 font-semibold">GDL locales {"{d}"} (sistema q–d)</h3>
-          <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">En la figura, en azul: (Δ, θ) de cada extremo. Primero columnas y placas, luego vigas.</p>
+          <p className="mb-1 text-xs text-slate-500 dark:text-slate-400">En la figura, en azul: (Δ, θ) de cada extremo; 0 = GDL local fijo (apoyo o EA = ∞), que no se numera. Primero columnas y placas, luego vigas.</p>
           <div className="max-h-72 space-y-1 overflow-y-auto">{data.barras.map((b, k) => <div key={k} className="celda-in flex justify-between gap-2 rounded-md border border-slate-200 px-2 py-0.5 text-xs dark:border-ink-line" style={{ animationDelay: `${k * 50}ms` }}><b>{b.elem}</b><span className="text-slate-500">{b.tipo}</span><span className="tabular-nums">{(b.dnum || []).map((d, q) => `${d} ${LOC[q]}`).join(" · ")}</span></div>)}</div>
         </div>
       </div>
+    </div>
+  );
+}
+
+
+/* ---------- GDL locales de cada barra (sistema q–d), dibujados barra por barra ---------- */
+// Cada barra con sus 4 GDL locales: Δ (perpendicular) y θ (antihorario) en i y en j. Los que se
+// mueven con algún D llevan su número (d1, d2, …); los que quedan fijos (apoyo o EA = ∞) valen 0.
+export function LocalesGDL({ data }) {
+  return (
+    <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(190px,1fr))]">
+      {data.barras.map((b, n) => {
+        const vert = b.tipo === "columna" || b.tipo === "placa";
+        const x0 = 38, x1 = 152, y = 70;
+        const fl = (k) => (b.dnum?.[k] && b.dnum[k] !== "—" ? b.dnum[k] : null);
+        const ext = (x, kD, kT, lado) => {
+          const dD = fl(kD), dT = fl(kT);
+          const cD = dD ? "#0369A1" : "#94A3B8", cT = dT ? "#B45309" : "#94A3B8";
+          return (
+            <g key={lado}>
+              <line x1={x} y1={y} x2={x} y2={y - 34} stroke={cD} strokeWidth={2} markerEnd={`url(#lg-${dD ? "a" : "g"})`} strokeDasharray={dD ? "" : "3 3"} />
+              <text x={x + (lado === "i" ? -6 : 6)} y={y - 38} textAnchor={lado === "i" ? "end" : "start"} className="text-[11px] font-semibold" fill={cD}>{dD || "0"} Δ{lado}</text>
+              <path d={`M${x + 14},${y} A14,14 0 0,0 ${x},${y - 14}`} fill="none" stroke={cT} strokeWidth={2} markerEnd={`url(#lg-${dT ? "b" : "g"})`} strokeDasharray={dT ? "" : "3 3"}
+                transform={lado === "j" ? `translate(${2 * x},0) scale(-1,1)` : undefined} />
+              <text x={x} y={y + 24} textAnchor="middle" className="text-[11px] font-semibold" fill={cT}>{dT || "0"} θ{lado}</text>
+            </g>
+          );
+        };
+        return (
+          <div key={n} className="celda-in rounded-lg border border-slate-200 bg-white p-1 dark:border-ink-line dark:bg-ink-2" style={{ animationDelay: `${n * 60}ms` }}>
+            <div className="flex justify-between px-1 text-xs"><b>{b.elem}</b><span className="text-slate-500">{b.tipo}{vert ? " · i abajo" : " · i a la izquierda"}</span></div>
+            <svg viewBox="0 0 190 100" className="w-full">
+              <defs>
+                {[["a", "#0369A1"], ["b", "#B45309"], ["g", "#94A3B8"]].map(([id, c]) => <marker key={id} id={`lg-${id}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill={c} /></marker>)}
+              </defs>
+              <line x1={x0} y1={y} x2={x1} y2={y} className="stroke-slate-700 dark:stroke-slate-200" strokeWidth={4} strokeLinecap="round" />
+              <circle cx={x0} cy={y} r={3.5} className="fill-slate-700 dark:fill-slate-200" /><circle cx={x1} cy={y} r={3.5} className="fill-slate-700 dark:fill-slate-200" />
+              <text x={x0} y={y + 12} textAnchor="middle" className="fill-slate-500 text-[9px]">{b.i}</text>
+              <text x={x1} y={y + 12} textAnchor="middle" className="fill-slate-500 text-[9px]">{b.j}</text>
+              {ext(x0, 0, 1, "i")}{ext(x1, 2, 3, "j")}
+            </svg>
+          </div>
+        );
+      })}
     </div>
   );
 }

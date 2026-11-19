@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import gsap from "gsap";
-import { Coordenadas, DiagramaPaso, Matriz, Vector } from "./Paso.jsx";
+import { Coordenadas, DiagramaPaso, LocalesGDL, Matriz, Vector } from "./Paso.jsx";
 
 // «Como el profesor»: la solución escrita renglón a renglón, en el mismo orden de su hoja
 // (FIJA PC3 / ejemplo 7-1): datos → GDL → [A] → EI → G, Ac, α → A, B, C, D → [k] → Aᵀ →
@@ -47,11 +47,33 @@ export function guion(data) {
 
   // 2 · GDL
   add(2, { titulo: "Grados de libertad: global (Q–D) y local (q–d)" });
-  add(2, { bloque: "coords", nota: `Se numeran ${data.labels.length} GDL globales {D}: primero los desplazamientos laterales y luego los giros de nudo. Cada barra tiene 4 GDL locales: Δ y θ en su extremo i y en su extremo j (antihorario positivo).` });
+  add(2, { bloque: "coords", nota: `Se numeran ${data.labels.length} GDL globales {D}: primero los desplazamientos laterales y luego los giros de nudo.` });
+  const nAct = B.reduce((s, b) => s + (b.act?.length ?? 4), 0);
+  add(2, { bloque: "locales", nota: `Cada barra tiene 4 GDL locales: Δ y θ en su extremo i y en su extremo j (antihorario positivo). Con este gráfico se ve qué desplazamiento o giro de la barra se activa con cada D (ahí va el 1 en [A]). Los que nunca se mueven (empotramiento en la base, Δ de las vigas con EA = ∞) valen 0 y no se numeran: quedan ${nAct} GDL locales, d1 … d${nAct}.` });
 
   // 3 · [A]
   add(3, { titulo: "Matriz de compatibilidad [A]: {d} = [A]{D}" });
-  B.forEach((b) => {
+  const DL = data.labels.map((l) => l.replace(/\(.*/, ""));
+  const completa = Array.isArray(data.A) && data.A.length > 0;
+  if (completa) {
+    const filasA = B.flatMap((b) => (b.act ?? [0, 1, 2, 3]).map((k) => `${b.dnum[k]} ${LOC[k]} ${b.elem}`));
+    add(3, { bloque: "M", M: data.A, filas: filasA, cols: DL, titulo: `[A] (${data.A.length}×${DL.length})`, ancho: true,
+      nota: `Una sola matriz para toda la estructura: una fila por GDL local activo (d1 … d${data.A.length}) y una columna por GDL global (D1 … D${DL.length}). Cada columna se llena activando su D = 1 con los demás en 0 y leyendo cuánto se mueve cada d. Las filas de cada barra (de dos en dos aquí) forman su [Aᵢ].` });
+    let fila = 0;
+    B.forEach((b) => {
+      const act = b.act ?? [0, 1, 2, 3];
+      const M = data.A.slice(fila, fila + act.length); fila += act.length;
+      const filas = act.map((k) => `${b.dnum[k]} ${LOC[k]}`);
+      const expl = act.map((k, r) => {
+        const partes = M[r].map((v, c) => (Math.abs(v) < 1e-12 ? null : `${Math.abs(v - 1) < 1e-9 ? "" : Math.abs(v + 1) < 1e-9 ? "−" : g(v) + "·"}${DL[c]}`)).filter(Boolean);
+        return `${b.dnum[k]} (${LOC[k]}) = ${partes.join(" + ").replace(/\+ −/g, "− ")}`;
+      });
+      b._A = M; b._filasA = filas;
+      add(3, { bloque: "M", M, filas, cols: DL, titulo: `[A${B.indexOf(b) + 1}] ${b.elem} (${act.length}×${DL.length})`,
+        nota: `${nombre(b)}: ${expl.join(" · ")}.${act.length < 4 ? ` ${LOC.filter((_, k) => !act.includes(k)).join(" y ")} = 0 siempre, por eso no tiene fila.` : ""}` });
+    });
+  }
+  if (!completa) B.forEach((b) => {
     const filas = (b.dnum || ["d1", "d2", "d3", "d4"]).map((d, k) => `${d} ${LOC[k]}`);
     const cols = b.Aidx.map((c) => data.labels[c].replace(/\(.*/, ""));
     const expl = [];
@@ -97,10 +119,10 @@ export function guion(data) {
   B.forEach((b) => {
     const c = coef(b);
     const brazo = (+b.brazo_ini || +b.brazo_fin) ? ` (L flexible = ${g(b.L)} − ${g(+b.brazo_ini + +b.brazo_fin)} = ${g(c.L)} m: el brazo rígido no se deforma)` : "";
-    add(8, { pasos: [`${b.elem}:  L = ${g(c.L)} m, α = ${g(c.a)}${brazo}`,
+    add(8, { pasos: [`${b.elem}:  L = ${g(c.L)} m, α = ${g(c.a)}${c.a ? "" : ` (${b.tipo}: no se considera la deformación por corte)`}${brazo}`,
       `A = 12·${n6(c.EI)} / (${g(c.L)}³·${g(1 + c.a)}) = ${n6(c.A)}     B = 6·${n6(c.EI)} / (${g(c.L)}²·${g(1 + c.a)}) = ${n6(c.B)}`,
       `C = ${g(4 + c.a)}·${n6(c.EI)} / (${g(c.L)}·${g(1 + c.a)}) = ${n6(c.C)}     D = ${g(2 - c.a)}·${n6(c.EI)} / (${g(c.L)}·${g(1 + c.a)}) = ${n6(c.D)}`],
-      nota: b.exacta === false ? "Barra con tramos o rótulas: el sistema la condensa; la [k] de abajo es la que entra al cálculo." : "Se reemplazan los valores de la barra en las cuatro fórmulas." });
+      nota: b.exacta === false ? "Barra con tramos o rótulas: el sistema la condensa; la [k] de abajo es la que entra al cálculo." : c.a ? "Placa: α ≠ 0 porque se incluye la deformación por corte." : "Es la fórmula general con α = 0: en vigas y columnas no se considera la deformación por corte, así que quedan 12EI/L³, 6EI/L², 4EI/L y 2EI/L." });
     add(8, { bloque: "M", M: b.K, filas: LOC, cols: LOC, titulo: `[k] ${b.elem}`, nota: "" });
   });
 
@@ -108,8 +130,16 @@ export function guion(data) {
   add(9, { titulo: "Aporte de cada barra: [k]T = [A]ᵀ[k][A]" });
   B.forEach((b) => {
     const cols = b.Aidx.map((c) => data.labels[c].replace(/\(.*/, ""));
-    const At = b.Asub[0].map((_, c) => b.Asub.map((f) => f[c]));
-    add(9, { bloque: "M", M: At, filas: cols, cols: LOC, titulo: `[A]ᵀ ${b.elem}`, nota: "La transpuesta: filas y columnas de [A] intercambiadas." });
+    if (b._A) {
+      const act = b.act ?? [0, 1, 2, 3];
+      const At = DL.map((_, c) => b._A.map((f) => f[c]));
+      add(9, { bloque: "M", M: At, filas: DL, cols: b._filasA, titulo: `[A${B.indexOf(b) + 1}]ᵀ ${b.elem}`, nota: "La transpuesta de las filas de la barra en [A]: filas y columnas intercambiadas." });
+      if (act.length < 4) add(9, { bloque: "M", M: act.map((r) => act.map((c) => b.K[r][c])), filas: b._filasA, cols: b._filasA, titulo: `[k] ${b.elem} en sus GDL activos`,
+        nota: `De la [k] 4×4 solo entran las filas y columnas de ${b._filasA.join(", ")}; las de los GDL que valen 0 se multiplican por cero.` });
+    } else {
+      const At = b.Asub[0].map((_, c) => b.Asub.map((f) => f[c]));
+      add(9, { bloque: "M", M: At, filas: cols, cols: LOC, titulo: `[A]ᵀ ${b.elem}`, nota: "La transpuesta: filas y columnas de [A] intercambiadas." });
+    }
     add(9, { bloque: "M", M: b.AtKAsub, filas: cols, cols, titulo: `[A]ᵀ[k][A] ${b.elem}`, nota: `Rigidez que ${b.elem} aporta a los GDL ${cols.join(", ")}.` });
   });
 
@@ -318,6 +348,7 @@ function Renglon({ r, data, i }) {
       </div>
     );
     if (r.bloque === "coords") return <Coordenadas data={data} />;
+    if (r.bloque === "locales") return <LocalesGDL data={data} />;
     if (r.bloque === "A") return <Matriz M={r.M} filas={r.filas} columnas={r.cols} titulo={`[A] ${r.b.elem}`} />;
     if (r.bloque === "M") return <Matriz M={r.M} filas={r.filas} columnas={r.cols} titulo={r.titulo} max={30} />;
     if (r.bloque === "V") return <Vector v={r.v} labels={r.labels} titulo={r.titulo} />;
@@ -327,7 +358,7 @@ function Renglon({ r, data, i }) {
     if (r.bloque === "DFN") return <DiagramaPaso data={data} tipo="N" />;
     return null;
   };
-  const ancho = r.bloque === "DMF" || r.bloque === "DFC" || r.bloque === "DFN" || r.bloque === "coords" ? "basis-full" : "max-w-full";
+  const ancho = r.bloque === "DMF" || r.bloque === "DFC" || r.bloque === "DFN" || r.bloque === "coords" || r.bloque === "locales" ? "basis-full" : "max-w-full";
   return (
     <div data-renglon={i} style={{ visibility: "hidden" }} className={`${ancho} flex min-w-0 flex-col gap-3 rounded-lg border border-slate-200 bg-white/90 p-3 shadow-sm sm:flex-row dark:border-ink-line dark:bg-ink-2/90`}>
       <div className="min-w-0 overflow-x-auto">{cuerpo()}</div>
