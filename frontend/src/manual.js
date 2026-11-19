@@ -287,7 +287,7 @@ export const MANUAL = [
     id: "metodo", titulo: "11. Paso a paso: la resolución del profesor", bloques: [
       { t: "p", x: "La vista **Paso a paso** (tecla 4, o Analizar › Resolver paso a paso) muestra la resolución completa con el **Método Sistematizado de Rigidez**. Tiene dos modos, arriba a la izquierda:" },
       { t: "l", x: [
-        "**Como el profesor (hoja continua)** — por defecto. Una hoja que se va escribiendo sola, como en la pizarra: en cada cálculo, **fórmula → reemplazo de valores → resultado**, con una nota que explica por qué. **Ver todo** muestra la hoja entera; ▶ la escribe a la velocidad elegida.",
+        "**Como el profesor (hoja continua)** — por defecto. Una **página que se escribe sola**, como la hoja de un ejercicio: los bloques se colocan de izquierda a derecha hasta el borde de la pantalla y siguen en la fila de abajo; cada paso empieza una fila con su título. Las fórmulas se escriben de izquierda a derecha (**fórmula → reemplazo de valores → resultado**), las matrices aparecen celda a celda y la **explicación entra al lado** de cada bloque. La vista sigue sola lo que se está escribiendo.",
         "**Pasos animados**: un paso por pantalla con dibujos (GDL que se activan, barras que se iluminan, celdas de [K] que destellan al ensamblar).",
       ] },
       { t: "p", x: "Los dos modos usan **la misma numeración continua**. Los pasos 5 a 7 (placas) solo aparecen si el pórtico tiene placas; el resto se renumera para no dejar huecos." },
@@ -311,7 +311,13 @@ export const MANUAL = [
         "**Gráficos**: DMF, DFC y DFN.",
       ] },
       { t: "h", x: "Controles" },
-      { t: "p", x: "⏮ ◀ ▶ ⏭ para moverte, **Reproducir** (P) para avanzar solo, **Velocidad** lento/normal/rápido, chips numerados para saltar. ← → también avanzan. En la hoja continua, el botón **Excel** descarga el mismo cálculo con fórmulas." },
+      { t: "l", x: [
+        "**Hoja continua**: **⏸ Pausa / ▶ Seguir** (espacio), **Ver todo**, **Ritmo** (lento, normal, rápido, muy rápido, ×8), **⛶ Pantalla completa** (F; Esc sale) y los **números de paso** para saltar (← → van al paso anterior o siguiente).",
+        "**Barra de tiempo**: arrástrala hacia atrás o hacia adelante para ver cualquier momento de la resolución; a la derecha, el porcentaje y los segundos que faltan.",
+        "**Ritmo adaptado**: en «Normal», una hoja larga (por ejemplo, un pórtico de la torre con 400 renglones) se acelera sola para durar unos 2 a 3 minutos; «×8» la recorre en segundos.",
+        "**Pasos animados**: ⏮ ◀ ▶ ⏭, Reproducir (P), Velocidad y chips numerados.",
+        "El botón **Excel del profesor** descarga el mismo cálculo con fórmulas.",
+      ] },
       { t: "h", x: "Barras inclinadas" },
       { t: "p", x: "Con barras inextensibles, los desplazamientos independientes salen del **espacio nulo** de las condiciones de longitud constante. Cada GDL de traslación se nombra con su **componente real** («D1(Δx N3)»): x si participa, si no y. En [A], una fila con un valor distinto de 1 en una columna de traslación es la **proyección** del desplazamiento sobre la perpendicular de la barra." },
     ],

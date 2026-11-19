@@ -28,3 +28,6 @@ kbd { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) { .celda-in, .aparece, .trazo, .flash, .paso-in > * { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; } }
 
 @keyframes carga { 0% { transform: translateX(-100%); } 100% { transform: translateX(300%); } }
+
+/* hoja animada con GSAP: sin las animaciones CSS de montaje (las controla la línea de tiempo) */
+.hoja-gsap .paso-in, .hoja-gsap .celda-in, .hoja-gsap .aparece { animation: none !important; }

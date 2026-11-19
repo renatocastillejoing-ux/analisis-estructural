@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import gsap from "gsap";
 import { Coordenadas, DiagramaPaso, Matriz, Vector } from "./Paso.jsx";
 
 // «Como el profesor»: la solución escrita renglón a renglón, en el mismo orden de su hoja
@@ -163,74 +164,156 @@ export function guion(data) {
   return R;
 }
 
+// Reproductor de la hoja: una PÁGINA que se escribe sola. Los renglones se ordenan de izquierda a
+// derecha y bajan de fila al llegar al borde (como en la hoja de ejercicios); cada paso empieza
+// una fila nueva con su título. La animación es una línea de tiempo GSAP pausada con un «clip»
+// por renglón (enfoque de HyperFrames: tiempo explícito y seek a cualquier punto): las fórmulas se
+// escriben de izquierda a derecha, las matrices aparecen celda a celda y la explicación entra al
+// lado. La cámara sigue lo que se está escribiendo.
 export default function Pizarra({ data }) {
   const R = useMemo(() => guion(data), [data]);
-  const [k, setK] = useState(0);            // renglones visibles
-  const [fase, setFase] = useState(0);      // 0 fórmula, 1 reemplazo, 2 resultado del renglón k
+  const raiz = useRef(null), hoja = useRef(null), tl = useRef(null);
   const [play, setPlay] = useState(true);
-  const [vel, setVel] = useState(1900);
-  const fin = useRef(null);
-  const total = R.length;
+  const [ritmo, setRitmo] = useState(1);
+  const [prog, setProg] = useState(0);
+  const [secAct, setSecAct] = useState(1);
+  const [completa, setCompleta] = useState(false);
+  const etiquetas = useRef({});
+  const base = useRef(1);
+  const secs = useMemo(() => [...new Set(R.map((r) => r.sec))], [R]);
+  // la hoja se dibuja una sola vez; la animación solo cambia estilos con GSAP
+  const filas = useMemo(() => R.map((r, i) => <Renglon key={i} i={i} r={r} data={data} />), [R, data]);
 
-  useEffect(() => {
-    if (!play) return;
-    if (k >= total - 1 && fase >= 2) { setPlay(false); return; }
-    const r = R[k];
-    const nf = r?.pasos ? r.pasos.length : 1;
-    const t = setTimeout(() => {
-      if (fase < nf - 1) setFase(fase + 1);
-      else { setK(Math.min(total - 1, k + 1)); setFase(0); }
-    }, r?.titulo && !r?.bloque ? vel * 0.5 : r?.bloque ? vel * 1.4 : vel);
-    return () => clearTimeout(t);
-  }, [play, k, fase, vel, total, R]);
+  // ---- línea de tiempo ----
+  useLayoutEffect(() => {
+    const el = hoja.current;
+    if (!el) return undefined;
+    const reducir = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    // la barra de tiempo se refresca ~10 veces por segundo (no en cada cuadro: re-renderizar
+    // React 60 veces por segundo con cientos de matrices bajaba la animación a 7 fps)
+    let ultimoProg = 0;
+    const t = gsap.timeline({ paused: true, onUpdate: () => { const a = performance.now(); if (a - ultimoProg > 100 || t.progress() >= 1) { ultimoProg = a; setProg(t.progress()); } } });
+    let ultimaCam = -1;
+    const camara = (nodo) => {
+      const ahora = performance.now();
+      if (ahora - ultimaCam < 250) return;              // sin sacudidas al hacer seek rápido
+      ultimaCam = ahora;
+      nodo.scrollIntoView({ behavior: reducir ? "auto" : "smooth", block: "nearest", inline: "nearest" });
+    };
+    etiquetas.current = {};
+    const nodos = [...el.querySelectorAll("[data-renglon]")];
+    // Solo opacidad y recorte (clip-path): animar y/x/scale obliga a GSAP a leer el estilo
+    // calculado de cada elemento entre escrituras y, con 400 renglones y 3000 celdas, armar la
+    // línea de tiempo tardaba 13 s (1.5 s así). Posiciones con un cursor propio.
+    let c = 0;
+    nodos.forEach((n) => {
+      const i = +n.dataset.renglon, r = R[i];
+      const pos = c;
+      if (r.titulo && !r.bloque && !r.pasos && etiquetas.current[r.sec] == null) etiquetas.current[r.sec] = pos;
+      t.call(() => { setSecAct(r.sec); camara(n); }, null, pos);
+      t.fromTo(n, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.35, ease: "power2.out" }, pos);
+      c = pos + 0.35;
+      n.querySelectorAll("[data-escribe]").forEach((ln) => {
+        const d = Math.min(1.2, 0.2 + (ln.textContent || "").length * 0.012);
+        t.fromTo(ln, { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: d, ease: "none" }, c);
+        c += d;
+      });
+      const celdas = n.querySelectorAll("td, [data-celda]");
+      if (celdas.length > 300) {
+        // matriz grande: se revela entera de izquierda a derecha (celda a celda sería muy pesado)
+        t.fromTo(n.firstElementChild, { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 1.2, ease: "power1.inOut" }, c);
+        c += 1.2;
+      } else if (celdas.length) {
+        const total = Math.min(1.2, 0.3 + celdas.length * 0.008);
+        t.fromTo(celdas, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.18, stagger: { amount: total }, ease: "power1.out" }, c - 0.1);
+        c += total + 0.08;
+      }
+      const nota = n.querySelector("[data-nota]");
+      if (nota) { t.fromTo(nota, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4 }, c - 0.15); c += 0.25; }
+      c += r.titulo && !r.bloque && !r.pasos ? 0.15 : 0.3;      // respiro entre renglones
+    });
+    tl.current = t;
+    // ritmo adaptado al tamaño: una hoja larga se acelera sola hasta durar ~2.5 min (máx. ×4)
+    base.current = Math.min(4, Math.max(1, t.duration() / 150));
+    t.timeScale(ritmo * base.current);
+    if (reducir) { t.progress(1); setPlay(false); } else if (play) t.play();
+    return () => t.kill();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [R]);
 
-  useEffect(() => { fin.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [k, fase]);
+  useEffect(() => { tl.current?.timeScale(ritmo * base.current); }, [ritmo]);
+  useEffect(() => { const t = tl.current; if (!t) return; if (play) { if (t.progress() >= 1) t.restart(); else t.play(); } else t.pause(); }, [play]);
+  useEffect(() => { if (prog >= 1) setPlay(false); }, [prog]);
+
+  // ---- teclado y pantalla completa ----
+  const irA = (sec) => { const p = etiquetas.current[sec]; if (p == null) return; setPlay(false); tl.current?.seek(p + 0.01); };
   useEffect(() => {
     const h = (e) => {
       if (/INPUT|SELECT|TEXTAREA/.test(document.activeElement?.tagName)) return;
       if (e.key === " ") { e.preventDefault(); setPlay((p) => !p); }
-      else if (e.key === "ArrowRight") { setPlay(false); setK((x) => Math.min(total - 1, x + 1)); setFase(9); }
-      else if (e.key === "ArrowLeft") { setPlay(false); setK((x) => Math.max(0, x - 1)); setFase(9); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); irA(Math.min(secs[secs.length - 1], secAct + 1)); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); irA(Math.max(1, secAct - 1)); }
+      else if (e.key === "f" || e.key === "F") alternarCompleta();
+      else if (e.key === "Escape" && completa && !document.fullscreenElement) setCompleta(false);
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [total]);
+  });
+  useEffect(() => {
+    const h = () => setCompleta(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", h);
+    return () => document.removeEventListener("fullscreenchange", h);
+  }, []);
+  const alternarCompleta = () => {
+    if (document.fullscreenElement) { document.exitFullscreen?.(); return; }
+    if (completa) { setCompleta(false); return; }
+    const p = raiz.current?.requestFullscreen?.();
+    if (p?.catch) p.catch(() => setCompleta(true)); else if (!p) setCompleta(true);   // sin API (iPhone): ocupa la ventana
+  };
 
-  const secActual = R[k]?.sec;
-  const saltar = (sec) => { setPlay(false); const i = R.findIndex((r) => r.sec === sec); if (i >= 0) { setK(i); setFase(9); } };
-  const secs = [...new Set(R.map((r) => r.sec))];
-
+  const total = tl.current?.duration() || 1;
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={raiz} className={`flex min-h-0 flex-1 flex-col bg-slate-50 dark:bg-ink ${completa ? "fixed inset-0 z-[60]" : ""}`}>
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-6 dark:border-ink-line dark:bg-ink-2">
-        <button onClick={() => { if (k >= total - 1) { setK(0); setFase(0); } setPlay((p) => !p); }} className="min-w-28 rounded-md bg-teal px-4 py-1.5 text-sm font-semibold text-white hover:bg-teal-dark" title="Reproducir / pausar (espacio)">{play ? "⏸ Pausa" : "▶ Seguir"}</button>
-        <button onClick={() => { setPlay(false); setK(total - 1); setFase(9); }} className={btn}>Ver todo</button>
-        <button onClick={() => { setK(0); setFase(0); setPlay(true); }} className={btn}>Desde el inicio</button>
+        <button onClick={() => setPlay((p) => !p)} className="min-h-9 min-w-28 rounded-md bg-teal px-4 text-sm font-semibold text-white hover:bg-teal-dark" title="Reproducir / pausar (espacio)">{play ? "⏸ Pausa" : prog >= 1 ? "↺ Repetir" : "▶ Seguir"}</button>
+        <button onClick={() => { setPlay(false); tl.current?.progress(1); }} className={btn}>Ver todo</button>
         <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">Ritmo
-          <select value={vel} onChange={(e) => setVel(+e.target.value)} className="inp !py-0.5 text-xs">{VEL.map(([l, v]) => <option key={v} value={v}>{l}</option>)}</select>
+          <select value={ritmo} onChange={(e) => setRitmo(+e.target.value)} className="inp !py-0.5 text-xs">
+            {[["Lento", 0.6], ["Normal", 1], ["Rápido", 1.8], ["Muy rápido", 3.5], ["×8", 8]].map(([l, v]) => <option key={v} value={v}>{l}</option>)}
+          </select>
         </label>
+        <button onClick={alternarCompleta} className={btn} title="Pantalla completa (F)">{completa ? "⤡ Salir" : "⛶ Pantalla completa"}</button>
         <div className="ml-auto flex flex-wrap gap-1">
-          {secs.map((s) => <button key={s} onClick={() => saltar(s)} className={`rounded-full border px-2 py-0.5 text-xs tabular-nums ${s === secActual ? "border-teal bg-teal font-semibold text-white" : s < secActual ? "border-teal/40 bg-teal/10" : "border-slate-200 text-slate-500 dark:border-ink-line"}`}>{s}</button>)}
+          {secs.map((s) => <button key={s} onClick={() => irA(s)} className={`min-h-7 min-w-7 rounded-full border px-2 text-xs tabular-nums ${s === secAct ? "border-teal bg-teal font-semibold text-white" : s < secAct ? "border-teal/40 bg-teal/10" : "border-slate-200 text-slate-500 dark:border-ink-line"}`}>{s}</button>)}
         </div>
       </div>
-      <div className="h-1 bg-slate-200 dark:bg-ink-3"><div className="h-1 bg-teal transition-all duration-500" style={{ width: `${((k + 1) / total) * 100}%` }} /></div>
-      <div className="min-h-0 flex-1 overflow-y-auto bg-[linear-gradient(#e2e8f0_1px,transparent_1px),linear-gradient(90deg,#e2e8f0_1px,transparent_1px)] bg-[size:22px_22px] p-3 sm:p-6 dark:bg-[linear-gradient(#1e293b_1px,transparent_1px),linear-gradient(90deg,#1e293b_1px,transparent_1px)]">
-        <div className="mx-auto max-w-5xl space-y-3">
-          {R.slice(0, k + 1).map((r, i) => <Renglon key={i} r={r} data={data} fase={i < k ? 9 : fase} />)}
-          <div ref={fin} />
+      {/* barra de tiempo: se puede arrastrar hacia atrás y hacia adelante */}
+      <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-3 py-1 sm:px-6 dark:border-ink-line dark:bg-ink-2">
+        <input type="range" min={0} max={1000} value={Math.round(prog * 1000)} aria-label="Avance de la resolución"
+          onChange={(e) => { setPlay(false); tl.current?.progress(+e.target.value / 1000); }} className="h-2 flex-1 accent-teal-600" />
+        <span className="w-24 text-right text-xs tabular-nums text-slate-500">{Math.round(prog * 100)} % · {Math.max(0, Math.round((1 - prog) * total / (ritmo * base.current)))} s</span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto bg-[linear-gradient(#e2e8f0_1px,transparent_1px),linear-gradient(90deg,#e2e8f0_1px,transparent_1px)] bg-[size:22px_22px] p-3 sm:p-6 dark:bg-[linear-gradient(#1e293b_1px,transparent_1px),linear-gradient(90deg,#1e293b_1px,transparent_1px)]">
+        <div ref={hoja} className="hoja-gsap flex flex-wrap content-start items-start gap-3">
+          {filas}
         </div>
       </div>
     </div>
   );
 }
 
-function Renglon({ r, data, fase }) {
-  if (r.titulo && !r.bloque && !r.pasos) return <h3 className="paso-in pt-3 text-lg font-semibold text-rose-700 dark:text-rose-400"><span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-rose-700 text-sm dark:border-rose-400">{r.sec}</span>{r.titulo}</h3>;
+function Renglon({ r, data, i }) {
+  if (r.titulo && !r.bloque && !r.pasos) return (
+    <h3 data-renglon={i} style={{ visibility: "hidden" }} className="basis-full pt-3 text-lg font-semibold text-rose-700 dark:text-rose-400">
+      <span className="mr-2 inline-flex h-7 w-7 items-center justify-center rounded-full border-2 border-rose-700 text-sm dark:border-rose-400">{r.sec}</span>
+      <span data-escribe className="inline-block">{r.titulo}</span>
+    </h3>
+  );
   const cuerpo = () => {
     if (r.pasos) return (
       <div className="space-y-1 font-mono text-[13px]">
-        {r.pasos.slice(0, Math.min(r.pasos.length, fase + 1)).map((t, j) => (
-          <div key={j} className={`paso-in whitespace-pre-wrap ${j === r.pasos.length - 1 && r.pasos.length > 1 ? "font-semibold text-teal-dark dark:text-teal-soft" : "text-slate-800 dark:text-slate-100"}`}>{t}</div>
+        {r.pasos.map((t, j) => (
+          <div key={j} data-escribe className={`whitespace-pre-wrap ${j === r.pasos.length - 1 && r.pasos.length > 1 ? "font-semibold text-teal-dark dark:text-teal-soft" : "text-slate-800 dark:text-slate-100"}`}>{t}</div>
         ))}
       </div>
     );
@@ -244,10 +327,11 @@ function Renglon({ r, data, fase }) {
     if (r.bloque === "DFN") return <DiagramaPaso data={data} tipo="N" />;
     return null;
   };
+  const ancho = r.bloque === "DMF" || r.bloque === "DFC" || r.bloque === "DFN" || r.bloque === "coords" ? "basis-full" : "max-w-full";
   return (
-    <div className="paso-in grid gap-3 rounded-lg border border-slate-200 bg-white/90 p-3 md:grid-cols-[1fr_260px] dark:border-ink-line dark:bg-ink-2/90">
+    <div data-renglon={i} style={{ visibility: "hidden" }} className={`${ancho} flex min-w-0 flex-col gap-3 rounded-lg border border-slate-200 bg-white/90 p-3 shadow-sm sm:flex-row dark:border-ink-line dark:bg-ink-2/90`}>
       <div className="min-w-0 overflow-x-auto">{cuerpo()}</div>
-      {r.nota && <p className="text-xs leading-relaxed text-slate-600 md:border-l md:border-slate-200 md:pl-3 dark:text-slate-300 dark:md:border-ink-line">{r.nota}</p>}
+      {r.nota && <p data-nota className="max-w-[240px] text-xs leading-relaxed text-slate-600 sm:border-l sm:border-slate-200 sm:pl-3 dark:text-slate-300 dark:sm:border-ink-line">{r.nota}</p>}
     </div>
   );
 }
