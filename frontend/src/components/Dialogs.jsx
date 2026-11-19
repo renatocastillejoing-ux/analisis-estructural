@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { pdfTorre, pdfTorreProgreso, torreLista, torreModelo } from "../api.js";
+import { pdfTorre, torreLista, torreModelo } from "../api.js";
 import { PLANTILLAS, generarPortico, modeloDesdeCasos } from "../model.js";
 import { Campo, Modal, NumIn } from "./ui.jsx";
 
@@ -60,15 +60,18 @@ export function DialogoTorre({ onCerrar, onElegir }) {
   const [conCasos, setConCasos] = useState(false);
   const [pdf, setPdf] = useState(null);       // null | { i, n, t } mientras se genera
   const [msgPdf, setMsgPdf] = useState("");
+  const [reintentar, setReintentar] = useState(false);
   const bajarPdf = async () => {
-    setMsgPdf(""); setPdf({ i: 0, n: 0, t: 0 });
+    setMsgPdf(""); setReintentar(false); setPdf({ i: 0, n: 0, t: 0 });
     const t0 = Date.now();
-    const h = setInterval(async () => {
-      try { const p = await pdfTorreProgreso(); setPdf({ i: p.i || 0, n: p.n || 0, t: Math.round((Date.now() - t0) / 1000) }); } catch { /* sigue */ }
-    }, 1500);
-    try { await pdfTorre(); setMsgPdf(`PDF descargado (${Math.round((Date.now() - t0) / 1000)} s).`); }
-    catch (e) { setMsgPdf("No se pudo generar el PDF: " + (e.message || e)); }
-    clearInterval(h); setPdf(null);
+    try {
+      await pdfTorre({ onProgreso: (p) => setPdf({ i: p.i || 0, n: p.n || 0, t: Math.round(p.segundos ?? (Date.now() - t0) / 1000) }) });
+      setMsgPdf(`PDF descargado (${Math.round((Date.now() - t0) / 1000)} s).`);
+    } catch (e) {
+      setMsgPdf((e.reintentar ? "" : "No se pudo generar el PDF: ") + (e.message || e));
+      setReintentar(!!e.reintentar);
+    }
+    setPdf(null);
   };
   useEffect(() => {
     torreLista().then((r) => setItems(r.items || [])).catch((e) => setEstado("No se pudo leer la lista: " + e));
@@ -84,8 +87,8 @@ export function DialogoTorre({ onCerrar, onElegir }) {
   };
   return (
     <Modal titulo="Torre de Arequipa" sub="10 pisos × 3.00 m · pórticos 2D por eje · combinación 1.4CM + 1.7CV." onCerrar={onCerrar}
-      pie={<><button className={btnS} onClick={bajarPdf} disabled={!!pdf} title="Resuelve los 34 pórticos (1.4CM + 1.7CV) y descarga un PDF con DFN, DFC y DMF de cada uno y la tabla de máximos. Tarda alrededor de un minuto.">{pdf ? `Generando PDF… ${pdf.n ? `${pdf.i}/${pdf.n} pórticos` : "iniciando"} · ${pdf.t} s` : "PDF de todos los pórticos"}</button><button className={btnS} onClick={onCerrar}>Cancelar</button><button className={btnP} disabled={!items?.length} onClick={cargar}>Cargar pórtico</button></>}>
-      {(pdf || msgPdf) && <p role="status" className="mb-2 text-sm">{pdf ? "Generando el PDF de los 34 pórticos: puede tardar uno o dos minutos; no cierres este diálogo." : msgPdf}</p>}
+      pie={<><button className={btnS} onClick={bajarPdf} disabled={!!pdf} title="Resuelve los 34 pórticos (1.4CM + 1.7CV) y descarga un PDF con DFN, DFC y DMF de cada uno y la tabla de máximos. Se genera en segundo plano (menos de medio minuto).">{pdf ? `Generando PDF… ${pdf.n ? `${pdf.i}/${pdf.n} pórticos` : "iniciando"} · ${pdf.t} s` : reintentar ? "Reintentar PDF" : "PDF de todos los pórticos"}</button><button className={btnS} onClick={onCerrar}>Cancelar</button><button className={btnP} disabled={!items?.length} onClick={cargar}>Cargar pórtico</button></>}>
+      {(pdf || msgPdf) && <p role="status" className="mb-2 text-sm">{pdf ? "Generando el PDF de los 34 pórticos: puede tardar unos segundos; no cierres este diálogo." : msgPdf}</p>}
       {!items ? <p className="text-sm text-slate-500">{estado || "Leyendo pórticos…"}</p> : (
         <>
           <Campo label={`Pórtico (${items.length} disponibles)`}>

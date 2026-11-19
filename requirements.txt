@@ -4,3 +4,4 @@ matplotlib==3.11.0
 gunicorn==23.0.0
 scipy==1.18.0
 openpyxl==3.1.5
+pypdf==5.9.0
