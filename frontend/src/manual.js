@@ -153,7 +153,6 @@ export const MANUAL = [
         "**Usar este modelo y resolver**: un aviso dice qué se reemplaza; el modelo entra como un cambio (**Ctrl+Z** lo deshace), se calcula y se abre el **paso a paso** del profesor.",
       ] },
       { t: "aviso", x: "La IA **propone**; tú respondes por el modelo. Revisa siempre luces, alturas, signos de las cargas y apoyos contra el enunciado. Si el servidor no tiene la IA configurada, la ventana lo dice y puedes armar el modelo a mano." },
-      { t: "nota", x: "**Cuota**: cada persona tiene **5 lecturas con IA** (la ventana dice cuántas te quedan) y el servidor tiene un tope diario para todos. Solo se descuenta cuando la IA devuelve un modelo válido: si falla o la foto no se entiende, no cuenta. Al agotarlas, sigue con el editor, el generador o una plantilla." },
       { t: "nota", x: "Atajo: **Archivo › Plantillas › EJ 1** abre el pórtico del curso ya armado; **FIJA PC3** trae una placa con brazo rígido para comparar con la hoja de práctica." },
       { t: "h", x: "Editar lo que ya dibujaste" },
       { t: "l", x: [

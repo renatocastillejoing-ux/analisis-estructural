@@ -167,7 +167,7 @@ export default function FotoEjercicio({ onCerrar, onAceptar }) {
   const cambiar = (fn) => setLeido((l) => { const m = structuredClone(l.modelo); fn(m); return { ...l, modelo: m }; });
   const m = leido?.modelo;
   const u = m ? `${m.unidad_fuerza}, ${m.unidad_longitud}` : "";
-  const sinCuota = cuota && (cuota.quedan <= 0 || cuota.diario_agotado);
+  const sinCuota = false;      // sin cuota: lecturas ilimitadas
   const bajas = (leido?.confianza || []).filter((c) => c.nivel === "baja");
 
   return (
@@ -176,8 +176,6 @@ export default function FotoEjercicio({ onCerrar, onAceptar }) {
       <div className="flex h-full w-full flex-col overflow-hidden bg-white md:h-[90vh] md:max-w-5xl md:rounded-xl md:shadow-2xl dark:bg-ink-2">
         <div className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-4 py-3 pt-[max(.75rem,env(safe-area-inset-top))] dark:border-ink-line">
           <h2 className="flex-1 text-base font-semibold">📷 Ejercicio desde foto</h2>
-          {cuota && <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${sinCuota ? "bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300" : "bg-slate-100 text-slate-600 dark:bg-ink-3 dark:text-slate-300"}`}>
-            {cuota.diario_agotado && cuota.quedan > 0 ? "Tope diario del servidor alcanzado" : `Te quedan ${cuota.quedan} de ${cuota.limite ?? 5} lecturas`}</span>}
           <button onClick={onCerrar} className="grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Cerrar">✕</button>
         </div>
 
@@ -204,7 +202,6 @@ export default function FotoEjercicio({ onCerrar, onAceptar }) {
               </div>
               {foto && <img src={foto} alt="Vista previa del ejercicio" className="max-h-[50dvh] w-full rounded-lg border border-slate-200 object-contain dark:border-ink-line" />}
               {foto && estado === "elegir" && <button className="self-start text-sm text-teal underline" onClick={() => setEstado("recortar")}>✂ Volver a recortar</button>}
-              {sinCuota && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{cuota.quedan <= 0 ? `Ya usaste tus ${cuota.limite ?? 5} lecturas con IA.` : "Hoy ya se usaron todas las lecturas con IA del servidor."} Puedes armar el modelo a mano, con el generador o con una plantilla.</p>}
               {error && <p role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{error}</p>}
               {estado === "leyendo" && <p className="text-center text-sm text-slate-500">Leyendo el ejercicio con IA… puede tardar unos segundos.</p>}
             </div>

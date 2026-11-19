@@ -26,47 +26,65 @@ export default function MenuMovil({ abierto, onCerrar, menus, comandos, vistas, 
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, [abierto, onCerrar]);
+  const [sub, setSub] = useState(null);           // menú abierto (pantalla 2) o null (inicio)
+  useEffect(() => { if (abierto) setSub(null); }, [abierto]);
   if (!abierto) return null;
+  const ICV = { modelo: "✎", "3d": "⬚", resultados: "▤", paso: "≡", historial: "↺" };
+  const ICM = { archivo: "📁", editar: "✂", vista: "👁", definir: "⚙", dibujar: "✏", asignar: "⇣", analizar: "▶", ayuda: "?" };
+  const m = sub && menus.find((x) => x.id === sub);
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/40" onPointerDown={(e) => { if (e.target === e.currentTarget) onCerrar(); }}>
       <aside className="absolute inset-y-0 right-0 flex w-[88vw] max-w-sm flex-col bg-white pr-[env(safe-area-inset-right)] pt-[env(safe-area-inset-top)] shadow-2xl dark:bg-ink-2" aria-label="Menú"
         style={{ transform: dx ? `translateX(${dx}px)` : undefined, transition: g.current ? "none" : "transform .2s ease" }}
         onTouchStart={ini} onTouchMove={mov} onTouchEnd={fin} onTouchCancel={fin}>
-        <div className="flex h-12 shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-ink-line">
-          <span className="font-semibold">Menú</span>
-          <button onClick={onCerrar} className="ml-auto grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Cerrar menú">✕</button>
+        <div className="flex h-12 shrink-0 items-center gap-1 border-b border-slate-200 px-2 dark:border-ink-line">
+          {m ? <button onClick={() => setSub(null)} className="grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Volver">←</button> : null}
+          <span className="px-2 font-semibold">{m ? m.label : "Menú"}</span>
+          <button onClick={() => setTema((t) => (t === "dark" ? "light" : "dark"))} className="ml-auto grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-ink-3" aria-label={tema === "dark" ? "Tema claro" : "Tema oscuro"}>{tema === "dark" ? "☀" : "☾"}</button>
+          <button onClick={onCerrar} className="grid h-11 w-11 place-items-center rounded-md hover:bg-slate-100 dark:hover:bg-ink-3" aria-label="Cerrar menú">✕</button>
         </div>
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm">
-          <BuscadorComandos comandos={comandos.map((c) => ({ ...c, accion: () => { onCerrar(); c.accion(); } }))} ancho="w-full" />
-          {onFoto && (
-            <button onClick={() => { onCerrar(); onFoto(); }} className="flex min-h-[3.25rem] w-full items-center justify-center gap-2 rounded-xl bg-teal px-4 text-base font-semibold text-white hover:bg-teal-dark">📷 Ejercicio desde foto</button>
-          )}
-          <div>
-            <div className="mb-1 text-xs font-semibold uppercase text-slate-500">Vistas</div>
-            <div className="grid grid-cols-2 gap-1">
-              {vistas.map(([id, l]) => (
-                <button key={id} onClick={() => { setVista(id); onCerrar(); }} className={`rounded-md border px-3 py-2 text-left ${vista === id ? "border-teal bg-teal text-white" : "border-slate-200 dark:border-ink-line"}`}>{l}</button>
+        {m ? (
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-1 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm">
+            {m.items.map((it, k) => it === "sep"
+              ? <div key={`s${k}`} className="my-1 border-t border-slate-200 dark:border-ink-line" />
+              : (
+                <button key={it.id} disabled={it.disabled} onClick={() => { onCerrar(); it.accion(); }}
+                  className="flex min-h-12 w-full items-center gap-3 px-4 text-left hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-ink-3">
+                  <span className="w-5 text-center text-teal-dark dark:text-teal-soft">{it.check ? "✓" : it.icono || ""}</span>
+                  <span className="flex-1">{it.label}</span>
+                </button>
               ))}
-            </div>
           </div>
-          {menus.map((m) => (
-            <details key={m.id} className="rounded-lg border border-slate-200 dark:border-ink-line">
-              <summary className="flex cursor-pointer list-none items-center px-3 py-2 font-semibold">{m.label}</summary>
-              <div className="border-t border-slate-200 py-1 dark:border-ink-line">
-                {m.items.filter((it) => it !== "sep").map((it) => (
-                  <button key={it.id} disabled={it.disabled} onClick={() => { onCerrar(); it.accion(); }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-left disabled:opacity-40">
-                    <span className="w-4 text-center text-teal-dark dark:text-teal-soft">{it.check ? "✓" : it.icono || ""}</span>
-                    <span className="flex-1">{it.label}</span>
+        ) : (
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 pb-[max(1rem,env(safe-area-inset-bottom))] text-sm">
+            <BuscadorComandos comandos={comandos.map((c) => ({ ...c, accion: () => { onCerrar(); c.accion(); } }))} ancho="w-full" />
+            {onFoto && (
+              <button onClick={() => { onCerrar(); onFoto(); }} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-teal px-4 font-semibold text-white hover:bg-teal-dark">📷 Ejercicio desde foto</button>
+            )}
+            <div>
+              <div className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Vistas</div>
+              <div className="grid grid-cols-5 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-ink-3">
+                {vistas.map(([id, l]) => (
+                  <button key={id} onClick={() => { setVista(id); onCerrar(); }} aria-pressed={vista === id}
+                    className={`flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-lg px-0.5 text-[11px] leading-tight ${vista === id ? "bg-teal font-semibold text-white shadow" : "text-slate-600 dark:text-slate-300"}`}>
+                    <span className="text-base leading-none">{ICV[id] || "•"}</span><span className="text-center">{l}</span>
                   </button>
                 ))}
               </div>
-            </details>
-          ))}
-          <button onClick={() => setTema((t) => (t === "dark" ? "light" : "dark"))} className="w-full rounded-md border border-slate-200 px-3 py-2 text-left dark:border-ink-line">
-            {tema === "dark" ? "☀ Tema claro" : "☾ Tema oscuro"}
-          </button>
-        </div>
+            </div>
+            <div>
+              <div className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Menús</div>
+              <div className="grid grid-cols-2 gap-2">
+                {menus.map((x) => (
+                  <button key={x.id} onClick={() => setSub(x.id)}
+                    className="flex min-h-14 items-center gap-2 rounded-xl border border-slate-200 px-3 text-left font-semibold hover:bg-slate-50 dark:border-ink-line dark:hover:bg-ink-3">
+                    <span className="text-lg leading-none">{ICM[x.id] || "•"}</span><span className="flex-1">{x.label}</span><span className="text-slate-400">›</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </aside>
     </div>
   );
