@@ -47,6 +47,33 @@ def error_json(mensaje, codigo=400):
     return jsonify(cuerpo), codigo
 
 
+@app.errorhandler(400)
+def _e400(e):
+    return jsonify({"ok": False, "error": "La petición no es un JSON válido."}), 400
+
+
+@app.errorhandler(404)
+def _e404(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"ok": False, "error": "Ruta no encontrada."}), 404
+    return e
+
+
+@app.errorhandler(405)
+def _e405(e):
+    return jsonify({"ok": False, "error": "Método HTTP no permitido en esta ruta."}), 405
+
+
+@app.errorhandler(500)
+def _e500(e):
+    return jsonify({"ok": False, "error": "Error interno del servidor."}), 500
+
+
+@app.errorhandler(RecursionError)
+def _erec(e):
+    return jsonify({"ok": False, "error": "El JSON está demasiado anidado."}), 400
+
+
 @app.errorhandler(413)
 def demasiado_grande(_e):
     return jsonify({"ok": False,
@@ -95,10 +122,8 @@ def memoria_de_calculo(est):
     try:
         return memoria_profesor(resolver_profesor(est), est.nombre)
     except Exception as e:
-        return ("AVISO: este modelo no se puede presentar con el método sistematizado "
-                f"([A], barras 4×4): {e}" + "\n"
-                "Se muestra la memoria del método directo de rigidez." + "\n\n"
-                + generar_reporte(est))
+        # solo el método del profesor: si no se puede, se dice por qué (sin cambiar de método)
+        return f"No se puede resolver este modelo con el método sistematizado ([A], barras 4×4): {e}"
 
 
 # ----------------------------------------------------------------------------
@@ -292,8 +317,7 @@ def api_exportar_excel():
     except NotImplementedError as e:
         return jsonify({"ok": False, "error": f"Caso aun no soportado por el metodo [A]: {e}"}), 400
     except Exception as e:
-        return jsonify({"ok": False, "error": f"No se pudo exportar a Excel: {e}",
-                        "detalle": traceback.format_exc()}), 400
+        return error_json(f"No se pudo exportar a Excel: {e}")
     nombre = "".join(c if c.isalnum() or c in " _-" else "_" for c in est.nombre).strip() or "portico"
     return send_file(io.BytesIO(contenido), as_attachment=True, download_name=f"{nombre}_profesor.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -327,8 +351,7 @@ def api_torre_pdf():
             pr.update(estado="listo")
         except Exception as e:
             pr.update(estado="error")
-            return jsonify({"ok": False, "error": f"No se pudo generar el PDF: {e}",
-                            "detalle": traceback.format_exc()}), 500
+            return error_json(f"No se pudo generar el PDF: {e}", 500)
         finally:
             _PDF_LOCK.release()
     r = send_file(io.BytesIO(_PDF["bytes"]), mimetype="application/pdf", as_attachment=True,
@@ -459,7 +482,9 @@ def api_torre():
     from core.torre_arequipa import portico
     from core.torre_resultados import carga_combinada
     tipo = request.args.get("tipo", "letra")
-    idx = int(request.args.get("idx", 0))
+    idx = request.args.get("idx", 0, type=int)
+    if idx is None or idx < 0:
+        return error_json("«idx» debe ser un número entero mayor o igual a 0.")
     try:
         if request.args.get("casos") in ("1", "true"):
             return jsonify(portico(tipo, idx))       # con casos CM y CV separados
@@ -539,6 +564,6 @@ if __name__ == "__main__":
     print(f"  Abrir en el navegador:  http://127.0.0.1:{port}")
     print("=" * 60)
     # Depuración solo en local (FLASK_DEBUG=0 la apaga). En Render la app corre con gunicorn y no pasa por aquí.
-    app.run(debug=os.environ.get("FLASK_DEBUG", "1") == "1", port=port)
+    app.run(debug=os.environ.get("FLASK_DEBUG", "0") == "1", port=port)
 else:
     init_db()

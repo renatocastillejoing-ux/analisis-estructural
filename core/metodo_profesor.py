@@ -44,6 +44,16 @@ def k_barra(EI, L, alfa=0.0):
         [6 / L, 2 - alfa, -6 / L, 4 + alfa]])
 
 
+def k_rotula(EI, L, rel_i, rel_j):
+    """[k] 4×4 del profesor para barra con rótula (Δi, θi, Δj, θj)."""
+    if rel_i and rel_j:
+        return np.zeros((4, 4))
+    c = 3 * EI / L**3
+    if rel_j:
+        return c * np.array([[1, L, -1, 0], [L, L**2, -L, 0], [-1, -L, 1, 0], [0, 0, 0, 0]], float)
+    return c * np.array([[1, 0, -1, L], [0, 0, 0, 0], [-1, 0, 1, -L], [L, 0, -L, L**2]], float)
+
+
 def _tipo(e):
     c, s = abs(e.cos), abs(e.sin)
     if s < 1e-6:
@@ -74,12 +84,14 @@ def _flexibles(e):
     return [sg for sg in (e.segmentos or []) if not sg.get("rigido")]
 
 
+def _asent(nd):
+    """Asentamiento impuesto en los GDL restringidos del nudo (dx, dy, giro)."""
+    return np.array([nd.asentamiento[k] if nd.restriccion[k] else 0.0 for k in range(3)], float)
+
+
 def resolver_profesor(est):
     """Resuelve la estructura con matrices 4×4 por barra. Devuelve un dict con todos
     los datos de cada paso (para el reproductor y la memoria de cálculo)."""
-    for nd in est.nudos:
-        if any(nd.resorte) or any(nd.asentamiento):
-            raise NotImplementedError("resortes y asentamientos de apoyo (usa el cálculo normal)")
     est.ensamblar()                       # fija Timoshenko, axial y tramos en cada barra
     nudos = sorted(est.nudos, key=lambda n: n.id)
     elementos = _orden_barras(est.elementos)
@@ -154,22 +166,37 @@ def resolver_profesor(est):
                 G = E / (2 * (1 + nu)); Ac = A_ / getattr(sec, "k_corte", 1.2)
                 alfa = 12 * EI / (Lf**2 * G * Ac)
             Kf = k_barra(EI, Lf, alfa)
+        rotula = None
+        if (not exacta and len(_flexibles(e)) <= 1 and not e.timoshenko and not (a or b)):
+            # [k] modificada del profesor para barra con rótula (3EI/L³), sin condensar
+            sg = (_flexibles(e) or [{}])[0]
+            mat = sg.get("mat") or e.mat; sec = sg.get("sec") or e.sec
+            E = mat.E; I = sec.I; A_ = sec.A; EI = E * I; alfa = 0.0
+            Kf = k_rotula(EI, Lf, bool(e.release_i), bool(e.release_j))
+            rotula = "ambos" if (e.release_i and e.release_j) else "i" if e.release_i else "j"
+            if _invertida(e, tipo) and rotula != "ambos":
+                rotula = "j" if rotula == "i" else "i"
         A4 = T @ An
+        # asentamiento de apoyo: desplazamientos conocidos de los extremos {d0} = [Δi, θi, Δj, θj];
+        # entra como fuerza de fijación  {r} += [k]{d0}
+        si, sj = _asent(e.ni), _asent(e.nj)
+        d0 = T @ np.array([nrm @ si[:2], si[2], nrm @ sj[:2], sj[2]])
         # axial (EA = ∞): las fuerzas de empotramiento axiales van directo a las traslaciones
         Rax = (ex @ tras(e.ni)) * ff6[0] + (ex @ tras(e.nj)) * ff6[3]
         if _invertida(e, tipo):
-            A4 = S_INV @ A4; Kf = S_INV @ Kf @ S_INV.T; rf = S_INV @ rf
+            A4 = S_INV @ A4; Kf = S_INV @ Kf @ S_INV.T; rf = S_INV @ rf; d0 = S_INV @ d0
             ni, nj = e.nj, e.ni
         else:
             ni, nj = e.ni, e.nj
         AtKA = A4.T @ Kf @ A4
         K += AtKA
+        rf = rf + Kf @ d0
         R += A4.T @ rf + Rax
         dl = [f"d{numero + k + 1}" for k in range(4)]
         numero += 4
         sec = e.sec
         barras.append({
-            "e": e, "A": A4, "K": Kf, "r": rf, "AtKA": AtKA,
+            "e": e, "A": A4, "K": Kf, "r": rf, "d0": d0, "AtKA": AtKA,
             "elem": e.nombre, "tipo": tipo, "i": ni.nombre, "j": nj.nombre,
             "xi": float(ni.x), "yi": float(ni.y), "xj": float(nj.x), "yj": float(nj.y),
             "L": float(e.L), "Lf": float(Lf), "brazo_i": a, "brazo_j": b,
@@ -177,9 +204,21 @@ def resolver_profesor(est):
             "E": float(E), "I": float(I), "Asec": float(A_), "EI": float(EI),
             "b": getattr(sec, "b", None), "h": getattr(sec, "h", None),
             "alfa": alfa, "G": G, "Ac": Ac, "nu": nu,
-            "exacta": exacta, "def_labels": [f"{e.nombre}·{d} {LOC[k]}" for k, d in enumerate(dl)],
+            "exacta": exacta, "rotula": rotula, "def_labels": [f"{e.nombre}·{d} {LOC[k]}" for k, d in enumerate(dl)],
             "dnum": dl,
         })
+
+    # apoyos elásticos (resortes): kx, ky sobre las traslaciones del nudo y kg sobre su giro
+    resortes = []
+    for n in nudos:
+        kx, ky, kg = (float(v) for v in n.resorte)
+        if kx or ky:
+            Tn = tras(n)
+            K += Tn.T @ np.diag([kx, ky]) @ Tn
+        if kg and n.id in rot:
+            K[rot[n.id], rot[n.id]] += kg
+        if kx or ky or kg:
+            resortes.append({"nudo": n.nombre, "kx": kx, "ky": ky, "kg": kg})
 
     Qn = np.zeros(nD)
     for n in nudos:
@@ -196,6 +235,8 @@ def resolver_profesor(est):
         b["q"] = b["K"] @ b["d"]
         b["qT"] = b["q"] + b["r"]
 
+    reac, residuo = _equilibrio_nudos(nudos, barras, tras, D)
+
     modos = []
     for k in range(nD):
         u = {}
@@ -207,7 +248,66 @@ def resolver_profesor(est):
             u[nombre[nid]][2] = 1.0           # giro antihorario positivo
         modos.append(u)
     return {"labels": labels, "nT": nT, "barras": barras, "K": K, "R": R,
-            "Qn": Qn, "Q": Q, "D": D, "modos": modos, "nudos": nudos}
+            "Qn": Qn, "Q": Q, "D": D, "modos": modos, "nudos": nudos, "resortes": resortes,
+            "reacciones": reac, "residuo_equilibrio": residuo}
+
+
+def _equilibrio_nudos(nudos, barras, tras, D):
+    """Fuerza normal N de cada barra y reacciones de apoyo por EQUILIBRIO DE NUDOS
+    (como a mano): con EA = ∞ el método no da N; se despeja de ΣFx = ΣFy = 0 en cada
+    nudo, con los cortantes y momentos {q} ya conocidos. ΣM da la reacción de momento."""
+    idx = {n.id: k for k, n in enumerate(nudos)}
+    incog = []                                    # ("N", barra) | ("R", nudo, gdl)
+    for k, b in enumerate(barras):
+        incog.append(("N", k))
+    for n in nudos:
+        for g in range(3):
+            if n.restriccion[g]:
+                incog.append(("R", n.id, g))
+    col = {u: c for c, u in enumerate(incog)}
+    M = np.zeros((3 * len(nudos), len(incog)))
+    rhs = np.zeros(3 * len(nudos))
+    for n in nudos:                               # cargas y resortes: fuerzas externas conocidas
+        f = np.asarray(n.carga, float).copy()
+        u = tras(n) @ D if len(D) else np.zeros(2)
+        f[:2] -= np.asarray(n.resorte[:2], float) * u
+        rhs[3 * idx[n.id]: 3 * idx[n.id] + 3] -= f
+    for k, b in enumerate(barras):
+        e = b["e"]
+        xi, yi, xj, yj = b["xi"], b["yi"], b["xj"], b["yj"]
+        L = np.hypot(xj - xi, yj - yi)
+        ex = np.array([xj - xi, yj - yi]) / L; nr = np.array([-ex[1], ex[0]])
+        ii = e.nj if _invertida(e, b["tipo"]) else e.ni
+        jj = e.ni if ii is e.nj else e.nj
+        Vi, Mi, Vj, Mj = b["qT"]
+        # con brazo rígido, {q} está en la cara: al nudo se lleva con [T]ᵀ (M + V·a)
+        Mi = Mi + Vi * b["brazo_ini"]; Mj = Mj - Vj * b["brazo_fin"]
+        exm = np.array([e.cos, e.sin])            # axial de empotramiento (sentido del modelo)
+        ff = e._condensar(e.k_local_base(), e.ff_local_base())[1]
+        for nd, V, Mo, s, fa in ((ii, Vi, Mi, -1.0, None), (jj, Vj, Mj, 1.0, None)):
+            r = 3 * idx[nd.id]
+            # fuerza que la barra recibe en ese extremo = la que el nudo le da: va al nudo con −
+            M[r:r + 2, col[("N", k)]] -= s * ex
+            rhs[r:r + 2] += V * nr
+            rhs[r + 2] += Mo
+        rhs[3 * idx[e.ni.id]: 3 * idx[e.ni.id] + 2] += ff[0] * exm
+        rhs[3 * idx[e.nj.id]: 3 * idx[e.nj.id] + 2] += ff[3] * exm
+    for n in nudos:
+        for g in range(3):
+            if n.restriccion[g]:
+                M[3 * idx[n.id] + g, col[("R", n.id, g)]] = 1.0
+    # Σ(fuerzas de barra sobre el nudo) + cargas + reacciones = 0
+    #   −(V·n + N·(±ex) + ff) + carga + R = 0  →  M·x = rhs
+    x = np.linalg.lstsq(M, rhs, rcond=None)[0]
+    residuo = float(np.max(np.abs(M @ x - rhs))) if len(rhs) else 0.0
+    for k, b in enumerate(barras):
+        b["N"] = float(x[col[("N", k)]])          # tracción +
+    reac = []
+    for n in nudos:
+        if any(n.restriccion):
+            reac.append({"nudo": n.nombre, **{c: (float(x[col[("R", n.id, g)]]) if n.restriccion[g] else None)
+                                             for g, c in enumerate(("Rx", "Ry", "M"))}})
+    return reac, residuo
 
 
 # ------------------------------------------------------------------------------
@@ -235,6 +335,10 @@ def formula_k(b):
         else:
             t.append(f"Ac = 5/6·A = {b['Ac']:.6g} m²")
         t.append(f"α = 12EI / (L²·G·Ac) = 12·{b['EI']:.6g} / ({b['Lf']:.4g}²·{b['G']:.6g}·{b['Ac']:.6g}) = {b['alfa']:.4f}")
+    elif b.get("rotula"):
+        lado = {"i": "en i", "j": "en j", "ambos": "en ambos extremos"}[b["rotula"]]
+        t.append(f"Rótula {lado}: [k] modificada = 3EI/L³ = 3·{b['EI']:.6g}/{b['Lf']:.4g}³"
+                 if b["rotula"] != "ambos" else "Rótula en ambos extremos: [k] = 0 (solo transmite cortante isostático)")
     elif b["exacta"]:
         t.append("α = 0 (se desprecia la deformación por corte)")
     else:
@@ -256,7 +360,7 @@ def a_api(res):
                       "Aidx": idx, "Asub": b["A"][:, idx].tolist(),
                       "AtKAsub": b["AtKA"][np.ix_(idx, idx)].tolist(),
                       "K": b["K"].tolist(), "r": b["r"].tolist(), "d": b["d"].tolist(),
-                      "q": b["q"].tolist(), "qT": b["qT"].tolist()})
+                      "q": b["q"].tolist(), "qT": b["qT"].tolist(), "N": b.get("N")})
     def_labels = [l for b in out for l in b["def_labels"]]
     # [A] completa solo en modelos pequeños (en los grandes se ve por barra)
     A_full = np.vstack([b["A"] for b in res["barras"]]).tolist() if res["barras"] and nD <= 40 else None
@@ -265,7 +369,11 @@ def a_api(res):
     return {"ok": True, "n_gdl": nD, "labels": labels, "def_labels": def_labels, "A": A_full,
             "K": K, "R": R, "Qn": Qn, "Q": Q, "D": D, "barras": out, "nudos": nudos,
             "modos": res["modos"], "general": True, "matrices4": True,
-            "pasos": _pasos(labels, def_labels, out, A_full, K, Qn, R, Q, D)}
+            "reacciones": res["reacciones"], "residuo_equilibrio": res["residuo_equilibrio"],
+            "pasos": _pasos(labels, def_labels, out, A_full, K, Qn, R, Q, D) + [
+                {"n": 13, "id": "reacciones", "titulo": "Fuerza normal y reacciones por equilibrio de nudos",
+                 "desc": "Con EA = ∞ el método no da N: se despeja de ΣFx = ΣFy = 0 en cada nudo con los cortantes {q} ya conocidos; ΣM da el momento de apoyo.",
+                 "barras": [{"elem": b["elem"], "N": b["N"]} for b in out], "reacciones": res["reacciones"]}]}
 
 
 def _pasos(labels, def_labels, barras, A, K, Qn, R, Q, D):

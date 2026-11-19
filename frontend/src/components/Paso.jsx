@@ -27,7 +27,9 @@ export default function Paso({ modelo, onVolver }) {
       if (data.diagramas?.elementos?.length) {
         pasos.push({ id: "DMF", n: 13, titulo: "Diagrama de Momento Flector (DMF)", desc: "Con las fuerzas de extremo {qᵢ} y las cargas de tramo se traza el momento a lo largo de cada barra, del lado traccionado." });
         pasos.push({ id: "DFC", n: 14, titulo: "Diagrama de Fuerza Cortante (DFC)", desc: "La cortante V a lo largo de cada barra: su pendiente es la carga distribuida y sus saltos, las cargas puntuales." });
+        pasos.push({ id: "DFN", n: 15, titulo: "Diagrama de Fuerza Normal (DFN)", desc: "La fuerza normal de cada barra, despejada del equilibrio de nudos (tracción +)." });
       }
+      pasos.forEach((p, k) => { p.n = k + 1; });   // numeración continua, igual que la hoja
       setData({ ...data, pasos }); setI(0);
     }).catch((e) => vivo && setError(`No hay conexión con el servidor de cálculo (${e}).`));
     return () => { vivo = false; };
@@ -138,7 +140,7 @@ function duracion(p, data) {
   if (p.id === "activar") return Math.min(p.labels?.length || 0, 12) * T_GDL;
   if (p.id === "ensamble") return Math.min(p.barras?.length || 0, 12) * T_ENS;
   if (["A", "Ki", "AtKA", "r", "d", "q", "qT"].includes(p.id)) return Math.min(data.barras.length, 12) * T_BARRA;
-  if (p.id === "DMF" || p.id === "DFC") return 1400;
+  if (p.id === "DMF" || p.id === "DFC" || p.id === "DFN") return 1400;
   return 0;
 }
 
@@ -171,6 +173,14 @@ function PasoCuerpo({ paso, data }) {
     case "qT": return <PasoBarras data={data} render={(b) => <Vector v={b.qT} labels={["V i", "M i", "V j", "M j"].map((t, k) => `${b.dnum[k]} · ${t}`)} resaltado />} pie="Con estas cortantes y momentos de extremo y las cargas de cada tramo se trazan el DMF y el DFC (pasos siguientes)." />;
     case "DMF": return <DiagramaPaso data={data} tipo="M" />;
     case "DFC": return <DiagramaPaso data={data} tipo="V" />;
+    case "DFN": return <DiagramaPaso data={data} tipo="N" />;
+    case "reacciones": return (
+      <div className="flex flex-wrap items-start gap-4">
+        <Vector v={paso.barras.map((b) => +b.N || 0)} labels={paso.barras.map((b) => `N ${b.elem}`)} titulo="N (tracción +)" />
+        <Vector v={paso.reacciones.flatMap((r) => ["Rx", "Ry", "M"].filter((c) => r[c] != null).map((c) => r[c]))}
+          labels={paso.reacciones.flatMap((r) => ["Rx", "Ry", "M"].filter((c) => r[c] != null).map((c) => `${c} ${r.nudo}`))} titulo="Reacciones" resaltado />
+      </div>
+    );
     default: return null;
   }
 }
@@ -522,7 +532,7 @@ export function DiagramaPaso({ data, tipo }) {
   return (
     <div className="space-y-2">
       <Diagrama elementos={els} nudos={data.diagramas?.nudos || data.nudos} tipo={tipo} animado />
-      <p className="text-xs text-slate-500 dark:text-slate-400">{tipo === "M" ? "DMF dibujado del lado traccionado. Positivos en verde azulado, negativos en rojo." : "DFC con la convención de signos de la barra (i → j). Positivos en verde azulado, negativos en rojo."}</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">{tipo === "M" ? "DMF dibujado del lado traccionado. Positivos en verde azulado, negativos en rojo." : tipo === "N" ? "DFN: tracción positiva (verde azulado), compresión negativa (rojo)." : "DFC con la convención de signos de la barra (i → j). Positivos en verde azulado, negativos en rojo."}</p>
     </div>
   );
 }

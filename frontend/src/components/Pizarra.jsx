@@ -130,12 +130,25 @@ export function guion(data) {
   add(14, { pasos: ["Comprobación: Σ cortantes de base = carga lateral", `Σ V = ${B.filter((b) => b.tipo !== "viga").filter((b) => Math.min(b.yi, b.yj) < 1e-9).map((b) => n6(b.qT[0])).join(" + ") || "—"}`,
     `Σ V = ${n6(B.filter((b) => b.tipo !== "viga" && Math.min(b.yi, b.yj) < 1e-9).reduce((s, b) => s + +b.qT[0], 0))}  (Q = ${n6(Fx)})`], nota: "Si estos números no coinciden, revisa el redondeo de {D} o la longitud flexible de las vigas con brazo rígido." });
 
-  // 15 · gráficos
-  if (data.diagramas?.elementos?.length) {
-    add(15, { titulo: "Gráficos" });
-    add(15, { bloque: "DMF", nota: "DMF: con los momentos de extremo y las cargas de tramo, del lado traccionado." });
-    add(15, { bloque: "DFC", nota: "DFC: cortante a lo largo de cada barra." });
+  // 15 · N y reacciones (equilibrio de nudos)
+  if (data.reacciones?.length) {
+    add(15, { titulo: "Fuerza normal y reacciones: equilibrio de nudos" });
+    add(15, { pasos: ["ΣFx = 0   ΣFy = 0   ΣM = 0  en cada nudo", "Con EA = ∞ el método no da N: se despeja del equilibrio con los cortantes {q} ya conocidos"], nota: "Es lo que se hace a mano después de {q}: cada nudo en equilibrio entre las fuerzas de las barras, las cargas y los apoyos." });
+    add(15, { bloque: "V", v: B.map((b) => +b.N || 0), labels: B.map((b) => `N ${b.elem}`), titulo: "Fuerza normal N (tracción +)", nota: "" });
+    data.reacciones.forEach((r) => add(15, { pasos: [`Apoyo ${r.nudo}`, ["Rx", "Ry", "M"].filter((c) => r[c] != null).map((c) => `${c} = ${n6(r[c])}`).join("    ")], nota: "" }));
+    if (data.residuo_equilibrio != null) add(15, { pasos: [`Residuo del equilibrio = ${Number(data.residuo_equilibrio).toExponential(1)}`], nota: "Prácticamente cero: las fuerzas de {q} cierran el equilibrio de todos los nudos." });
   }
+
+  // 16 · gráficos
+  if (data.diagramas?.elementos?.length) {
+    add(16, { titulo: "Gráficos" });
+    add(16, { bloque: "DMF", nota: "DMF: con los momentos de extremo y las cargas de tramo, del lado traccionado." });
+    add(16, { bloque: "DFC", nota: "DFC: cortante a lo largo de cada barra." });
+    add(16, { bloque: "DFN", nota: "DFN: fuerza normal de cada barra (del equilibrio de nudos)." });
+  }
+  // numeración continua (los pasos 5–7 solo existen si hay placas)
+  const orden = [...new Set(R.map((r) => r.sec))];
+  R.forEach((r) => { r.sec = orden.indexOf(r.sec) + 1; });
   return R;
 }
 
@@ -217,6 +230,7 @@ function Renglon({ r, data, fase }) {
     if (r.bloque === "V6") return <V6 v={r.v} labels={r.labels} titulo={r.titulo} />;
     if (r.bloque === "DMF") return <DiagramaPaso data={data} tipo="M" />;
     if (r.bloque === "DFC") return <DiagramaPaso data={data} tipo="V" />;
+    if (r.bloque === "DFN") return <DiagramaPaso data={data} tipo="N" />;
     return null;
   };
   return (

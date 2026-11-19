@@ -18,7 +18,7 @@ E = 2.0e6
 def _base2d():
     """Pórtico de 2 vanos con cargas variadas (formato del editor 2D)."""
     return {
-        "nombre": "P", "unidad_fuerza": "tonf", "unidad_longitud": "m", "despreciar_axial": False,
+        "nombre": "P", "unidad_fuerza": "tonf", "unidad_longitud": "m", "despreciar_axial": False, "_axial_real_solo_pruebas": True,
         "material": {"modo": "E", "E": E},
         "secciones": [{"nombre": "C", "modo": "rect", "b": 0.4, "h": 0.4}, {"nombre": "V", "modo": "rect", "b": 0.3, "h": 0.6},
                       {"nombre": "W", "modo": "rect", "b": 0.3, "h": 0.9}],

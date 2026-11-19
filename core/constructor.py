@@ -117,8 +117,11 @@ def construir(datos):
     def _m(v):  return float(v) * cf * cl         # momento → tonf·m
     def _cd(v): return float(v) * cf / cl         # carga distribuida → tonf/m
 
+    if not isinstance(datos, dict):
+        raise ValueError("El modelo debe ser un objeto JSON con nudos, elementos, secciones y materiales.")
+    _validar_finitos(datos)
     est = Estructura(nombre=datos.get("nombre", "Portico"),
-                     despreciar_axial=bool(datos.get("despreciar_axial", False)),
+                     despreciar_axial=not datos.get("_axial_real_solo_pruebas", False),  # método del profesor: EA = ∞
                      timoshenko=bool(datos.get("timoshenko", False)),
                      pdelta=bool(datos.get("pdelta", False)),
                      g=float(datos.get("g", 9.81) or 9.81))
@@ -607,3 +610,16 @@ def resolver_combinaciones(datos):
                     "n_casos": len(casos), "n_combinaciones": len(combo_res)},
         "reacciones_envolvente": reacciones_env,
     }
+
+
+def _validar_finitos(x, ruta="modelo"):
+    """Rechaza NaN, infinito y números absurdos (|v| > 1e12) en cualquier parte del modelo."""
+    import math
+    if isinstance(x, dict):
+        for k, v in x.items():
+            _validar_finitos(v, f"{ruta}.{k}")
+    elif isinstance(x, list):
+        for i, v in enumerate(x):
+            _validar_finitos(v, f"{ruta}[{i}]")
+    elif isinstance(x, float) and (not math.isfinite(x) or abs(x) > 1e12):
+        raise ValueError(f"Valor no válido en {ruta}: {x}")

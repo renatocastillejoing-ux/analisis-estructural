@@ -155,7 +155,6 @@ function Proyecto({ modelo, commit }) {
         </Campo>
       </div>
       <h3 className="pt-2 text-xs font-semibold uppercase text-slate-500 dark:text-slate-400">Opciones de análisis</h3>
-      <Interruptor label="Despreciar deformaciones axiales (método a mano)" valor={!!modelo.despreciar_axial} onChange={(v) => commit((m) => { m.despreciar_axial = v; })} />
       <Interruptor label="Incluir peso propio" valor={!!modelo.peso_propio} onChange={(v) => commit((m) => { m.peso_propio = v; })} />
       <Interruptor label="Timoshenko (deformación por cortante)" valor={!!modelo.timoshenko} onChange={(v) => commit((m) => { m.timoshenko = v; })} />
       <Interruptor label="P-Delta (2.º orden)" valor={!!modelo.pdelta} onChange={(v) => commit((m) => { m.pdelta = v; })} />
