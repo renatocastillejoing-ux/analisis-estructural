@@ -1,18 +1,24 @@
 // Cliente de la API Flask (mismo backend que la interfaz clásica).
+// Cada acción que puede tardar se envuelve en conCarga(): el indicador global (Carga.jsx)
+// muestra qué se está haciendo, la etapa, el porcentaje y cuánto falta.
+import { conCarga } from "./progreso.js";
 const post = (url, body) =>
   fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
     .then(async (r) => ({ ok: r.ok, data: await r.json() }));
 
-export const calcular = (modelo) => post("/api/calcular", modelo);
-export const metodoA = (modelo) => post("/api/metodo_a", modelo);
-export const torrePseudo3d = () => fetch("/api/torre/pseudo3d").then((r) => r.json());
-export const torreLista = () => fetch("/api/torre/lista").then((r) => r.json());
+const tam = (m) => (m?.elementos?.length > 200 ? "g" : m?.elementos?.length > 30 ? "m" : "p");   // para recordar duraciones por tamaño
+export const calcular = (modelo) => conCarga(`calc2d-${tam(modelo)}`, "Calculando el pórtico (método [A])", () => post("/api/calcular", modelo), "Armando [A], [K] y resolviendo {D}");
+export const metodoA = (modelo) => conCarga(`pasos-${tam(modelo)}`, "Preparando la resolución paso a paso", () => post("/api/metodo_a", modelo), "Matrices de cada barra");
+export const torrePseudo3d = () => conCarga("pseudo3d", "Análisis pseudo-tridimensional", () => fetch("/api/torre/pseudo3d").then((r) => r.json()), "Rigidez lateral de cada pórtico y diafragmas");
+export const torreLista = () => conCarga("torre-lista", "Leyendo los pórticos de la torre", () => fetch("/api/torre/lista").then((r) => r.json()), "Armando la torre desde el plano");
 export const torreModelo = (tipo, idx, casos = false) =>
-  fetch(`/api/torre?tipo=${tipo}&idx=${idx}${casos ? "&casos=1" : ""}`).then((r) => r.json());
-export const combinaciones = (modelo) => post("/api/combinaciones", modelo);
+  conCarga("torre-portico", "Cargando el pórtico de la torre", () => fetch(`/api/torre?tipo=${tipo}&idx=${idx}${casos ? "&casos=1" : ""}`).then((r) => r.json()), "Extrayendo el pórtico y sus cargas");
+export const combinaciones = (modelo) => conCarga(`combos-${tam(modelo)}`, "Calculando combinaciones y envolventes", () => post("/api/combinaciones", modelo), "Un cálculo por combinación");
 // Cálculo 3D en segundo plano: se inicia y se consulta cada segundo (la torre puede tardar
 // más que el límite de una petición en el servidor en línea). Devuelve { ok, data } como post().
-export async function calcular3d(modelo, { onProgreso } = {}) {
+export const calcular3d = (modelo, opciones = {}) =>
+  conCarga(`calc3d-${tam(modelo)}`, `Calculando el modelo 3D (${modelo?.elementos?.length || 0} barras)`, (act) => _calcular3d(modelo, opciones, act), "Enviando el modelo");
+async function _calcular3d(modelo, { onProgreso } = {}, act) {
   const ini = await post("/api/calcular3d/iniciar", modelo);
   if (!ini.ok || !ini.data.ok) return ini;
   for (let fallos = 0; ;) {
@@ -27,13 +33,14 @@ export async function calcular3d(modelo, { onProgreso } = {}) {
     fallos = 0;
     if (d.estado === "listo") return { ok: true, data: d.resultado };
     if (d.estado !== "calculando") return { ok: false, data: { error: d.error || "No se pudo calcular el modelo 3D." } };
+    act?.({ etapa: d.etapa, fraccion: d.fraccion });
     onProgreso?.(d.segundos);
   }
 }
-export const extraerPortico = (modelo, eje, valor, factores) => post("/api/modelo3d/portico", { modelo, eje, valor, factores });
-export const torre3dModelo = () => fetch("/api/torre/modelo3d").then((r) => r.json());
+export const extraerPortico = (modelo, eje, valor, factores) => conCarga("extraer", "Extrayendo el pórtico del modelo 3D", () => post("/api/modelo3d/portico", { modelo, eje, valor, factores }), "Reparto de cargas de losa");
+export const torre3dModelo = () => conCarga("torre-3d", "Cargando la Torre de Arequipa (3D)", () => fetch("/api/torre/modelo3d").then((r) => r.json()), "Columnas, placas, vigas y losa desde el plano");
 // Memoria de cálculo (texto): el servidor la genera solo cuando se pide.
-export const memoria = (modelo) => post("/api/memoria", modelo);
+export const memoria = (modelo) => conCarga("memoria", "Generando la memoria de cálculo", () => post("/api/memoria", modelo));
 
 // ---- exportaciones: Excel del profesor, PDF de la torre y comparación con ETABS ----
 export function guardarBlob(blob, nombre) {
@@ -45,7 +52,8 @@ export function guardarBlob(blob, nombre) {
 const nombreDeCabecera = (r, otro) => /filename="?([^";]+)"?/.exec(r.headers.get("Content-Disposition") || "")?.[1] || otro;
 const errorDe = async (r) => { try { return (await r.json()).error || `Error ${r.status}`; } catch { return `Error ${r.status}`; } };
 
-export async function excelProfesor(modelo) {
+export const excelProfesor = (modelo) => conCarga("excel", "Generando el Excel del profesor", () => _excelProfesor(modelo), "Hojas, matrices y fórmulas");
+async function _excelProfesor(modelo) {
   const r = await fetch("/api/exportar/excel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(modelo) });
   if (!r.ok) throw new Error(await errorDe(r));
   guardarBlob(await r.blob(), nombreDeCabecera(r, "portico_profesor.xlsx"));
@@ -56,7 +64,9 @@ export async function excelProfesor(modelo) {
 // varias veces seguidas, falla con error.reintentar = true para ofrecer «Reintentar».
 const pdfJson = (url, opciones) => fetch(url, opciones).then((r) => r.json());
 export const pdfTorreProgreso = () => pdfJson("/api/torre/pdf/progreso");
-export async function pdfTorre({ onProgreso, forzar = false, cada = 1000 } = {}) {
+export const pdfTorre = (opciones = {}) => conCarga("pdf-torre", "Generando el PDF de todos los pórticos", (act) =>
+  _pdfTorre({ ...opciones, onProgreso: (p) => { act({ paso: { i: p.i || 0, n: p.n || 0, nombre: p.nombre } }); opciones.onProgreso?.(p); } }), "Iniciando");
+async function _pdfTorre({ onProgreso, forzar = false, cada = 1000 } = {}) {
   const falla = (msg, reintentar) => Object.assign(new Error(msg), { reintentar });
   let p;
   try { p = await pdfJson("/api/torre/pdf/iniciar" + (forzar ? "?forzar=1" : ""), { method: "POST" }); }
@@ -80,7 +90,8 @@ export async function pdfTorre({ onProgreso, forzar = false, cada = 1000 } = {})
   guardarBlob(await r.blob(), nombreDeCabecera(r, "torre_arequipa_porticos.pdf"));
   return p;
 }
-export async function compararEtabs(modelo, archivo, opciones = {}) {
+export const compararEtabs = (modelo, archivo, opciones = {}) => conCarga("etabs", "Comparando con ETABS", () => _compararEtabs(modelo, archivo, opciones), "Leyendo la tabla y emparejando barras");
+async function _compararEtabs(modelo, archivo, opciones = {}) {
   const fd = new FormData();
   fd.append("modelo", JSON.stringify(modelo));
   fd.append("archivo", archivo);

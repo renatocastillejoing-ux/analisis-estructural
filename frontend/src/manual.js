@@ -71,6 +71,8 @@ export const MANUAL = [
         "**Derecha — Propiedades**: los datos de lo seleccionado (o un resumen del modelo). En el teléfono es una hoja inferior.",
         "**Abajo — Barra de estado**: herramienta activa, coordenadas del cursor, zoom, conteos y estado del modelo: ✓ listo, ⚠ avisos (se puede calcular), ⛔ errores (no deja calcular hasta corregirlos).",
       ] },
+      { t: "h", x: "Indicador de carga" },
+      { t: "p", x: "Mientras el sistema calcula o prepara algo (cálculo 2D o 3D, paso a paso, torre, pseudo-3D, combinaciones, memoria, Excel, PDF, comparación con ETABS), aparece arriba una tarjeta con **qué está haciendo**, la **etapa** actual (en el 3D, las reales del servidor: resolver [K], modos, sismo dinámico, combinaciones, esfuerzos, derivas, diseño; en el PDF, «12 de 35 · Eje C»), una **barra con el porcentaje**, el **tiempo transcurrido** y **cuánto falta**. La estimación mejora con el uso: el navegador recuerda cuánto tardó cada acción la última vez." },
       { t: "nota", x: "Si cambias el modelo después de calcular, «Resultados» muestra un punto naranja y un aviso para recalcular: los resultados en pantalla son del modelo anterior." },
     ],
   },

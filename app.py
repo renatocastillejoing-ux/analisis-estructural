@@ -470,7 +470,13 @@ def api_calcular3d_iniciar():
             _TRABAJOS3D.pop(k, None)                     # limpia trabajos de más de 30 min
         _TRABAJOS3D[tid] = {"estado": "calculando", "t0": time.time()}
 
+    # fracción del tiempo total en que empieza cada etapa (medido con la torre, 2026-11-19)
+    FRACCION = {"prep": 0.0, "diaf": 0.01, "sub": 0.01, "sismo": 0.01, "resolver": 0.01, "modal": 0.15,
+                "dinamico": 0.16, "combos": 0.38, "barras": 0.70, "derivas": 0.71, "diseno": 0.76}
+
     def correr():
+        from core import analisis_3d as a3
+        a3._AVANCE.cb = lambda k, txt: _TRABAJOS3D[tid].update(etapa=txt, fraccion=FRACCION.get(k, 0.0))
         try:
             r = analizar_modelo3d(datos)
             _TRABAJOS3D[tid].update(estado="listo", resultado=r)
@@ -493,7 +499,8 @@ def api_calcular3d_estado(tid):
     if t["estado"] == "error":
         _TRABAJOS3D.pop(tid, None)
         return jsonify({"ok": False, "estado": "error", "error": t["error"]}), 400
-    return jsonify({"ok": True, "estado": "calculando", "segundos": seg})
+    return jsonify({"ok": True, "estado": "calculando", "segundos": seg,
+                    "etapa": t.get("etapa", "Iniciando"), "fraccion": t.get("fraccion", 0.0)})
 
 
 @app.route("/favicon.ico")

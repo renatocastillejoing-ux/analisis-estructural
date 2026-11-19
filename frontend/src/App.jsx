@@ -16,6 +16,7 @@ import { a3d, borrarBarra, borrarNudo3d, borrarSeleccion, sumarSel, copiarPlano,
 import Documentos from "./components/Documentos.jsx";
 import { registrarPedir } from "./pedir.js";
 import MenuMovil from "./components/MenuMovil.jsx";
+import Carga from "./components/Carga.jsx";
 import { PasoPortico3D } from "./components/PorticoDe3D.jsx";
 import { PLANTILLAS } from "./model.js";
 import { BuscadorComandos, MenuBar } from "./components/MenuBar.jsx";
@@ -515,6 +516,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col bg-slate-50 text-slate-900 dark:bg-ink dark:text-slate-100">
+      <Carga />
       {/* ===== cabecera única ===== */}
       <header className="flex h-12 min-w-0 shrink-0 items-center gap-1.5 border-b border-slate-200 bg-white px-3 dark:border-ink-line dark:bg-ink-2">
         <div className="flex shrink-0 items-center gap-2 pr-1">

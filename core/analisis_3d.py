@@ -708,14 +708,28 @@ def espectro_e030(T, Z, U, S, R, TP, TL):
     return Z * U * C * S / R * 9.81, C
 
 
+# ---- avance del cálculo (para la barra de progreso de la interfaz) ----
+# El trabajo en segundo plano fija _AVANCE.cb = función(clave, texto); cada etapa la llama.
+import threading as _th
+_AVANCE = _th.local()
+
+
+def _avance(clave, texto):
+    cb = getattr(_AVANCE, "cb", None)
+    if cb:
+        cb(clave, texto)
+
+
 def analizar_modelo3d(m):
     t0 = time.time()
+    _avance("prep", "Preparando geometría y cargas")
     P = preparar_modelo3d(m)
     X, restr, info, L = P["X"], P["restr"], P["info"], P["L"]
     niveles_z, por_nivel, casos_n = P["niveles_z"], P["por_nivel"], P["casos_n"]
     _brazos_auto(P, m.get("brazos_rigidos") or {"modo": "placas", "factor": 1.0})
     nudos = m["nudos"]
 
+    _avance("diaf", "Armando los diafragmas por piso y bloque")
     # ---- diafragmas por nivel (niveles con nudos libres) ----
     diaf = None
     niveles_libres = [z for z in niveles_z if any(restr[k] is None for k in por_nivel[z].values())]
@@ -766,6 +780,7 @@ def analizar_modelo3d(m):
             if c_ in P_niv: P_niv[c_] += -F[2] * f
     niv_d = sorted(diaf) if diaf else []
 
+    _avance("sub", "Subdividiendo barras con tramos")
     # ---- tramos → sub-barras (con nudos internos) ----
     S = _subdividir(P)
     if diaf:
@@ -780,6 +795,7 @@ def analizar_modelo3d(m):
     modelo_s = {"nudos": S["X"], "restr": S["restr"], "elementos": S["elementos"]}
     origen = S["origen"]
 
+    _avance("sismo", "Fuerzas sísmicas E.030")
     # ---- sismo E.030 ----
     sismo_out = {}
     casos = {c: v for c, v in S["cargas"].items()}
@@ -833,7 +849,9 @@ def analizar_modelo3d(m):
                 "clave": {nudos[k]["id"]: c_ for k, c_ in clave_de.items() if k < len(nudos)},
                 "fuerzas": {d: casos["S" + d]["maestros"] for d in ("X", "Y") if "S" + d in casos},
                 "sismo": sismo_out, "bloques": n_bloques}
+    _avance("resolver", "Ensamblando y resolviendo [K]")
     res = resolver(modelo_s, casos, diaf)
+    _avance("modal", "Modos de vibración")
     if diaf and not modos and any(P_niv.get(c_, 0) > 0 for c_ in niv_d):
         modos, aux = modal_condensado(res["Kred"], res["n_maestros"], masas(), con_formas=True)
 
@@ -843,6 +861,7 @@ def analizar_modelo3d(m):
     FE = {n: res["fext"][n] for n in nombres}
     RE = dict(res["reacciones"])
 
+    _avance("dinamico", "Sismo dinámico (CQC)")
     # ---- sismo dinámico (espectral, CQC) ----
     dinamico = {}
     if activo and sis_cfg.get("dinamico") and modos:
@@ -870,6 +889,7 @@ def analizar_modelo3d(m):
             dinamico[d] = {"U": np.array(Ures), "F": np.array(Fres) * esc, "V": Vd * esc, "V_sin_escalar": Vd, "escala": esc}
             sismo_out[d].update({"V_dinamico": Vd * esc, "escala_dinamica": esc})
 
+    _avance("combos", "Combinaciones de carga")
     # ---- combinaciones ----
     combos = m.get("combinaciones")
     if not combos:
@@ -920,6 +940,7 @@ def analizar_modelo3d(m):
             FE[cb["nombre"]] = (fe, cl)
             RE[cb["nombre"]] = sum(f * RE[k] for k, f in lin.items())
 
+    _avance("barras", "Esfuerzos de cada barra")
     # ---- resultados por barra original (los tramos se agregan) ----
     ne0 = len(info)
     nn = len(X)
@@ -960,6 +981,7 @@ def analizar_modelo3d(m):
         Fy = sum(v[1] for v in casos[c].get("nudos", {}).values()) + sum(v[1] for v in casos[c].get("maestros", {}).values())
         aplicado[c] = {"Fx": float(Fx), "Fy": float(Fy), "Fz": float(Fz)}
 
+    _avance("derivas", "Derivas por piso")
     # ---- derivas (estático y, si hay, dinámico CQC) ----
     derivas = {}
     if activo:
@@ -1022,6 +1044,7 @@ def analizar_modelo3d(m):
         "elementos": [{"id": inf["id"], "nombre": inf["nombre"], "tipo": inf["tipo"], "sec": inf["sec"], "L": float(L[k]),
                        "b": inf["b"], "h": inf["h"], "fc": inf["fc"]} for k, inf in enumerate(info)],
     }
+    _avance("diseno", "Diseño E.060")
     if m.get("disenar", True):
         from core.diseno_e060 import disenar_3d
         t1 = time.time()
