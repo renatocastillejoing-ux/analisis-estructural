@@ -83,7 +83,16 @@ B) "formato": "libre" — SOLO si hay barras inclinadas o geometría no regular:
   "pide", "gdl": [{"nudo": id, "numeros": [...]}], "supuestos", "dudas", "confianza"
 }
 Convenciones: x a la derecha, y arriba, origen abajo a la izquierda. Cargas en componentes GLOBALES: hacia abajo negativo (wy < 0, Py < 0, Fy < 0), a la derecha positivo, momento antihorario positivo. Viento en columnas: wx. La foto puede venir girada 90° o 180°: orienta la figura según el texto del enunciado (que se lea derecho) antes de leer x e y. Una carga «W en las vigas» es de gravedad: va en wy negativo, nunca en wx. Usa solo las cotas de ESTE ejercicio: si en la hoja asoma la figura o una cota de otra pregunta, ignórala y anótalo en "supuestos". "rodillo_y" impide solo el desplazamiento vertical; "fijo" = articulación.
-Si da EI o I en vez de b y h, usa A = 1 e I. Si no da material, usa E = 2.0e6 tonf/m² y dilo en supuestos. Si no hay numeración de GDL en la figura, "gdl": [].
+Si da EI o I en vez de b y h, usa A = 1 e I (con EA = ∞, A no influye). Si no da material, usa E = 2.0e6 tonf/m² y dilo en supuestos. Si no hay numeración de GDL en la figura, "gdl": [].
+LECTURA CUIDADOSA (errores frecuentes):
+- Flechas numeradas pequeñas en los nudos (1, 2, 3… o D1, D2…, flechas rectas y curvas, a menudo verdes) son GRADOS DE LIBERTAD, NO cargas: van en "gdl" y nunca en cargas. Una carga siempre trae magnitud con unidad (5 t, 700 kg/m, 20 kN).
+- Las reacciones o incógnitas dibujadas en los apoyos (Ax, Ay, By, R, M_A…) NO son cargas: ignóralas. Los ejes locales x', y' dibujados tampoco son datos.
+- Números encerrados en círculos son nudos; en cuadrados, barras. Cotas en rojo o con líneas de cota son longitudes.
+- Apoyos: triángulo solo = "fijo" (articulado); triángulo con círculo o ruedas = rodillo ("rodillo_y" si apoya en el suelo); rayado con base plana = "empotrado".
+- kg o kgf → tonf dividiendo entre 1000; kN → tonf dividiendo entre 9.81. Pon "unidad_fuerza": "tonf" con los números ya convertidos y explícalo en "conversion". kg/m → tonf/m igual.
+- Carga distribuida perpendicular a una barra inclinada: da sus componentes GLOBALES por metro de barra (wx = q·sen o −q·sen, wy = −q·cos según el sentido dibujado). Carga puntual inclinada dada como Px y Py o con su ángulo: componentes globales.
+- Si una cota no se lee, deduce de las demás si es posible y anótalo con confianza "baja".
+- Si no hay secciones ni EI en la figura, deja "secciones": [] (el servidor pone una por defecto); no inventes A = 1, I = 1.
 "supuestos": cada cosa que asumiste (cota no legible, unidad, material…). "dudas": lo ambiguo que el estudiante debe revisar. "confianza": una entrada por cada dato numérico o apoyo que leíste (vanos, alturas, apoyos, secciones, material, cada carga). Nunca inventes números sin decirlo en supuestos."""
 
 
@@ -125,12 +134,18 @@ def usa_max_completion(url):
     return bool(_RE_RAZONADOR.search(str(url)))
 
 
-def _cuerpo(imagen, razonador):
+REVISION = """Revisa la transcripción anterior (JSON) contra la foto, dato por dato: geometría y cotas, número de vanos y pisos (que no sobre ni falte ninguno; cotas de otra pregunta no cuentan), apoyos, secciones, unidades y conversión, y cada carga (magnitud, sentido, barra y posición). Recuerda: las flechas numeradas de GDL y las reacciones no son cargas. Devuelve SOLO el JSON corregido, con el mismo formato, y anota en "supuestos" lo que corregiste."""
+
+
+def _cuerpo(imagen, razonador, previo=None):
+    msgs = [{"role": "user", "content": [
+        {"type": "text", "text": INSTRUCCIONES},
+        {"type": "image_url", "image_url": {"url": imagen, "detail": "high"}},
+    ]}]
+    if previo is not None:
+        msgs += [{"role": "assistant", "content": previo}, {"role": "user", "content": REVISION}]
     c = {
-        "messages": [{"role": "user", "content": [
-            {"type": "text", "text": INSTRUCCIONES},
-            {"type": "image_url", "image_url": {"url": imagen, "detail": "high"}},
-        ]}],
+        "messages": msgs,
         "response_format": {"type": "json_object"},
     }
     if razonador:
@@ -150,12 +165,12 @@ def _pide_otro_formato(e):
                                   "unsupported_value", "temperature"))
 
 
-def pedir_a_la_ia(imagen, url, llave, abrir=None):
+def pedir_a_la_ia(imagen, url, llave, abrir=None, previo=None):
     """Devuelve el texto (contenido) que respondió el modelo."""
     abrir = abrir or urllib.request.urlopen
     razonador = usa_max_completion(url)
     for intento in (0, 1):
-        req = urllib.request.Request(url, data=json.dumps(_cuerpo(imagen, razonador)).encode("utf-8"),
+        req = urllib.request.Request(url, data=json.dumps(_cuerpo(imagen, razonador, previo)).encode("utf-8"),
                                      method="POST", headers={"Content-Type": "application/json", "api-key": llave})
         try:
             with abrir(req, timeout=TIMEOUT_S) as r:
@@ -266,7 +281,11 @@ def validar_modelo(d):
 
     # secciones
     secciones, nombres_sec = [], set()
-    for k, s in enumerate(_lista(d, "secciones", 50, obligatoria=True), 1):
+    lista_sec = _lista(d, "secciones", 50)
+    if not lista_sec:
+        lista_sec = [dict({"nombre": "S", "modo": "rect", "b": 0.30, "h": 0.50})]
+        dudas.append("La figura no trae secciones: se usó 0.30 × 0.50 m para todas las barras. Corrígela si el ejercicio da otra (o EI).")
+    for k, s in enumerate(lista_sec, 1):
         nombre = _txt(s.get("nombre"), 30) or f"S{k}"
         if nombre in nombres_sec:
             raise ErrorIA(f"La sección «{nombre}» está repetida.", 422)
@@ -319,10 +338,9 @@ def validar_modelo(d):
         barras.add(par)
         sec = _txt(ed.get("seccion"), 30)
         if sec not in nombres_sec:
-            if len(secciones) == 1:
-                sec = secciones[0]["nombre"]
-            else:
-                raise ErrorIA(f"El elemento {i} usa una sección que no existe.", 422)
+            if len(secciones) > 1:
+                dudas.append(f"El elemento {i} no tenía una sección válida: se le puso «{secciones[0]['nombre']}».")
+            sec = secciones[0]["nombre"]
         elementos.append({"id": i, "nombre": _txt(ed.get("nombre"), 20) or f"E{i}", "i": ni, "j": nj, "seccion": sec})
 
     # cargas
@@ -443,7 +461,7 @@ def armar_desde_esquema(d):
             nudo[(cx, lv)] = nid
             nudos.append({"id": nid, "x": round(x, 6), "y": round(y, 6), "apoyo": apoyos[cx - 1] if lv == 0 else "libre"})
 
-    secs = _lista(e, "secciones", 50, obligatoria=True)
+    secs = _lista(e, "secciones", 50) or [dict({"nombre": "S", "modo": "rect", "b": 0.30, "h": 0.50})]
     nombres = [_txt(s.get("nombre"), 30) or f"S{k}" for k, s in enumerate(secs, 1)]
     for s, n in zip(secs, nombres):
         s["nombre"] = n
@@ -455,7 +473,7 @@ def armar_desde_esquema(d):
         if len(nombres) == 1:
             return nombres[0]
         if v:
-            raise ErrorIA(f"«{clave}» usa la sección «{v}», que no existe.", 422)
+            return defecto
         nota.append(f"No se indicó «{clave}»: se usó «{defecto}».")
         return defecto
     sec_col = _sec("seccion_columnas", nombres[0])
@@ -590,4 +608,10 @@ def leer_ejercicio(imagen, abrir=None):
     url, llave = configuracion()
     validar_imagen(imagen)
     contenido = pedir_a_la_ia(imagen, url, llave, abrir=abrir)
+    if os.environ.get("AE_IA_REVISAR", "1") != "0":
+        try:                                   # segunda pasada: la IA revisa su lectura contra la foto
+            revisado = pedir_a_la_ia(imagen, url, llave, abrir=abrir, previo=contenido)
+            return interpretar(_json_de(revisado))
+        except ErrorIA:
+            pass                               # si la revisión falla, vale la primera lectura
     return interpretar(_json_de(contenido))

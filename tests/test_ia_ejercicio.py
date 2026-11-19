@@ -51,6 +51,7 @@ def _azure(contenido, capturar=None):
 def config(monkeypatch):
     monkeypatch.setenv("AE_IA_URL", "https://ejemplo.invalid/openai/deployments/m/chat/completions?api-version=x")
     monkeypatch.setenv("AE_IA_LLAVE", "llave-de-prueba")
+    monkeypatch.setenv("AE_IA_REVISAR", "0")
 
 
 def test_lee_modelo_valido(config):
@@ -120,7 +121,6 @@ def _mal(fn):
     (lambda m: [n.update(apoyo="libre") for n in m["nudos"]], "ningún apoyo"),
     (lambda m: m["cargas_elementos"][1].update(a=9), "fuera de la barra"),
     (lambda m: m["cargas_nodales"][0].update(nudo=50), "no existe"),
-    (lambda m: m["elementos"][1].update(seccion="Z"), "sección"),
     (lambda m: m["elementos"][0].update(i=True), "entero"),
     (lambda m: m.update(nudos=[]), "nudos"),
 ])
@@ -248,7 +248,6 @@ def test_arma_portico_desde_esquema(config):
     (lambda e: e["cargas_barras"][0]["barra"].update(vano=7), "no existe"),
     (lambda e: e["cargas_barras"][1].update(a=9), "fuera de la barra"),
     (lambda e: e["cargas_nodales"][0].update(nivel=5), "no existe"),
-    (lambda e: e.update(seccion_vigas="Z"), "no existe"),
     (lambda e: e["apoyos"].__setitem__(0, "libre"), "no es válido"),
 ])
 def test_esquema_invalido(config, roto, texto):
@@ -269,6 +268,7 @@ def test_formato_libre_sigue_valiendo_para_inclinadas(config):
 def test_gpt5_usa_max_completion_tokens(monkeypatch):
     monkeypatch.setenv("AE_IA_URL", "https://x.invalid/openai/deployments/gpt-5-mini/chat/completions?api-version=x")
     monkeypatch.setenv("AE_IA_LLAVE", "k")
+    monkeypatch.setenv("AE_IA_REVISAR", "0")
     cap = {}
     ia.leer_ejercicio(IMAGEN, abrir=_azure(json.dumps(ESQUEMA), cap))
     c = json.loads(cap["req"].data)
@@ -287,3 +287,26 @@ def test_reintenta_si_azure_pide_max_completion_tokens(config):
     assert "max_tokens" in cuerpos[0] and "max_completion_tokens" in cuerpos[1] and len(cuerpos) == 2
 
 
+
+
+def test_sin_secciones_usa_una_por_defecto_y_avisa():
+    m = {"formato": "libre", "nudos": [{"id": 1, "x": 0, "y": 0, "apoyo": "empotrado"}, {"id": 2, "x": 0, "y": 3}],
+         "elementos": [{"id": 1, "i": 1, "j": 2}], "cargas_nodales": [{"nudo": 2, "Fx": 1}], "secciones": []}
+    r = ia.interpretar(m)
+    assert r["modelo"]["secciones"][0]["b"] == 0.30 and any("no trae secciones" in d for d in r["dudas"])
+
+
+def test_segunda_pasada_revisa_la_lectura(config, monkeypatch):
+    monkeypatch.setenv("AE_IA_REVISAR", "1")
+    import json as _j
+    llamadas = []
+    malo = {"formato": "libre", "nudos": [{"id": 1, "x": 0, "y": 0, "apoyo": "empotrado"}, {"id": 2, "x": 0, "y": 3}],
+            "elementos": [{"id": 1, "i": 1, "j": 2}], "secciones": [{"nombre": "C", "b": 0.3, "h": 0.3}]}
+    bueno = dict(malo, nudos=[{"id": 1, "x": 0, "y": 0, "apoyo": "empotrado"}, {"id": 2, "x": 0, "y": 4}])
+    def falso(imagen, url, llave, abrir=None, previo=None):
+        llamadas.append(previo)
+        return _j.dumps(bueno if previo else malo)
+    monkeypatch.setattr(ia, "pedir_a_la_ia", falso)
+    monkeypatch.setattr(ia, "validar_imagen", lambda x: None)
+    r = ia.leer_ejercicio("data:image/png;base64,AAAA")
+    assert len(llamadas) == 2 and llamadas[1] is not None and r["modelo"]["nudos"][1]["y"] == 4
