@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { escena3d } from "../model3d.js";
 import PorticoDe3D from "./PorticoDe3D.jsx";
+import Pseudo3D from "./Pseudo3D.jsx";
 
 const Visor3D = lazy(() => import("./Visor3D.jsx"));
 const caja = "rounded-xl border border-slate-200 bg-white p-4 dark:border-ink-line dark:bg-ink-2";
@@ -162,7 +163,7 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
         </div>
         <div className="flex-[2] overflow-y-auto border-t border-slate-200 bg-slate-50 p-4 dark:border-ink-line dark:bg-ink">
           <div className="mb-3 flex gap-1" role="tablist">
-            {[["resumen", "Resumen"], ["derivas", "Derivas"], ["modal", "Modos"], ["diseno", "Diseño E.060"], ["reacciones", "Reacciones"], ["porticos", "Pórtico por eje"]].map(([k, l]) => (
+            {[["resumen", "Resumen"], ["derivas", "Derivas"], ["modal", "Modos"], ["diseno", "Diseño E.060"], ["reacciones", "Reacciones"], ["porticos", "Pórtico por eje"], ["pseudo", "Pseudo-3D (profesor)"]].map(([k, l]) => (
               <button key={k} role="tab" aria-selected={pestaña === k} onClick={() => setPestaña(k)} className={`rounded-full px-3 py-1 text-sm ${pestaña === k ? "bg-teal font-semibold text-white" : "bg-white dark:bg-ink-2"}`}>{l}</button>
             ))}
           </div>
@@ -171,6 +172,7 @@ export default function Results3D({ modelo, res, error, onVolver, onExtraer, onP
           {pestaña === "modal" && <Modal res={res} />}
           {pestaña === "reacciones" && <Reacciones res={res} caso={caso} />}
           {pestaña === "diseno" && <Diseno res={res} setElegido={setElegido} />}
+          {pestaña === "pseudo" && <Pseudo3D />}
           {pestaña === "porticos" && <PorticoDe3D modelo={modelo} res={res} caso={caso} onPaso={onPaso} onAbrir2d={(e, c) => onExtraer(e, c, { CM: 1.4, CV: 1.7 })} />}
         </div>
       </div>

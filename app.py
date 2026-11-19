@@ -384,6 +384,30 @@ def api_comparar_etabs():
         return jsonify({"ok": False, "error": str(e)}), 400
 
 
+_PSEUDO3D = {}
+
+
+@app.route("/api/torre/pseudo3d", methods=["GET"])
+def api_torre_pseudo3d():
+    """Sismo de la torre por el método pseudo-tridimensional del profesor: [K] de cada pórtico
+    con [A], rigidez lateral [KL] por condensación y [K]ed = Σ[r]ᵀ[KL][r] por diafragma."""
+    from core.pseudo3d import analizar_pseudo3d
+    from core.torre_plano import supuestos
+    try:
+        supuestos()
+        from core import torre_plano
+        clave = torre_plano._SUP_MTIME
+        if clave not in _PSEUDO3D:
+            _PSEUDO3D.clear(); _PSEUDO3D[clave] = analizar_pseudo3d()
+        r = _PSEUDO3D[clave]
+        if request.args.get("barras") not in ("1", "true"):
+            r = {**r, "direcciones": {d: {**v, "porticos": [{k: x for k, x in p.items() if k != "barras"} for p in v["porticos"]]}
+                                      for d, v in r["direcciones"].items()}}
+        return jsonify({"ok": True, **r})
+    except Exception as e:
+        return error_json(f"No se pudo hacer el análisis pseudo-tridimensional: {e}", 500)
+
+
 @app.route("/api/torre/lista", methods=["GET"])
 def api_torre_lista():
     from core.torre_arequipa import todos_los_pórticos

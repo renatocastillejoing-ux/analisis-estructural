@@ -248,7 +248,7 @@ def resolver_profesor(est):
             nid = next(i for i, v in rot.items() if v == k)
             u[nombre[nid]][2] = 1.0           # giro antihorario positivo
         modos.append(u)
-    return {"labels": labels, "nT": nT, "barras": barras, "K": K, "R": R,
+    return {"labels": labels, "nT": nT, "pivotes": [comp[f] for f in libres], "barras": barras, "K": K, "R": R,
             "Qn": Qn, "Q": Q, "D": D, "modos": modos, "nudos": nudos, "resortes": resortes,
             "reacciones": reac, "residuo_equilibrio": residuo, "desp": desp}
 

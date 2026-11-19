@@ -827,6 +827,12 @@ def analizar_modelo3d(m):
             sismo_out[d] = {"T": float(T), "C": float(C), "k": float(k), "V": float(V), "F": [float(f) for f in F], "R": R0, "bloques": n_bloques,
                             "T_norma": float(T_n), "C_R": float(C / R0), "C_R_ok": bool(C / R0 >= 0.11)}
 
+    if m.get("_solo_sismo"):
+        # para el análisis pseudo-tridimensional: fuerzas E.030 por diafragma y su centro
+        return {"diaf": {c_: {"xc": diaf[c_]["xc"], "yc": diaf[c_]["yc"], "peso": P_niv[c_]} for c_ in niv_d},
+                "clave": {nudos[k]["id"]: c_ for k, c_ in clave_de.items() if k < len(nudos)},
+                "fuerzas": {d: casos["S" + d]["maestros"] for d in ("X", "Y") if "S" + d in casos},
+                "sismo": sismo_out, "bloques": n_bloques}
     res = resolver(modelo_s, casos, diaf)
     if diaf and not modos and any(P_niv.get(c_, 0) > 0 for c_ in niv_d):
         modos, aux = modal_condensado(res["Kred"], res["n_maestros"], masas(), con_formas=True)

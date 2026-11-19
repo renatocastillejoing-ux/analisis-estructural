@@ -5,6 +5,7 @@ const post = (url, body) =>
 
 export const calcular = (modelo) => post("/api/calcular", modelo);
 export const metodoA = (modelo) => post("/api/metodo_a", modelo);
+export const torrePseudo3d = () => fetch("/api/torre/pseudo3d").then((r) => r.json());
 export const torreLista = () => fetch("/api/torre/lista").then((r) => r.json());
 export const torreModelo = (tipo, idx, casos = false) =>
   fetch(`/api/torre?tipo=${tipo}&idx=${idx}${casos ? "&casos=1" : ""}`).then((r) => r.json());
