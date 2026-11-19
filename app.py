@@ -24,6 +24,30 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "historial.db")
 
 app = Flask(__name__, static_folder="static")
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024      # 20 MB por petición
+
+HISTORIAL_MAX_FILAS = 50                                  # el historial conserva solo los últimos 50 cálculos
+HISTORIAL_MAX_BYTES = 2 * 1024 * 1024                     # no se guardan payloads mayores a 2 MB
+
+
+def _con_detalle():
+    """El traceback solo sale en local: con app.debug o con AE_DEBUG=1."""
+    return bool(app.debug) or os.environ.get("AE_DEBUG") == "1"
+
+
+def error_json(mensaje, codigo=400):
+    """Respuesta de error en JSON; incluye 'detalle' (traceback) solo fuera de producción."""
+    cuerpo = {"ok": False, "error": mensaje}
+    if _con_detalle():
+        cuerpo["detalle"] = traceback.format_exc()
+    return jsonify(cuerpo), codigo
+
+
+@app.errorhandler(413)
+def demasiado_grande(_e):
+    return jsonify({"ok": False,
+                    "error": "La petición es demasiado grande (máximo 20 MB). "
+                             "Reduzca el tamaño del modelo."}), 413
 
 
 # ----------------------------------------------------------------------------
@@ -98,14 +122,9 @@ def api_calcular():
         est = construir(datos)
         est.resolver()
     except Exception as e:
-        return jsonify({
-            "ok": False,
-            "error": f"No se pudo resolver la estructura: {e}",
-            "detalle": traceback.format_exc(),
-        }), 400
+        return error_json(f"No se pudo resolver la estructura: {e}")
 
     resultados = extraer_resultados(est)
-    reporte = memoria_de_calculo(est)
     # Los diagramas se renderizan como SVG interactivo en el navegador; los PNG
     # de matplotlib solo se generan bajo demanda (?imagenes=1) para no penalizar
     # cada cálculo. Por defecto se omiten.
@@ -126,27 +145,51 @@ def api_calcular():
         "nombre": est.nombre,
         "resultados": resultados,
         "imagenes": imagenes,
-        "reporte": reporte,
         "modal": modal,
     }
 
-    # guardar en historial
+    # guardar en historial (sin imágenes base64 ni payloads enormes; máximo 50 filas)
     try:
-        db = get_db()
-        fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        resumen = json.dumps(resultados["resumen"])
-        db.execute(
-            "INSERT INTO calculos (fecha, nombre, resumen, datos, resultado) "
-            "VALUES (?,?,?,?,?)",
-            (fecha, est.nombre, resumen, json.dumps(datos), json.dumps(payload)),
-        )
-        db.commit()
-        payload["id"] = db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
-        payload["fecha"] = fecha
+        guardable = {k: v for k, v in payload.items() if k != "imagenes"}
+        guardable["imagenes"] = {}
+        txt_resultado = json.dumps(guardable)
+        txt_datos = json.dumps(datos)
+        if len(txt_resultado) + len(txt_datos) > HISTORIAL_MAX_BYTES:
+            payload["id"] = None
+            payload["aviso_historial"] = "Cálculo demasiado grande: no se guardó en el historial."
+        else:
+            db = get_db()
+            fecha = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            resumen = json.dumps(resultados["resumen"])
+            cur = db.execute(
+                "INSERT INTO calculos (fecha, nombre, resumen, datos, resultado) "
+                "VALUES (?,?,?,?,?)",
+                (fecha, est.nombre, resumen, txt_datos, txt_resultado),
+            )
+            payload["id"] = cur.lastrowid
+            payload["fecha"] = fecha
+            db.execute(
+                "DELETE FROM calculos WHERE id NOT IN "
+                "(SELECT id FROM calculos ORDER BY id DESC LIMIT ?)",
+                (HISTORIAL_MAX_FILAS,),
+            )
+            db.commit()
     except Exception:
         payload["id"] = None
 
     return jsonify(payload)
+
+
+@app.route("/api/memoria", methods=["POST"])
+def api_memoria():
+    """Memoria de cálculo (texto): solo se genera cuando se pide, con el modelo en el cuerpo."""
+    datos = request.get_json(force=True)
+    try:
+        est = construir(datos)
+        est.resolver()
+        return jsonify({"ok": True, "nombre": est.nombre, "texto": memoria_de_calculo(est)})
+    except Exception as e:
+        return error_json(f"No se pudo generar la memoria de cálculo: {e}")
 
 
 # ----------------------------------------------------------------------------
@@ -231,8 +274,7 @@ def api_metodo_a():
         return jsonify({"ok": False,
                         "error": f"Caso aun no soportado por el metodo [A]: {e}"}), 400
     except Exception as e:
-        return jsonify({"ok": False, "error": str(e),
-                        "detalle": traceback.format_exc()}), 400
+        return error_json(str(e))
 
 
 @app.route("/api/torre/lista", methods=["GET"])
@@ -254,8 +296,7 @@ def api_calcular3d():
     try:
         return jsonify(analizar_modelo3d(datos))
     except Exception as e:
-        return jsonify({"ok": False, "error": f"No se pudo resolver el modelo 3D: {e}",
-                        "detalle": traceback.format_exc()}), 400
+        return error_json(f"No se pudo resolver el modelo 3D: {e}")
 
 
 @app.route("/api/diseno", methods=["POST"])

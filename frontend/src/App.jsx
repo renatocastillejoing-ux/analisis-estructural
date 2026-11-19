@@ -20,7 +20,7 @@ import { PasoPortico3D } from "./components/PorticoDe3D.jsx";
 import { PLANTILLAS } from "./model.js";
 import { BuscadorComandos, MenuBar } from "./components/MenuBar.jsx";
 import { DialogoAtajos, DialogoPedir, DialogoConfirmar, DialogoGenerador, DialogoPlantillas, DialogoTorre } from "./components/Dialogs.jsx";
-import { calcular, calcular3d, combinaciones, extraerPortico, torre3dModelo, torreModelo } from "./api.js";
+import { calcular, calcular3d, combinaciones, extraerPortico, memoria, torre3dModelo, torreModelo } from "./api.js";
 import { agregarElemento, agregarNudo, borrarElemento, borrarNudo, modeloEjemplo, modeloVacio, nextId } from "./model.js";
 
 const CLAVE = "ae_react_modelo";
@@ -243,10 +243,13 @@ export default function App() {
       abrirDoc(m.tipo === "3d" ? m : { ...modeloVacio(), ...m }, `«${m.nombre || f.name}» importado como documento nuevo: ${m.nudos.length} nudos, ${m.elementos.length} elementos.`);
     }).catch((e) => avisar("El archivo no es un modelo válido: " + e.message, "err"));
   };
-  const exportarMemoria = () => {
-    if (!resultado?.reporte) return;
-    const r = resultado.reporte;
-    descargar(`${archivo(modelo)}_memoria.txt`, typeof r === "string" ? r : JSON.stringify(r, null, 2), "text/plain");
+  const exportarMemoria = async () => {
+    if (!resultado) return;
+    try {
+      const { ok, data } = await memoria(modelo);      // el servidor la genera solo al pedirla
+      if (!ok || !data.texto) throw new Error(data.error || "sin texto");
+      descargar(`${archivo(modelo)}_memoria.txt`, data.texto, "text/plain");
+    } catch (e) { avisar("No se pudo generar la memoria de cálculo: " + e.message, "err"); }
   };
   const exportarCSV = () => {
     if (!resultado) return;
@@ -378,7 +381,7 @@ export default function App() {
       { id: "importar", label: "Importar modelo (JSON)…", atajo: "Ctrl+O", accion: () => importar.current?.click(), claves: "abrir" },
       { id: "exportar", label: "Exportar modelo (JSON)", atajo: "Ctrl+S", accion: exportarJSON, claves: "guardar descargar" },
       "sep",
-      { id: "memoria", label: "Exportar memoria de cálculo (.txt)", accion: exportarMemoria, disabled: !resultado?.reporte, claves: "reporte" },
+      { id: "memoria", label: "Exportar memoria de cálculo (.txt)", accion: exportarMemoria, disabled: !resultado, claves: "reporte" },
       { id: "csv", label: "Exportar resultados (CSV)", accion: exportarCSV, disabled: !resultado, claves: "excel" },
       { id: "imprimir", label: "Imprimir / PDF", accion: () => window.print() },
     ] },

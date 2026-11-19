@@ -469,8 +469,8 @@ def extraer_resultados(est):
         "equilibrio_elem": equilibrio_elem,
         "diagramas": diagramas,
         "gdl_labels": lbl,
-        "K": est.K.tolist(),
-        "Kff": est._part["Kff"].tolist(),
+        # K y Kff ya no viajan en la respuesta ni en el historial (eran ~9 MB de JSON
+        # por pórtico); la memoria de cálculo los imprime bajo demanda en /api/memoria.
         "n_libres": est.n_libres,
     }
 

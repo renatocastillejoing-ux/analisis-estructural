@@ -1138,14 +1138,63 @@ import threading
 _CALCULOS = OrderedDict()
 _CANDADO = threading.Lock()          # gunicorn usa varios hilos en un solo proceso
 
+# Los cálculos también se guardan en disco (calculos3d/ junto a app.py) para que sobrevivan
+# a un reinicio del servidor o a otro worker de gunicorn.
+import os, pickle, re
 
-def _guardar_calculo(d, maximo=6):
+_DIR_CALCULOS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "calculos3d")
+_ID_VALIDO = re.compile(r"^[0-9a-f]{32}$")
+_MAX_CALCULOS = 6
+
+
+def _ruta_calculo(k):
+    return os.path.join(_DIR_CALCULOS, k + ".pkl")
+
+
+def _guardar_en_disco(k, d, maximo):
+    try:
+        os.makedirs(_DIR_CALCULOS, exist_ok=True)
+        tmp = _ruta_calculo(k) + ".tmp"
+        with open(tmp, "wb") as f:
+            pickle.dump(d, f, protocol=pickle.HIGHEST_PROTOCOL)
+        os.replace(tmp, _ruta_calculo(k))
+        # conserva solo los más recientes
+        archivos = [os.path.join(_DIR_CALCULOS, n) for n in os.listdir(_DIR_CALCULOS) if n.endswith(".pkl")]
+        archivos.sort(key=os.path.getmtime, reverse=True)
+        for viejo in archivos[maximo:]:
+            try:
+                os.remove(viejo)
+            except OSError:
+                pass
+    except Exception:
+        pass        # sin disco escribible el cálculo sigue disponible en memoria
+
+
+def _guardar_calculo(d, maximo=_MAX_CALCULOS):
     k = uuid.uuid4().hex
     with _CANDADO:
         _CALCULOS[k] = d
         while len(_CALCULOS) > maximo:
             _CALCULOS.popitem(last=False)
+        _guardar_en_disco(k, d, maximo)
     return k
+
+
+def _obtener_calculo(id_calculo):
+    """Cálculo guardado por id: de memoria o, si no está (reinicio, otro worker), del disco."""
+    with _CANDADO:
+        d = _CALCULOS.get(id_calculo)
+        if d is not None or not isinstance(id_calculo, str) or not _ID_VALIDO.match(id_calculo):
+            return d
+        try:
+            with open(_ruta_calculo(id_calculo), "rb") as f:
+                d = pickle.load(f)
+        except Exception:
+            return None
+        _CALCULOS[id_calculo] = d
+        while len(_CALCULOS) > _MAX_CALCULOS:
+            _CALCULOS.popitem(last=False)
+        return d
 
 
 def plano_de_eje(eje, valor):
@@ -1159,8 +1208,7 @@ def diagramas_portico(id_calculo, caso, eje, valor, n=21):
     """Esfuerzos N, V, M en el plano del pórtico (convención del motor 2D) para las
     barras contenidas en él, a partir de un cálculo 3D guardado. Con brazos rígidos,
     los diagramas van de cara a cara del apoyo."""
-    with _CANDADO:
-        d = _CALCULOS.get(id_calculo)
+    d = _obtener_calculo(id_calculo)
     if d is None:
         raise LookupError("El cálculo ya no está en memoria: vuelve a calcular el modelo 3D.")
     if caso not in d["FE"]:
@@ -1205,8 +1253,7 @@ def diagramas_3d(id_calculo, caso, n=11):
     """Diagramas de momento a lo largo de cada barra, en coordenadas globales, para
     dibujarlos sobre el visor 3D. Por barra: puntos de la parte flexible, Mz (eje fuerte,
     dibujado según el eje local y) y My (eje débil, según el eje local z)."""
-    with _CANDADO:
-        d = _CALCULOS.get(id_calculo)
+    d = _obtener_calculo(id_calculo)
     if d is None:
         raise LookupError("El cálculo ya no está en memoria: vuelve a calcular el modelo 3D.")
     if caso not in d["FE"]:

@@ -755,17 +755,43 @@ class Estructura:
             for k in range(3):
                 if nd.restriccion[k] == 1 and nd.asentamiento[k] != 0.0:
                     Dr[nd.gdl[k] - nl] = nd.asentamiento[k]
-        # guardia de estabilidad: la matriz Kff debe ser de rango completo
-        if nl > 0 and np.linalg.matrix_rank(Kff) < nl:
-            detalle = self._diagnostico_inestabilidad(Kff)
-            raise ValueError(
-                "La estructura es inestable o está insuficientemente restringida "
-                "(matriz de rigidez singular). En 2D se necesitan al menos 3 "
-                "reacciones bien dispuestas (no concurrentes ni paralelas)."
-                + (f" Mecanismo detectado en: {detalle}." if detalle else ""))
-        self.cond_Kff = float(np.linalg.cond(Kff)) if nl > 0 else 0.0
+        # guardia de estabilidad + número de condición, sin SVD completas (costaban ~18x el solve):
+        # una factorización LU y el estimador de condición en norma 1 (LAPACK dgecon) bastan
+        # para detectar el caso sospechoso; solo entonces se hace el rango exacto y el diagnóstico.
+        self.cond_Kff = 0.0
+        lu = None
+        if nl > 0:
+            from scipy.linalg import lu_factor, lapack
+            rcond = 0.0
+            try:
+                with np.errstate(all="ignore"):
+                    lu, piv = lu_factor(Kff, check_finite=False)
+                    if np.all(np.isfinite(lu)) and np.all(np.diag(lu) != 0):
+                        anorm = np.linalg.norm(Kff, 1)
+                        rcond, _info = lapack.dgecon(lu, anorm, norm="1")
+            except Exception:
+                rcond = 0.0
+            if not (rcond > 1e-13):
+                # sospechosa de singular: comprobación exacta (lenta, pero solo en este caso)
+                if np.linalg.matrix_rank(Kff) < nl:
+                    detalle = self._diagnostico_inestabilidad(Kff)
+                    raise ValueError(
+                        "La estructura es inestable o está insuficientemente restringida "
+                        "(matriz de rigidez singular). En 2D se necesitan al menos 3 "
+                        "reacciones bien dispuestas (no concurrentes ni paralelas)."
+                        + (f" Mecanismo detectado en: {detalle}." if detalle else ""))
+                lu = None
+                rcond = 1.0 / float(np.linalg.cond(Kff))
+            # κ: exacto (SVD) solo si la matriz es chica; si no, estimación en norma 1
+            self.cond_Kff = (float(np.linalg.cond(Kff)) if nl <= 300
+                             else float(1.0 / rcond))
         try:
-            Df = np.linalg.solve(Kff, Pf - Kfr @ Dr)
+            rhs = Pf - Kfr @ Dr
+            if lu is not None:
+                from scipy.linalg import lu_solve
+                Df = lu_solve((lu, piv), rhs, check_finite=False)
+            else:
+                Df = np.linalg.solve(Kff, rhs)
         except np.linalg.LinAlgError:
             raise ValueError("No se pudo resolver el sistema (matriz singular). "
                              "Revise apoyos y conectividad de los elementos.")

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Diagrama } from "./Paso.jsx";
 import { propsSeccion } from "../model.js";
+import { memoria } from "../api.js";
 
 const TIPOS = [
   { id: "M", label: "DMF", titulo: "Momento flector, del lado traccionado" },
@@ -61,7 +62,7 @@ export default function Results({ resultado, error, onVolver, combos, onExportar
           <button onClick={onVolver} className={btnS}>← Editar modelo</button>
         </div>
 
-        {verCombos ? <Combinaciones data={combos} /> : <Simple resultado={resultado} tipo={tipo} setTipo={setTipo} />}
+        {verCombos ? <Combinaciones data={combos} /> : <Simple resultado={resultado} tipo={tipo} setTipo={setTipo} modelo={modelo} />}
         {!verCombos && resultado && modelo && <Diseno2D resultado={resultado} modelo={modelo} />}
       </div>
     </div>
@@ -71,7 +72,7 @@ export default function Results({ resultado, error, onVolver, combos, onExportar
 const btnS = "rounded-md border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-100 dark:border-ink-line dark:hover:bg-ink-3";
 const caja = "rounded-xl border border-slate-200 bg-white p-4 dark:border-ink-line dark:bg-ink-2";
 
-function Simple({ resultado, tipo, setTipo }) {
+function Simple({ resultado, tipo, setTipo, modelo }) {
   const r = resultado.resumen || {};
   const kpis = [
     ["Momento máx.", fmt(r.Mmax), "tonf·m"],
@@ -118,13 +119,29 @@ function Simple({ resultado, tipo, setTipo }) {
       <Tabla titulo="Fuerzas en extremos de elemento" cols={["Elem.", "N i", "V i", "M i", "N j", "V j", "M j"]}
         filas={(resultado.fuerzas || []).map((f) => [f.elem, fmt(f.Ni), fmt(f.Vi), fmt(f.Mi), fmt(f.Nj), fmt(f.Vj), fmt(f.Mj)])} />
 
-      {resultado.reporte && (
-        <details className={caja}>
-          <summary className="cursor-pointer font-semibold">Memoria de cálculo</summary>
-          <pre className="mt-3 max-h-[60vh] overflow-auto whitespace-pre text-xs leading-relaxed">{resultado.reporte}</pre>
-        </details>
-      )}
+      {modelo && modelo.tipo !== "3d" && <MemoriaVista modelo={modelo} />}
     </>
+  );
+}
+
+// Memoria de cálculo: se pide al servidor solo al abrir el bloque (no viaja con cada cálculo).
+function MemoriaVista({ modelo }) {
+  const [texto, setTexto] = useState(null);
+  const [error, setError] = useState("");
+  const [cargando, setCargando] = useState(false);
+  const alAbrir = (ev) => {
+    if (!ev.currentTarget.open || texto !== null || cargando) return;
+    setCargando(true); setError("");
+    memoria(modelo).then(({ ok, data }) => { if (ok && data.texto) setTexto(data.texto); else setError(data.error || "No se pudo generar."); })
+      .catch((e) => setError(String(e))).finally(() => setCargando(false));
+  };
+  return (
+    <details className={caja} onToggle={alAbrir}>
+      <summary className="cursor-pointer font-semibold">Memoria de cálculo</summary>
+      {cargando && <p className="mt-3 text-sm text-slate-500">Generando la memoria…</p>}
+      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {texto && <pre className="mt-3 max-h-[60vh] overflow-auto whitespace-pre text-xs leading-relaxed">{texto}</pre>}
+    </details>
   );
 }
 
