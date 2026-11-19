@@ -87,8 +87,8 @@ export function DialogoTorre({ onCerrar, onElegir }) {
   };
   return (
     <Modal titulo="Torre de Arequipa" sub="10 pisos × 3.00 m · pórticos 2D por eje · combinación 1.4CM + 1.7CV." onCerrar={onCerrar}
-      pie={<><button className={btnS} onClick={bajarPdf} disabled={!!pdf} title="Resuelve los 34 pórticos (1.4CM + 1.7CV) y descarga un PDF con DFN, DFC y DMF de cada uno y la tabla de máximos. Se genera en segundo plano (menos de medio minuto).">{pdf ? `Generando PDF… ${pdf.n ? `${pdf.i}/${pdf.n} pórticos` : "iniciando"} · ${pdf.t} s` : reintentar ? "Reintentar PDF" : "PDF de todos los pórticos"}</button><button className={btnS} onClick={onCerrar}>Cancelar</button><button className={btnP} disabled={!items?.length} onClick={cargar}>Cargar pórtico</button></>}>
-      {(pdf || msgPdf) && <p role="status" className="mb-2 text-sm">{pdf ? "Generando el PDF de los 34 pórticos: puede tardar unos segundos; no cierres este diálogo." : msgPdf}</p>}
+      pie={<><button className={btnS} onClick={bajarPdf} disabled={!!pdf} title="Resuelve los 35 pórticos (1.4CM + 1.7CV) y descarga un PDF con DFN, DFC y DMF de cada uno y la tabla de máximos. Se genera en segundo plano (menos de medio minuto).">{pdf ? `Generando PDF… ${pdf.n ? `${pdf.i}/${pdf.n} pórticos` : "iniciando"} · ${pdf.t} s` : reintentar ? "Reintentar PDF" : "PDF de todos los pórticos"}</button><button className={btnS} onClick={onCerrar}>Cancelar</button><button className={btnP} disabled={!items?.length} onClick={cargar}>Cargar pórtico</button></>}>
+      {(pdf || msgPdf) && <p role="status" className="mb-2 text-sm">{pdf ? "Generando el PDF de los 35 pórticos: puede tardar unos segundos; no cierres este diálogo." : msgPdf}</p>}
       {!items ? <p className="text-sm text-slate-500">{estado || "Leyendo pórticos…"}</p> : (
         <>
           <Campo label={`Pórtico (${items.length} disponibles)`}>
