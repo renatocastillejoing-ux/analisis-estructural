@@ -226,6 +226,7 @@ export default function App() {
   const borrarSel = useCallback(() => {
     if (!sel) return;
     if (es3d(modelo)) commit((m) => borrarSeleccion(m, sel), sel.tipo === "varios" ? `Eliminar ${sel.elems.length + sel.nudos.length} objetos` : undefined);
+    else if (sel.tipo === "varios") commit((m) => { sel.nudos.forEach((id) => borrarNudo(m, id)); sel.elems.forEach((id) => borrarElemento(m, id)); }, `Eliminar ${sel.elems.length + sel.nudos.length} objetos`);
     else commit((m) => (sel.tipo === "nudo" ? borrarNudo(m, sel.id) : borrarElemento(m, sel.id)));
     setSel(null);
   }, [sel, commit, modelo]);

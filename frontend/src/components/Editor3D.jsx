@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { APOYOS3D, borrarBarra, borrarNudo3d, borrarSeleccion, columnaEntera, tipoBarra, trasladarColumnas } from "../model3d.js";
+import { APOYOS3D, borrarBarra, borrarNudo3d, borrarSeleccion, columnaEntera, moverNudosDeEje, tipoBarra, trasladarColumnas } from "../model3d.js";
 import { pedir } from "../pedir.js";
 import { BtnAgregar, BtnIcon, Campo, NombreUnico, NumIn } from "./ui.jsx";
 import { Interruptor } from "./Editor.jsx";
@@ -142,16 +142,28 @@ function ListaCoord({ titulo, items, onSet, onAdd, onDel, etiqueta }) {
 }
 
 function Ejes({ modelo, commit }) {
+  const [arrastrar, setArrastrar] = useState(true);
   const lista = (clave, etiqueta, gen) => ({
     items: clave === "niveles" ? modelo.niveles : modelo.ejes[clave],
     etiqueta,
-    onSet: (k, campo, v) => commit((m) => { (clave === "niveles" ? m.niveles : m.ejes[clave])[k][campo] = v; }),
+    onSet: (k, campo, v) => commit((m) => {
+      const it = (clave === "niveles" ? m.niveles : m.ejes[clave])[k];
+      const viejo = it[campo];
+      it[campo] = v;
+      // «Mover también lo que está sobre el eje»: los nudos que estaban en esa coordenada la siguen
+      if (arrastrar && (campo === "c" || campo === "z")) moverNudosDeEje(m, clave === "niveles" ? "z" : clave, viejo, v);
+    }, arrastrar && (campo === "c" || campo === "z") ? (clave === "niveles" ? "Mover nivel con su contenido" : "Mover eje con su contenido") : undefined),
     onDel: (k) => commit((m) => { (clave === "niveles" ? m.niveles : m.ejes[clave]).splice(k, 1); }),
     onAdd: () => commit((m) => { const arr = clave === "niveles" ? m.niveles : m.ejes[clave]; const u = arr[arr.length - 1]; arr.push(gen(arr.length, u)); }),
   });
   return (
     <>
-      <p className="text-xs text-slate-500 dark:text-slate-400">Los ejes y niveles forman la grilla de dibujo (como en ETABS). Mover un eje no mueve los nudos ya dibujados.</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">Los ejes y niveles forman la grilla de dibujo (como en ETABS).</p>
+      <Interruptor label="Mover también lo que está sobre el eje" valor={arrastrar} onChange={setArrastrar} />
+      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+        {arrastrar ? "Al cambiar la coordenada de un eje o nivel, todos los nudos que estaban en ella (con sus barras y cargas) se mueven juntos; si uno cae sobre otro nudo, se unen."
+          : "Apagado: mover un eje no mueve los nudos ya dibujados."}
+      </p>
       <ListaCoord titulo="Ejes en X (posición x, m)" {...lista("x", "c", (n, u) => ({ nombre: String(n + 1), c: (u?.c ?? -5) + 5 }))} />
       <ListaCoord titulo="Ejes en Y (posición y, m)" {...lista("y", "c", (n, u) => ({ nombre: String.fromCharCode(65 + n), c: (u?.c ?? -5) + 5 }))} />
       <ListaCoord titulo="Niveles (altura z, m)" {...lista("niveles", "z", (n, u) => ({ nombre: `Piso ${n}`, z: (u?.z ?? -3) + 3 }))} />
