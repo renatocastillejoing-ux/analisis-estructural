@@ -111,3 +111,4 @@ async function _compararEtabs(modelo, archivo, opciones = {}) {
 }
 // Ejercicio desde foto: la IA con visión del servidor lee el pórtico (AE_IA_URL / AE_IA_LLAVE en el servidor).
 export const leerEjercicio = (imagen) => conCarga("ia-foto", "Leyendo el ejercicio con IA", () => post("/api/ia/leer_ejercicio", { imagen }), "La IA interpreta el dibujo, las cotas y las cargas");
+export const cuotaIA = () => fetch("/api/ia/cuota").then((r) => r.json()).catch(() => null);

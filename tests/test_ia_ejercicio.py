@@ -64,7 +64,8 @@ def test_lee_modelo_valido(config):
     # la imagen va como image_url y la llave en la cabecera, no en la URL
     cuerpo = json.loads(cap["req"].data)
     partes = cuerpo["messages"][0]["content"]
-    assert partes[1] == {"type": "image_url", "image_url": {"url": IMAGEN}}
+    assert partes[1] == {"type": "image_url", "image_url": {"url": IMAGEN, "detail": "high"}}
+    assert cuerpo["response_format"] == {"type": "json_object"} and cuerpo["max_tokens"] == 4000
     assert cap["req"].get_header("Api-key") == "llave-de-prueba"
     assert "llave" not in cap["req"].full_url
     assert cap["timeout"] == ia.TIMEOUT_S
@@ -151,7 +152,19 @@ def test_sin_red(config):
     assert e.value.estado == 504
 
 
-def test_endpoint(config, monkeypatch):
+@pytest.fixture
+def bd(tmp_path, monkeypatch):
+    """SQLite propia del test: la cuota no toca historial.db."""
+    import app as aplicacion
+    ruta = str(tmp_path / "h.db")
+    monkeypatch.setattr(aplicacion, "DB_PATH", ruta)
+    aplicacion.init_db()
+    for v in ("AE_IA_LIMITE_USUARIO", "AE_IA_TOPE_IP", "AE_IA_TOPE_DIARIO"):
+        monkeypatch.delenv(v, raising=False)
+    return aplicacion
+
+
+def test_endpoint(config, monkeypatch, bd):
     import app as aplicacion
     monkeypatch.setattr(ia, "leer_ejercicio", _leer)
     r = aplicacion.app.test_client().post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN})
@@ -166,9 +179,179 @@ def _leer(img):
     return _original(img, abrir=_azure(json.dumps(MODELO_IA)))
 
 
-def test_endpoint_sin_configuracion(monkeypatch):
+def test_endpoint_sin_configuracion(monkeypatch, bd):
     import app as aplicacion
     monkeypatch.delenv("AE_IA_URL", raising=False)
     monkeypatch.delenv("AE_IA_LLAVE", raising=False)
     r = aplicacion.app.test_client().post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN})
     assert r.status_code == 503 and "no está configurada" in r.get_json()["error"]
+
+
+# ---------------------------------------------------------------- esquema → modelo
+ESQUEMA = {
+    "formato": "esquema", "nombre": "Dos vanos, dos pisos",
+    "unidades_leidas": {"fuerza": "kN", "longitud": "cm"}, "conversion": "kN → tonf (÷ 9.81); cm → m",
+    "unidad_fuerza": "tonf", "unidad_longitud": "m", "material": {"modo": "fc", "fc": 210},
+    "esquema": {
+        "vanos": [5, 4], "alturas": [3.5, 3],
+        "apoyos": ["empotrado", "fijo", "empotrado"],
+        "secciones": [{"nombre": "C", "b": 0.3, "h": 0.4}, {"nombre": "V", "b": 0.25, "h": 0.5},
+                      {"nombre": "C2", "b": 0.4, "h": 0.4}],
+        "seccion_columnas": "C", "seccion_vigas": "V",
+        "secciones_barras": [{"barra": {"tipo": "columna", "eje": 2, "piso": 1}, "seccion": "C2"}],
+        "cargas_barras": [
+            {"barra": {"tipo": "viga", "vano": 1, "piso": 1}, "tipo": "uniforme", "wx": 0, "wy": -2},
+            {"barra": {"tipo": "viga", "vano": 2, "piso": 2}, "tipo": "puntual", "Px": 0, "Py": -4, "a": 2},
+            {"barra": {"tipo": "columna", "eje": 1, "piso": 1}, "tipo": "uniforme", "wx": 0.5, "wy": 0},
+        ],
+        "cargas_nodales": [{"eje": 1, "nivel": 2, "Fx": 3, "Fy": 0, "M": 0}],
+    },
+    "pide": ["Reacciones", "DMF"],
+    "gdl": [{"eje": 1, "nivel": 1, "numeros": [1, 2, 3]}],
+    "supuestos": ["Altura del 2.º piso no acotada: 3 m."], "dudas": [],
+    "confianza": [{"dato": "alturas[2]", "nivel": "baja", "nota": "cota borrosa"},
+                  {"dato": "vanos[1]", "nivel": "alta", "nota": ""}],
+}
+
+
+def test_arma_portico_desde_esquema(config):
+    r = ia.leer_ejercicio(IMAGEN, abrir=_azure(json.dumps(ESQUEMA)))
+    m = r["modelo"]
+    assert r["formato"] == "esquema"
+    # 3 ejes × 3 niveles; ids por nivel y de izquierda a derecha, como generarPortico
+    assert [(n["x"], n["y"]) for n in m["nudos"]][:4] == [(0, 0), (5, 0), (9, 0), (0, 3.5)]
+    assert m["nudos"][8] == {"id": 9, "nombre": "N9", "x": 9, "y": 6.5, "apoyo": "libre"}
+    assert [n["apoyo"] for n in m["nudos"][:3]] == ["empotrado", "fijo", "empotrado"]
+    # 6 columnas (por eje y piso) y luego 4 vigas (por piso y vano)
+    nombres = [e["nombre"] for e in m["elementos"]]
+    assert nombres == ["C1", "C2", "C3", "C4", "C5", "C6", "V1", "V2", "V3", "V4"]
+    assert (m["elementos"][2]["i"], m["elementos"][2]["j"], m["elementos"][2]["seccion"]) == (2, 5, "C2")
+    assert m["elementos"][0]["seccion"] == "C" and m["elementos"][6]["seccion"] == "V"
+    v4 = m["elementos"][9]
+    assert (v4["i"], v4["j"]) == (8, 9)
+    assert {"elem": 7, "tipo": "distribuida", "subtipo": "uniforme", "wx": 0.0, "wy": -2.0} in m["cargas_elementos"]
+    assert {"elem": 10, "tipo": "puntual", "Px": 0.0, "Py": -4.0, "a": 2.0} in m["cargas_elementos"]
+    assert m["cargas_nodales"] == [{"nudo": 7, "Fx": 3.0, "Fy": 0.0, "M": 0.0}]
+    assert r["gdl"] == [{"nudo": 4, "numeros": [1, 2, 3]}]
+    assert r["pide"] == ["Reacciones", "DMF"]
+    assert r["confianza"][0]["nivel"] == "baja"
+    assert r["supuestos"][0].startswith("Conversión de unidades")
+    from core.constructor import construir
+    from core.metodo_profesor import resolver_profesor
+    est = construir(m); est.resolver(); resolver_profesor(est)
+
+
+@pytest.mark.parametrize("roto, texto", [
+    (lambda e: e.update(apoyos=["empotrado", "fijo"]), "Se esperaban 3 apoyos"),
+    (lambda e: e.update(vanos=[5, -4]), "mayor que cero"),
+    (lambda e: e.update(alturas=[]), "alturas"),
+    (lambda e: e["cargas_barras"][0]["barra"].update(vano=7), "no existe"),
+    (lambda e: e["cargas_barras"][1].update(a=9), "fuera de la barra"),
+    (lambda e: e["cargas_nodales"][0].update(nivel=5), "no existe"),
+    (lambda e: e.update(seccion_vigas="Z"), "no existe"),
+    (lambda e: e["apoyos"].__setitem__(0, "libre"), "no es válido"),
+])
+def test_esquema_invalido(config, roto, texto):
+    d = copy.deepcopy(ESQUEMA); roto(d["esquema"])
+    with pytest.raises(ia.ErrorIA) as e:
+        ia.leer_ejercicio(IMAGEN, abrir=_azure(json.dumps(d)))
+    assert texto in str(e.value)
+
+
+def test_formato_libre_sigue_valiendo_para_inclinadas(config):
+    d = copy.deepcopy(MODELO_IA); d["formato"] = "libre"
+    d["nudos"][2]["y"] = 4.5                                   # viga inclinada
+    r = ia.leer_ejercicio(IMAGEN, abrir=_azure(json.dumps(d)))
+    assert r["formato"] == "libre" and r["modelo"]["nudos"][2]["y"] == 4.5
+
+
+# ---------------------------------------------------------------- parámetros de la llamada
+def test_gpt5_usa_max_completion_tokens(monkeypatch):
+    monkeypatch.setenv("AE_IA_URL", "https://x.invalid/openai/deployments/gpt-5-mini/chat/completions?api-version=x")
+    monkeypatch.setenv("AE_IA_LLAVE", "k")
+    cap = {}
+    ia.leer_ejercicio(IMAGEN, abrir=_azure(json.dumps(ESQUEMA), cap))
+    c = json.loads(cap["req"].data)
+    assert "max_completion_tokens" in c and "max_tokens" not in c and "temperature" not in c
+
+
+def test_reintenta_si_azure_pide_max_completion_tokens(config):
+    cuerpos = []
+    def abrir(req, timeout=None):
+        cuerpos.append(json.loads(req.data))
+        if len(cuerpos) == 1:
+            raise urllib.error.HTTPError(req.full_url, 400, "x", {}, io.BytesIO(
+                b'{"error":{"code":"unsupported_parameter","message":"Use max_completion_tokens instead."}}'))
+        return _Resp(json.dumps({"choices": [{"message": {"content": json.dumps(ESQUEMA)}}]}).encode())
+    ia.leer_ejercicio(IMAGEN, abrir=abrir)
+    assert "max_tokens" in cuerpos[0] and "max_completion_tokens" in cuerpos[1] and len(cuerpos) == 2
+
+
+# ---------------------------------------------------------------- cuota
+def _cliente(bd, monkeypatch, contenido=None, falla=None):
+    def leer(img):
+        if falla:
+            raise ia.ErrorIA(falla, 502)
+        return _original(img, abrir=_azure(contenido or json.dumps(ESQUEMA)))
+    monkeypatch.setattr(ia, "leer_ejercicio", leer)
+    return bd.app.test_client()
+
+
+def test_cuota_cinco_y_luego_429(config, monkeypatch, bd):
+    c = _cliente(bd, monkeypatch)
+    assert c.get("/api/ia/cuota").get_json()["quedan"] == 5
+    for k in range(5):
+        r = c.post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN})
+        assert r.status_code == 200 and r.get_json()["quedan"] == 4 - k
+    r = c.post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN})
+    assert r.status_code == 429 and "Ya usaste tus 5 lecturas con IA" in r.get_json()["error"]
+    assert c.get("/api/ia/cuota").get_json()["quedan"] == 0
+
+
+def test_borrar_la_cookie_no_regala_cuota(config, monkeypatch, bd):
+    monkeypatch.setenv("AE_IA_TOPE_IP", "6")
+    for k in range(6):
+        c = _cliente(bd, monkeypatch)                     # cliente nuevo = sin cookie
+        assert c.post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN}).status_code == 200
+    c = _cliente(bd, monkeypatch)
+    assert c.post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN}).status_code == 429
+    # otra IP (primer valor de X-Forwarded-For) sí puede
+    r = c.post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN}, headers={"X-Forwarded-For": "10.0.0.9, 1.2.3.4"})
+    assert r.status_code == 200
+
+
+def test_cookie_firmada_httponly(config, monkeypatch, bd):
+    c = _cliente(bd, monkeypatch)
+    r = c.get("/api/ia/cuota")
+    cab = r.headers.get("Set-Cookie", "")
+    assert "ae_ia=" in cab and "HttpOnly" in cab
+    c.set_cookie("ae_ia", "falsa.firma")                  # cookie manipulada → se ignora y se da otra
+    assert "ae_ia=" in c.get("/api/ia/cuota").headers.get("Set-Cookie", "")
+
+
+def test_tope_diario_global(config, monkeypatch, bd):
+    monkeypatch.setenv("AE_IA_TOPE_DIARIO", "2")
+    for ip in ("1.1.1.1", "2.2.2.2"):
+        c = _cliente(bd, monkeypatch)
+        assert c.post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN}, headers={"X-Forwarded-For": ip}).status_code == 200
+    c = _cliente(bd, monkeypatch)
+    r = c.post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN}, headers={"X-Forwarded-For": "3.3.3.3"})
+    assert r.status_code == 429 and "Hoy ya se usaron" in r.get_json()["error"]
+    assert c.get("/api/ia/cuota", headers={"X-Forwarded-For": "3.3.3.3"}).get_json()["diario_agotado"] is True
+
+
+def test_no_descuenta_si_falla(config, monkeypatch, bd):
+    c = _cliente(bd, monkeypatch, falla="La IA no pudo")
+    for _ in range(7):
+        assert c.post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN}).status_code == 502
+    roto = copy.deepcopy(ESQUEMA); roto["esquema"]["vanos"] = []
+    c2 = _cliente(bd, monkeypatch, contenido=json.dumps(roto))
+    assert c2.post("/api/ia/leer_ejercicio", json={"imagen": IMAGEN}).status_code == 422
+    assert c2.post("/api/ia/leer_ejercicio", json={"imagen": "nada"}).status_code == 400
+    assert c.get("/api/ia/cuota").get_json()["quedan"] == 5
+
+
+def test_ruta_cuota_sin_configuracion(monkeypatch, bd):
+    monkeypatch.delenv("AE_IA_URL", raising=False)
+    j = bd.app.test_client().get("/api/ia/cuota").get_json()
+    assert j["ok"] is True and j["configurada"] is False and j["limite"] == 5 and j["quedan"] == 5

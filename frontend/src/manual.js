@@ -81,7 +81,7 @@ export const MANUAL = [
       { t: "h", x: "Archivo" },
       { t: "t", cols: ["Comando", "Qué hace"], filas: [
         ["Nuevo pórtico 2D", "Documento 2D vacío."],
-        ["📷 Ejercicio desde foto…", "Toma una foto (o elige una imagen) de un ejercicio de pórtico: la IA lo lee, lo revisas, y se resuelve con el método del profesor."],
+        ["📷 Ejercicio desde foto…", "Toma una foto (o elige, pega o arrastra una imagen) de un ejercicio de pórtico: la IA lee su esquema, el servidor arma el modelo, lo revisas y se resuelve con el método del profesor. 5 lecturas por persona."],
         ["Plantillas (EJ 1, EJ 2, …)", "Ejemplos listos: EJ 1 (pórtico de 2 vanos del curso), EJ 2 (viga continua de 5 tramos), FIJA PC3 (placa + columna con brazo rígido), voladizo, viga simple y pórtico simple."],
         ["Generar pórtico regular", "Pórtico de varios pisos y vanos en un paso: número de pisos y vanos, luces, alturas, secciones y carga en vigas."],
         ["Torre de Arequipa (pórtico 2D)", "Elige uno de los 35 pórticos de la torre (por eje y tramo), con cargas combinadas 1.4CM+1.7CV o con CM y CV separados. Desde aquí también se descarga el **PDF de todos los pórticos** (sección 18)."],
@@ -145,12 +145,15 @@ export const MANUAL = [
       { t: "h", x: "Ejercicio desde foto (IA)" },
       { t: "n", x: [
         "**Archivo › 📷 Ejercicio desde foto** (en el teléfono, el botón grande del menú ☰).",
-        "**Tomar foto** abre la cámara; **Elegir de la galería** usa una imagen guardada. Foto de frente, con buena luz y todas las cotas, apoyos y cargas visibles. La imagen se reduce en el teléfono antes de enviarse.",
-        "**Leer con IA**: en unos segundos aparece el pórtico dibujado, con **lo que asumió la IA** (alturas no acotadas, unidades, EA = ∞, material…) y las **dudas** que debes revisar.",
+        "**Tomar foto** abre la cámara; **Elegir imagen** usa una guardada. En la computadora también puedes **pegar** una captura con **Ctrl+V** o **arrastrar** la imagen a la ventana. Foto de frente, con buena luz y todas las cotas, apoyos y cargas visibles.",
+        "**Recorta** el ejercicio arrastrando las esquinas (o moviendo el recuadro) y **gira 90°** si la foto quedó de lado. La imagen se reduce en el equipo (máx. 1600 px) antes de enviarse; la foto no se guarda en el servidor.",
+        "**Leer con IA**: la IA lee el **esquema** del pórtico (vanos, alturas, apoyo de cada base, secciones, material, cargas por barra y en nudos, unidades) y el **servidor arma** nudos y barras igual que el generador de pórticos. Solo si hay barras inclinadas la IA da los nudos uno por uno.",
+        "En la revisión ves el pórtico dibujado, **lo que asumió la IA** (incluida la conversión de unidades), las **dudas**, lo que **pide el enunciado**, la numeración de GDL si la figura la trae y la **confianza de cada dato**: lo de baja confianza sale en **ámbar** para que lo compruebes primero.",
         "**Corregir datos** (opcional): apoyos con botones, coordenadas, secciones y cargas. Lo demás se ajusta luego en el editor.",
         "**Usar este modelo y resolver**: un aviso dice qué se reemplaza; el modelo entra como un cambio (**Ctrl+Z** lo deshace), se calcula y se abre el **paso a paso** del profesor.",
       ] },
       { t: "aviso", x: "La IA **propone**; tú respondes por el modelo. Revisa siempre luces, alturas, signos de las cargas y apoyos contra el enunciado. Si el servidor no tiene la IA configurada, la ventana lo dice y puedes armar el modelo a mano." },
+      { t: "nota", x: "**Cuota**: cada persona tiene **5 lecturas con IA** (la ventana dice cuántas te quedan) y el servidor tiene un tope diario para todos. Solo se descuenta cuando la IA devuelve un modelo válido: si falla o la foto no se entiende, no cuenta. Al agotarlas, sigue con el editor, el generador o una plantilla." },
       { t: "nota", x: "Atajo: **Archivo › Plantillas › EJ 1** abre el pórtico del curso ya armado; **FIJA PC3** trae una placa con brazo rígido para comparar con la hoja de práctica." },
       { t: "h", x: "Editar lo que ya dibujaste" },
       { t: "l", x: [

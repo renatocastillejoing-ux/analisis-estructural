@@ -14,6 +14,7 @@ import sqlite3
 import datetime
 import traceback
 import uuid
+import secrets
 
 import io
 import threading
@@ -30,6 +31,8 @@ DB_PATH = os.path.join(BASE_DIR, "historial.db")
 
 app = Flask(__name__, static_folder="static")
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024      # 20 MB por petición
+# firma la cookie anónima de la cuota de IA; sin SECRET_KEY se genera una (cambia al reiniciar)
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 
 HISTORIAL_MAX_FILAS = 50                                  # el historial conserva solo los últimos 50 cálculos
 HISTORIAL_MAX_BYTES = 2 * 1024 * 1024                     # no se guardan payloads mayores a 2 MB
@@ -111,6 +114,8 @@ def init_db():
             resultado TEXT NOT NULL
         )
     """)
+    from core.cuota_ia import crear_tabla
+    crear_tabla(con)                                      # conteo de lecturas con IA (ia_uso)
     con.commit()
     con.close()
 
@@ -621,17 +626,64 @@ def api_tipos_seccion():
 # ----------------------------------------------------------------------------
 #  API: ejercicio desde foto (IA con visión; AE_IA_URL / AE_IA_LLAVE)
 # ----------------------------------------------------------------------------
+_COOKIE_IA = "ae_ia"
+
+
+def _usuario_ia():
+    """(id anónimo, IP, ¿cookie nueva?). El id vive en una cookie firmada httponly que crea el servidor;
+    la IP es el primer valor de X-Forwarded-For (Render pone delante su proxy)."""
+    from itsdangerous import URLSafeSerializer, BadSignature
+    s = URLSafeSerializer(app.secret_key, salt="cuota-ia")
+    uid, nueva = None, False
+    try:
+        uid = s.loads(request.cookies.get(_COOKIE_IA, ""))
+    except BadSignature:
+        uid = None
+    if not isinstance(uid, str) or len(uid) != 32:
+        uid, nueva = secrets.token_hex(16), True
+    xff = request.headers.get("X-Forwarded-For", "")
+    ip = (xff.split(",")[0].strip() if xff else "") or request.remote_addr or "?"
+    return uid, ip, (s.dumps(uid) if nueva else None)
+
+
+def _con_cookie(resp, firmada):
+    if firmada:
+        resp.set_cookie(_COOKIE_IA, firmada, max_age=365 * 24 * 3600, httponly=True, samesite="Lax",
+                        secure=request.is_secure or request.headers.get("X-Forwarded-Proto") == "https")
+    return resp
+
+
+@app.route("/api/ia/cuota", methods=["GET"])
+def api_ia_cuota():
+    from core import cuota_ia
+    uid, ip, firmada = _usuario_ia()
+    est = cuota_ia.estado(DB_PATH, cuota_ia.claves(uid, ip, app.secret_key))
+    est["configurada"] = bool(os.environ.get("AE_IA_URL") and os.environ.get("AE_IA_LLAVE"))
+    return _con_cookie(jsonify({"ok": True, **est}), firmada)
+
+
 @app.route("/api/ia/leer_ejercicio", methods=["POST"])
 def api_ia_leer_ejercicio():
-    from core.ia_ejercicio import leer_ejercicio, ErrorIA
+    from core import ia_ejercicio, cuota_ia
     datos = request.get_json(force=True, silent=True) or {}
+    uid, ip, firmada = _usuario_ia()
+    cl = cuota_ia.claves(uid, ip, app.secret_key)
     try:
-        r = leer_ejercicio(datos.get("imagen"))
-    except ErrorIA as e:
-        return jsonify({"ok": False, "error": str(e)}), e.estado
+        ia_ejercicio.configuracion()                      # sin IA configurada no se toca la cuota
+        ia_ejercicio.validar_imagen(datos.get("imagen"))
+        cuota_ia.reservar(DB_PATH, cl)
+    except (ia_ejercicio.ErrorIA, cuota_ia.CuotaAgotada) as e:
+        return _con_cookie(jsonify({"ok": False, "error": str(e)}), firmada), e.estado
+    try:
+        r = ia_ejercicio.leer_ejercicio(datos.get("imagen"))
+    except ia_ejercicio.ErrorIA as e:
+        cuota_ia.devolver(DB_PATH, cl)                    # solo cuenta si la IA devolvió un modelo válido
+        return _con_cookie(jsonify({"ok": False, "error": str(e)}), firmada), e.estado
     except Exception:
-        return jsonify({"ok": False, "error": "No se pudo leer el ejercicio desde la foto."}), 500
-    return jsonify({"ok": True, **r})
+        cuota_ia.devolver(DB_PATH, cl)
+        return _con_cookie(jsonify({"ok": False, "error": "No se pudo leer el ejercicio desde la foto."}), firmada), 500
+    est = cuota_ia.estado(DB_PATH, cl)
+    return _con_cookie(jsonify({"ok": True, **r, "quedan": est["quedan"]}), firmada)
 
 
 # ----------------------------------------------------------------------------
