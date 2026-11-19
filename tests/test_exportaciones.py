@@ -14,7 +14,10 @@ import app as modapp
 from app import MODELO_EJEMPLO, app
 from core.constructor import construir
 from core.etabs import comparar, fuerzas_sistema
+from core.exportar_profesor import excel_desde_resultado
 from core.metodo_profesor import resolver_profesor
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from xl_eval import Libro
 
 DATOS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "datos")
 CSV = os.path.join(DATOS, "etabs_ejemplo.csv")
@@ -43,20 +46,75 @@ def test_excel_profesor(cli):
     assert np.allclose(A, np.vstack([b["A"] for b in res["barras"]]))
     assert wa.cell(2, 2).value == res["labels"][0]
     assert wa.cell(3, 1).value == res["barras"][0]["def_labels"][0]
-    # {D} sin redondear y con formato de 6 cifras significativas
+    # {D}: fórmula de matriz con formato de 6 cifras significativas
     wq = wb["Q R D"]
+    assert "MINVERSE" in wq["E3"].value.text
     for k in range(nD):
-        c = wq.cell(3 + k, 5)
-        assert c.value == pytest.approx(res["D"][k], rel=1e-14, abs=0)
-        assert c.number_format == "0.00000E+00"
-    # [K] total
+        assert wq.cell(3 + k, 5).number_format == "0.00000E+00"
+    # los números que dan las fórmulas son los del motor
+    L = Libro(wb)
+    for k in range(nD):
+        assert L.valor("Q R D", 3 + k, 5) == pytest.approx(res["D"][k], rel=1e-9, abs=1e-12)
+    # [K] total: suma de los aportes de las hojas de barra
     wk = wb["K total"]
-    K = np.array([[wk.cell(3 + i, 2 + j).value for j in range(nD)] for i in range(nD)], float)
-    assert np.allclose(K, res["K"])
+    assert str(wk["B3"].value).startswith("='Barra")
+    K = L.hoja("K total", 3, 2, nD, nD)
+    assert np.allclose(K, res["K"], rtol=1e-9, atol=1e-8)
     # hoja de una barra: [K] 4×4 (título en la fila 4, encabezado en la 5, datos desde la 6)
     hoja = wb[hojas_barra[0]]
-    Kb = np.array([[hoja.cell(6 + i, 2 + j).value for j in range(4)] for i in range(4)], float)
-    assert np.allclose(Kb, res["barras"][0]["K"])
+    assert str(hoja.cell(6, 2).value).startswith("=")
+    Kb = L.hoja(hojas_barra[0], 6, 2, 4, 4)
+    assert np.allclose(Kb, res["barras"][0]["K"], rtol=1e-9, atol=1e-9)
+
+
+def _recalcular_y_comparar(est):
+    """Genera el Excel, lo recalcula con el evaluador y compara cada hoja con el motor."""
+    res = resolver_profesor(est)
+    wb = load_workbook(io.BytesIO(excel_desde_resultado(res, est, "t")))
+    L = Libro(wb)
+    nD = len(res["labels"])
+    for k in range(nD):
+        assert L.valor("Q R D", 3 + k, 4) == pytest.approx(res["Q"][k], abs=1e-9)
+        assert L.valor("Q R D", 3 + k, 5) == pytest.approx(res["D"][k], rel=1e-8, abs=1e-12)
+    assert np.allclose(L.hoja("K total", 3, 2, nD, nD), res["K"], rtol=1e-9, atol=1e-8)
+    nombres = [s for s in wb.sheetnames if s.startswith("Barra ")]
+    formulas_k = 0
+    for h, b in zip(nombres, res["barras"]):
+        ws = wb[h]
+        assert np.allclose(L.hoja(h, 6, 2, 4, 4), b["K"], rtol=1e-9, atol=1e-9), h
+        formulas_k += str(ws.cell(6, 2).value).startswith("=")
+        col1 = {ws.cell(r, 1).value: r for r in range(1, ws.max_row + 1) if ws.cell(r, 1).value}
+        fP = col1["[A_i]ᵀ[K_i][A_i]"] + 2
+        assert np.allclose(L.hoja(h, fP, 2, nD, nD), b["AtKA"], rtol=1e-8, atol=1e-8), h
+        r0 = col1["Vectores de la barra"] + 2
+        assert np.allclose(L.hoja(h, r0, 2, 4, 1)[:, 0], b["r"], atol=1e-9)
+        assert np.allclose(L.hoja(h, r0, 3, 4, 1)[:, 0], b["d"], rtol=1e-8, atol=1e-10), h
+        assert np.allclose(L.hoja(h, r0, 4, 4, 1)[:, 0], b["q"], rtol=1e-8, atol=1e-8), h
+        assert np.allclose(L.hoja(h, r0, 5, 4, 1)[:, 0], b["qT"], rtol=1e-8, atol=1e-8), h
+        if b["brazo_ini"] or b["brazo_fin"]:
+            qn = np.array(b["qT"], float)
+            qn[1] += qn[0] * b["brazo_ini"]; qn[3] -= qn[2] * b["brazo_fin"]
+            assert np.allclose(L.hoja(h, r0, 6, 4, 1)[:, 0], qn, rtol=1e-8, atol=1e-8), h
+    return formulas_k, len(nombres)
+
+
+def test_excel_formulas_recalculan_a_los_valores_del_motor():
+    fk, n = _recalcular_y_comparar(construir(MODELO_EJEMPLO))
+    assert fk == n
+
+
+def test_excel_formulas_placa_con_corte_y_brazo():
+    from test_metodo_profesor import EJ71
+    fk, n = _recalcular_y_comparar(construir(EJ71))
+    assert fk >= 2                    # placa (α) y columna con fórmula; viga con brazo rígido en valores
+
+
+def test_excel_formulas_rotula_resorte_y_asentamiento():
+    from test_profesor_completo import _portico, _viga
+    for ri, rj in ((1, 0), (0, 1)):
+        fk, n = _recalcular_y_comparar(_portico(ri, rj))
+        assert fk == n                # la rótula también sale con fórmula (3EI/L³)
+    _recalcular_y_comparar(_viga())   # resorte (valor en [K] total) y asentamiento
 
 
 def test_excel_modelo_invalido(cli):
