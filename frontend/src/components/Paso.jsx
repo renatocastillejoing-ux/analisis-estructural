@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { metodoA } from "../api.js";
+import { BotonExcel } from "./Exportaciones.jsx";
 
 // Reproductor del Método Sistematizado de Rigidez (matriz [A], K = AᵀkA):
 // cada paso trae su figura animada y sus matrices, cálculo a cálculo.
@@ -83,7 +84,9 @@ export default function Paso({ modelo, onVolver }) {
             {VELOCIDADES.map(([l, v]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
-        <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">{data.n_gdl} GDL · {data.barras.length} barras · K = Σ AᵀkA</span>
+        <span className="ml-auto" />
+        <BotonExcel modelo={modelo} className={btn} />
+        <span className="text-xs text-slate-500 dark:text-slate-400">{data.n_gdl} GDL · {data.barras.length} barras · K = Σ AᵀkA</span>
         <span className="text-sm font-semibold tabular-nums">Paso {i + 1} / {n}</span>
       </div>
       <div className="flex gap-1 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 sm:px-6 dark:border-ink-line dark:bg-ink-2" role="tablist" aria-label="Pasos">

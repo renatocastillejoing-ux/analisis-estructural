@@ -1,0 +1,13 @@
+TABLE:  Element Forces - Frames
+Story,Beam,Unique Name,Output Case,Case Type,Station,P,V2,V3,T,M2,M3
+,,,,,m,tonf,tonf,tonf,tonf-m,tonf-m,tonf-m
+Story1,C1,1,1.4CM+1.7CV,Combination,0.0000,-5.2598,0.1346,0,0,0,-1.8908
+Story1,C1,1,1.4CM+1.7CV,Combination,3.0000,-5.4176,0.1437,0,0,0,-1.0616
+Story1,C2,2,1.4CM+1.7CV,Combination,0.0000,-13.6376,1.0047,0,0,0,-1.7584
+Story1,C2,2,1.4CM+1.7CV,Combination,3.0000,-9.9183,1.2559,0,0,0,1.9489
+Story1,C3,3,1.4CM+1.7CV,Combination,0.0000,-4.8424,2.5351,0,0,0,-4.2018
+Story1,C3,3,1.4CM+1.7CV,Combination,3.0000,-4.6972,2.6135,0,0,0,3.7479
+Story1,V1,4,1.4CM+1.7CV,Combination,0.0000,3.8694,-5.4176,0,0,0,1.4597
+Story1,V1,4,1.4CM+1.7CV,Combination,5.0000,3.9854,7.9643,0,0,0,5.0226
+Story1,V2,5,1.4CM+1.7CV,Combination,0.0000,2.8749,-4.1261,0,0,0,4.2690
+Story1,V2,5,1.4CM+1.7CV,Combination,4.0000,2.0908,4.8424,0,0,0,3.5296

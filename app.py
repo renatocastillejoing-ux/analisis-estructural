@@ -14,7 +14,11 @@ import sqlite3
 import datetime
 import traceback
 
-from flask import Flask, request, jsonify, g, send_from_directory, redirect
+import io
+import threading
+import time
+
+from flask import Flask, request, jsonify, g, send_from_directory, redirect, send_file
 
 from core.constructor import construir, extraer_resultados
 from core.reporte import generar_reporte
@@ -233,6 +237,86 @@ def api_metodo_a():
     except Exception as e:
         return jsonify({"ok": False, "error": str(e),
                         "detalle": traceback.format_exc()}), 400
+
+
+@app.route("/api/exportar/excel", methods=["POST"])
+def api_exportar_excel():
+    """Excel (.xlsx) del cálculo en el formato del profesor ([A], [K] por barra, {D}…)."""
+    from core.exportar_profesor import exportar_excel
+    datos = request.get_json(force=True)
+    try:
+        est = construir(datos)
+        contenido = exportar_excel(est)
+    except NotImplementedError as e:
+        return jsonify({"ok": False, "error": f"Caso aun no soportado por el metodo [A]: {e}"}), 400
+    except Exception as e:
+        return jsonify({"ok": False, "error": f"No se pudo exportar a Excel: {e}",
+                        "detalle": traceback.format_exc()}), 400
+    nombre = "".join(c if c.isalnum() or c in " _-" else "_" for c in est.nombre).strip() or "portico"
+    return send_file(io.BytesIO(contenido), as_attachment=True, download_name=f"{nombre}_profesor.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+_PDF = {"bytes": None, "info": None, "progreso": {"estado": "libre", "i": 0, "n": 0, "nombre": ""}}
+_PDF_LOCK = threading.Lock()
+
+
+@app.route("/api/torre/pdf/progreso", methods=["GET"])
+def api_torre_pdf_progreso():
+    return jsonify({"ok": True, **_PDF["progreso"]})
+
+
+@app.route("/api/torre/pdf", methods=["GET"])
+def api_torre_pdf():
+    """PDF con DFN, DFC y DMF de todos los pórticos de la torre (1.4CM + 1.7CV).
+    La primera vez tarda (se resuelven y dibujan los 34 pórticos); el resultado queda
+    en memoria. El avance se consulta en /api/torre/pdf/progreso."""
+    from core.pdf_porticos import generar_pdf
+    pr = _PDF["progreso"]
+    if _PDF["bytes"] is None or request.args.get("forzar") == "1":
+        if not _PDF_LOCK.acquire(blocking=False):
+            return jsonify({"ok": False, "error": "El PDF ya se está generando; espera a que termine."}), 409
+        try:
+            pr.update(estado="generando", i=0, n=0, nombre="", inicio=time.time())
+
+            def avance(i, n, nombre):
+                pr.update(i=i, n=n, nombre=nombre)
+            _PDF["bytes"], _PDF["info"] = generar_pdf(avance)
+            pr.update(estado="listo")
+        except Exception as e:
+            pr.update(estado="error")
+            return jsonify({"ok": False, "error": f"No se pudo generar el PDF: {e}",
+                            "detalle": traceback.format_exc()}), 500
+        finally:
+            _PDF_LOCK.release()
+    r = send_file(io.BytesIO(_PDF["bytes"]), mimetype="application/pdf", as_attachment=True,
+                  download_name="torre_arequipa_porticos.pdf")
+    r.headers["X-Segundos"] = str((_PDF["info"] or {}).get("segundos", ""))
+    return r
+
+
+@app.route("/api/comparar_etabs", methods=["POST"])
+def api_comparar_etabs():
+    """Compara las fuerzas de extremo del sistema con la tabla «Element Forces - Frames» de ETABS.
+    multipart: modelo (JSON), archivo (.xlsx/.csv); opcionales col_nombre, caso, modo (abs|signo),
+    factor_fuerza, factor_momento, por_coordenadas (1)."""
+    from core.etabs import comparar
+    f = request.files.get("archivo")
+    if f is None or not request.form.get("modelo"):
+        return jsonify({"ok": False, "error": "Faltan el modelo (campo «modelo») o el archivo de ETABS (campo «archivo»)."}), 400
+    try:
+        est = construir(json.loads(request.form["modelo"]))
+        est.resolver()
+        res = comparar(est, f.read(), f.filename or "",
+                       col_nombre=request.form.get("col_nombre") or None,
+                       caso=request.form.get("caso") or None,
+                       modo=request.form.get("modo", "abs"),
+                       factor_fuerza=float(request.form.get("factor_fuerza") or 1),
+                       factor_momento=request.form.get("factor_momento") or None,
+                       forzar_coordenadas=request.form.get("por_coordenadas") in ("1", "true"))
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 400
 
 
 @app.route("/api/torre/lista", methods=["GET"])

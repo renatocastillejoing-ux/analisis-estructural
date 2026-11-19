@@ -3,3 +3,4 @@ numpy
 matplotlib
 gunicorn
 scipy
+openpyxl==3.1.5

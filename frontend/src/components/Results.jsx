@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Diagrama } from "./Paso.jsx";
 import { propsSeccion } from "../model.js";
+import { BotonExcel, DialogoEtabs } from "./Exportaciones.jsx";
 
 const TIPOS = [
   { id: "M", label: "DMF", titulo: "Momento flector, del lado traccionado" },
@@ -12,6 +13,7 @@ const TIPOS = [
 export default function Results({ resultado, error, onVolver, combos, onExportar, modelo }) {
   const [tipo, setTipo] = useState("M");
   const [seccion, setSeccion] = useState("simple");
+  const [etabs, setEtabs] = useState(false);
 
   if (error) {
     return (
@@ -56,6 +58,8 @@ export default function Results({ resultado, error, onVolver, combos, onExportar
           {resultado && !verCombos && (<>
             <button onClick={() => onExportar("csv")} className={btnS}>CSV</button>
             <button onClick={() => onExportar("memoria")} className={btnS}>Memoria .txt</button>
+            {modelo && <BotonExcel modelo={modelo} className={btnS} />}
+            {modelo && <button onClick={() => setEtabs(true)} className={btnS}>Comparar con ETABS</button>}
             <button onClick={() => window.print()} className={btnS}>Imprimir</button>
           </>)}
           <button onClick={onVolver} className={btnS}>← Editar modelo</button>
@@ -64,6 +68,7 @@ export default function Results({ resultado, error, onVolver, combos, onExportar
         {verCombos ? <Combinaciones data={combos} /> : <Simple resultado={resultado} tipo={tipo} setTipo={setTipo} />}
         {!verCombos && resultado && modelo && <Diseno2D resultado={resultado} modelo={modelo} />}
       </div>
+      {etabs && modelo && <DialogoEtabs modelo={modelo} onCerrar={() => setEtabs(false)} />}
     </div>
   );
 }
