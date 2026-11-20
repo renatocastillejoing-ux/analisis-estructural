@@ -60,19 +60,22 @@ export function guion(data) {
   const completa = Array.isArray(data.A) && data.A.length > 0;
   if (completa) {
     const filasA = B.flatMap((b) => (b.act ?? [0, 1, 2, 3]).map((k) => `${b.dnum[k]} ${LOC[k]} ${b.elem}`));
-    add(3, { bloque: "M", M: data.A, filas: filasA, cols: DL, titulo: `[A] (${data.A.length}×${DL.length})`, ancho: true,
+    add(3, { bloque: "M", M: data.A, filas: filasA, cols: DL, titulo: `[A] (${data.A.length}×${DL.length})`, ancho: true, max: Infinity,
       nota: `Una sola matriz para toda la estructura: una fila por GDL local activo (d1 … d${data.A.length}) y una columna por GDL global (D1 … D${DL.length}). Cada columna se llena activando su D = 1 con los demás en 0 y leyendo cuánto se mueve cada d. Las filas de cada barra (de dos en dos aquí) forman su [Aᵢ].` });
     let fila = 0;
     B.forEach((b) => {
       const act = b.act ?? [0, 1, 2, 3];
-      const M = data.A.slice(fila, fila + act.length); fila += act.length;
+      const Mfull = data.A.slice(fila, fila + act.length); fila += act.length;
+      const cs = DL.length <= 12 ? DL.map((_, c) => c) : DL.map((_, c) => c).filter((c) => Mfull.some((f) => Math.abs(f[c]) > 1e-12));
+      const M = Mfull.map((f) => cs.map((c) => f[c]));
+      const DLb = cs.map((c) => DL[c]);
       const filas = act.map((k) => `${b.dnum[k]} ${LOC[k]}`);
       const expl = act.map((k, r) => {
-        const partes = M[r].map((v, c) => (Math.abs(v) < 1e-12 ? null : `${Math.abs(v - 1) < 1e-9 ? "" : Math.abs(v + 1) < 1e-9 ? "−" : g(v) + "·"}${DL[c]}`)).filter(Boolean);
+        const partes = M[r].map((v, c) => (Math.abs(v) < 1e-12 ? null : `${Math.abs(v - 1) < 1e-9 ? "" : Math.abs(v + 1) < 1e-9 ? "−" : g(v) + "·"}${DLb[c]}`)).filter(Boolean);
         return `${b.dnum[k]} (${LOC[k]}) = ${partes.join(" + ").replace(/\+ −/g, "− ")}`;
       });
-      b._A = M; b._filasA = filas;
-      add(3, { bloque: "M", M, filas, cols: DL, titulo: `[A${B.indexOf(b) + 1}] ${b.elem} (${act.length}×${DL.length})`,
+      b._A = Mfull; b._filasA = filas;
+      add(3, { bloque: "M", M, filas, cols: DLb, titulo: `[A${B.indexOf(b) + 1}] ${b.elem} (${act.length}×${DL.length}${cs.length < DL.length ? `; columnas no nulas` : ""})`,
         nota: `${nombre(b)}: ${expl.join(" · ")}.${act.length < 4 ? ` ${LOC.filter((_, k) => !act.includes(k)).join(" y ")} = 0 siempre, por eso no tiene fila.` : ""}` });
     });
   }
@@ -135,8 +138,9 @@ export function guion(data) {
     const cols = b.Aidx.map((c) => data.labels[c].replace(/\(.*/, ""));
     if (b._A) {
       const act = b.act ?? [0, 1, 2, 3];
-      const At = DL.map((_, c) => b._A.map((f) => f[c]));
-      add(9, { bloque: "M", M: At, filas: DL, cols: b._filasA, titulo: `[A${B.indexOf(b) + 1}]ᵀ ${b.elem}`, nota: "La transpuesta de las filas de la barra en [A]: filas y columnas intercambiadas." });
+      const csT = DL.length <= 12 ? DL.map((_, c) => c) : DL.map((_, c) => c).filter((c) => b._A.some((f) => Math.abs(f[c]) > 1e-12));
+      const At = csT.map((c) => b._A.map((f) => f[c]));
+      add(9, { bloque: "M", M: At, filas: csT.map((c) => DL[c]), cols: b._filasA, titulo: `[A${B.indexOf(b) + 1}]ᵀ ${b.elem}`, nota: "La transpuesta de las filas de la barra en [A]: filas y columnas intercambiadas." });
       if (act.length < 4) add(9, { bloque: "M", M: act.map((r) => act.map((c) => b.K[r][c])), filas: b._filasA, cols: b._filasA, titulo: `[k] ${b.elem} en sus GDL activos`,
         nota: `De la [k] 4×4 solo entran las filas y columnas de ${b._filasA.join(", ")}; las de los GDL que valen 0 se multiplican por cero.` });
     } else {
@@ -477,7 +481,7 @@ function Renglon({ r, data, i }) {
     if (r.bloque === "coords") return <Coordenadas data={data} />;
     if (r.bloque === "locales") return <LocalesGDL data={data} />;
     if (r.bloque === "A") return <Matriz M={r.M} filas={r.filas} columnas={r.cols} titulo={`[A] ${r.b.elem}`} />;
-    if (r.bloque === "M") return <Matriz M={r.M} filas={r.filas} columnas={r.cols} titulo={r.titulo} max={30} />;
+    if (r.bloque === "M") return <Matriz M={r.M} filas={r.filas} columnas={r.cols} titulo={r.titulo} max={r.max ?? 30} />;
     if (r.bloque === "V") return <Vector v={r.v} labels={r.labels} titulo={r.titulo} />;
     if (r.bloque === "V6") return <V6 v={r.v} labels={r.labels} titulo={r.titulo} />;
     if (r.bloque === "DMF") return <DiagramaPaso data={data} tipo="M" />;

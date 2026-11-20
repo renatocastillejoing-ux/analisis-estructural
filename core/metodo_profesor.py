@@ -98,7 +98,8 @@ def resolver_profesor(est):
 
     # ---- GDL globales: traslaciones independientes (barras inextensibles) + giros ----
     comp = []
-    for n in sorted(nudos, key=lambda q: (-q.y, q.x)):
+    # como en la hoja del profesor: de abajo hacia arriba (D1 en el primer piso), de izquierda a derecha
+    for n in sorted(nudos, key=lambda q: (q.y, q.x)):
         for k in (0, 1):
             if n.restriccion[k] == 0:
                 comp.append((n.id, k))
@@ -129,7 +130,7 @@ def resolver_profesor(est):
         i = _comp_real(k, f)
         labels.append(f"D{k+1}(Δ{'x' if comp[i][1] == 0 else 'y'} {nombre[comp[i][0]]})")
     rot = {}
-    for n in nudos:
+    for n in sorted(nudos, key=lambda q: (q.y, q.x)):     # giros también del primer piso hacia arriba
         if n.restriccion[2] == 0:
             rot[n.id] = len(labels)
             labels.append(f"D{len(labels)+1}(θ {n.nombre})")
@@ -415,7 +416,7 @@ def a_api(res):
                       "q": b["q"].tolist(), "qT": b["qT"].tolist(), "N": b.get("N")})
     def_labels = [l for b in out for l in b["def_labels"]]
     # [A] completa solo en modelos pequeños (en los grandes se ve por barra)
-    A_full = np.vstack([b["A"][b["act"]] for b in res["barras"]]).tolist() if res["barras"] and nD <= 40 else None
+    A_full = np.vstack([b["A"][b["act"]] for b in res["barras"]]).tolist() if res["barras"] and nD <= 400 else None
     nudos = [{"nombre": n.nombre, "x": float(n.x), "y": float(n.y), "restr": list(n.restriccion)} for n in res["nudos"]]
     K, R, Qn, Q, D = (res[k].tolist() for k in ("K", "R", "Qn", "Q", "D"))
     return {"ok": True, "n_gdl": nD, "labels": labels, "def_labels": def_labels, "A": A_full,

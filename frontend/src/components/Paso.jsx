@@ -212,7 +212,7 @@ function PasoCuerpo({ paso, data }) {
     case "activar": return <Activar paso={paso} data={data} />;
     case "coords": return <div className="space-y-4"><Coordenadas data={data} /><div><h3 className="mb-2 text-sm font-semibold">GDL locales de cada barra (sistema q–d)</h3><LocalesGDL data={data} /></div></div>;
     case "A": return <PasoBarras data={data} render={(b) => <Matriz M={b.Asub} filas={locales(b)} columnas={b.Aidx.map((c) => DL[c])} />}
-      arriba={(foco) => data.A && <Matriz M={data.A} filas={data.def_labels} columnas={DL} max={16} titulo={`[A] (${data.def_labels.length}×${DL.length}) · {d} = [A]{D}`} resaltarFilas={(r) => foco != null && data.def_labels[r].startsWith(data.barras[foco].elem + "·")} />}
+      arriba={(foco) => data.A && <Matriz M={data.A} filas={data.def_labels} columnas={DL} max={Infinity} titulo={`[A] (${data.def_labels.length}×${DL.length}) · {d} = [A]{D}`} resaltarFilas={(r) => foco != null && data.def_labels[r].startsWith(data.barras[foco].elem + "·")} />}
       pie="[A] tiene una fila por GDL local activo. En cada barra se muestran sus filas y solo las columnas distintas de cero: los GDL que la deforman." />;
     case "Ki": return <PasoBarras data={data} render={(b) => <><Formulas b={b} /><Matriz M={b.K} filas={b.dnum} columnas={b.dnum} /></>} />;
     case "AtKA": return <PasoBarras data={data} render={(b) => <Matriz M={b.AtKAsub} filas={b.Aidx.map((c) => DL[c])} columnas={b.Aidx.map((c) => DL[c])} resaltarCeldas />}
