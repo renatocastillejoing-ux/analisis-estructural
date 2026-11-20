@@ -61,7 +61,7 @@ export function guion(data) {
   if (completa) {
     const filasA = B.flatMap((b) => (b.act ?? [0, 1, 2, 3]).map((k) => `${b.dnum[k]} ${LOC[k]} ${b.elem}`));
     add(3, { bloque: "M", M: data.A, filas: filasA, cols: DL, titulo: `[A] (${data.A.length}×${DL.length})`, ancho: true, max: Infinity,
-      nota: `Una sola matriz para toda la estructura: una fila por GDL local activo (d1 … d${data.A.length}) y una columna por GDL global (D1 … D${DL.length}). Cada columna se llena activando su D = 1 con los demás en 0 y leyendo cuánto se mueve cada d. Las filas de cada barra (de dos en dos aquí) forman su [Aᵢ].` });
+      nota: `Una sola matriz para toda la estructura: una fila por GDL local activo (d1 … d${data.A.length}) y una columna por GDL global (D1 … D${DL.length}). Cada columna se llena activando su D = 1 con los demás en 0 y leyendo cuánto se mueve cada d. Las filas de cada barra forman su [Aᵢ]: ${(() => { const ns = [...new Set(B.map((b) => (b.act ?? [0, 1, 2, 3]).length))].sort(); return ns.length === 1 ? `aquí van de ${ns[0]} en ${ns[0]}` : `aquí cada barra tiene ${ns.slice(0, -1).join(", ")} o ${ns[ns.length - 1]} filas: una por cada GDL local que se mueve`; })()}.` });
     let fila = 0;
     B.forEach((b) => {
       const act = b.act ?? [0, 1, 2, 3];
